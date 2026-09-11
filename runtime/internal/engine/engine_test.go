@@ -146,7 +146,7 @@ func (e *failingExecutor) Execute(ctx context.Context, step engine.ResolvedStep,
 	}, nil
 }
 
-// varProducingExecutor returns output vars.
+// varProducingExecutor returns output
 type varProducingExecutor struct {
 	vars map[string]any
 }

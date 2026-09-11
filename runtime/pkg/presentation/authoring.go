@@ -28,17 +28,11 @@ func (r *AuthoringReply) unavailable(reason string) {
 }
 
 func ResolveAuthoring(ctx context.Context, req AuthoringRequest) (reply AuthoringReply) {
-	reply = AuthoringReply{SchemaVersion: "yawr.authoring-reply/v1", ResolverVersion: AuthoringResolverVersion, GrammarVersion: "yawr-expression/v2",
+	reply = AuthoringReply{SchemaVersion: "authoring-reply/v3", ResolverVersion: AuthoringResolverVersion, GrammarVersion: "yawr-expression/v2",
 		Operation: req.Operation, RequestID: req.RequestID, Context: req.Context,
 		Document: AuthoringDocument{URI: req.Document.URI, Version: req.Document.Version, Digest: Digest([]byte(req.Document.Text))},
 		Status:   "resolved", Discovery: AuthoringDiscovery{Scope: "explicit-local-catalog", Status: "not-needed"},
 		Dependencies: []Dependency{}, Items: []AuthoringItem{}}
-	if req.SchemaVersion == AuthoringIncludeRequestVersion {
-		reply.SchemaVersion, reply.ResolverVersion = "authoring-reply/v2", "core-authoring/v2"
-	}
-	if req.SchemaVersion == AuthoringTypedRequestVersion {
-		reply.SchemaVersion, reply.ResolverVersion = "authoring-reply/v3", "core-authoring/v3"
-	}
 	reply.contextJSON = req.contextJSON
 	snapshot := bindingSnapshot{ctx: ctx}
 	defer func() {
@@ -70,12 +64,12 @@ func ResolveAuthoring(ctx context.Context, req AuthoringRequest) (reply Authorin
 		reply.unavailable("invalid-request")
 		return
 	}
-	source, reason := parseAuthoringSource(req.Document.Text, caret, req.SchemaVersion != AuthoringRequestVersion)
+	source, reason := parseAuthoringSource(req.Document.Text, caret, true)
 	if reason != "" {
 		reply.unavailable(reason)
 		return
 	}
-	source.typed = req.SchemaVersion == AuthoringTypedRequestVersion
+	source.typed = true
 	target := source.target(ctx, req.Operation)
 	if source.unsafe {
 		reply.unavailable("incomplete-source")

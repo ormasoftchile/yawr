@@ -44,7 +44,7 @@ func (store *resumeSignalStore) SavePlan(_ context.Context, _ string, plan *engi
 func (store *resumeSignalStore) LoadPlan(context.Context, string) (*enginepkg.ExecutionPlan, error) {
 	return store.plan, nil
 }
-func (*resumeSignalStore) PlanDigest(string) (string, bool) { return "", false }
+func (*resumeSignalStore) PlanDigest(string) (string, bool) { return "current-plan", true }
 func (store *resumeSignalStore) TracePath(string) string    { return store.tracePath }
 func (*resumeSignalStore) AcquireRunLease(context.Context, string) (enginepkg.RunLease, error) {
 	return resumeSignalLease{}, nil
@@ -74,7 +74,8 @@ func TestResumeSignalCallbackWaitsForAssignedHandleUse(t *testing.T) {
 			plan: plan, tracePath: tracePath,
 			state: enginepkg.RunState{
 				RunID: runID, Status: enginepkg.RunStatusRunning, CheckpointSequence: 1,
-				CurrentStep: "first", CurrentStepIndex: 0,
+				PlanSnapshotDigest: "current-plan",
+				CurrentStep:        "first", CurrentStepIndex: 0,
 				CursorSet: &enginepkg.ExecutionCursorSet{
 					SchemaVersion: enginepkg.ExecutionCursorSchemaV1,
 					Cursors: []enginepkg.ExecutionCursor{{

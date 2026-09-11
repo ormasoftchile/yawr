@@ -368,7 +368,10 @@ func TestVSCodeMCP_RuntimeWiring(t *testing.T) {
 	reg := newTestRegistry(t, toolpkg.ToolDef{
 		Name:      "vscode-tool",
 		Transport: toolpkg.TransportVSCodeMCP,
-		Actions:   map[string]*toolpkg.ToolAction{"run": {Description: "run"}},
+		Actions: map[string]*toolpkg.ToolAction{"run": {
+			Description: "run",
+			Args:        map[string]*toolpkg.ArgDef{"arg": {Type: "string"}},
+		}},
 	})
 	runtime := NewDefaultToolRuntime(reg)
 	defer runtime.Close()

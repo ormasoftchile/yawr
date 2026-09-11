@@ -12,18 +12,6 @@ import (
 
 func runAuthoring(args []string) int {
 	if len(args) == 2 && args[0] == "capabilities" && args[1] == "--v3" {
-		if json.NewEncoder(os.Stdout).Encode(presentation.AuthoringTypedCapabilities()) != nil {
-			return exitFailure
-		}
-		return exitSuccess
-	}
-	if len(args) == 2 && args[0] == "capabilities" && args[1] == "--v2" {
-		if json.NewEncoder(os.Stdout).Encode(presentation.AuthoringIncludeCapabilities()) != nil {
-			return exitFailure
-		}
-		return exitSuccess
-	}
-	if len(args) == 1 && args[0] == "capabilities" {
 		if json.NewEncoder(os.Stdout).Encode(presentation.AuthoringCapabilities()) != nil {
 			return exitFailure
 		}

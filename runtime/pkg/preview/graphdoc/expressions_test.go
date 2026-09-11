@@ -12,19 +12,19 @@ import (
 )
 
 func TestExpressionDetailDestinations(t *testing.T) {
-	const s = "Hi ${vars.name}!"
+	const s = "Hi ${name}!"
 	cases := []struct {
 		step  schema.Step
 		paths []string
 	}{
 		{schema.Step{Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Command: s, Args: []string{s}, Run: map[string]string{"windows": s}, Workdir: s, Shell: s, Stdin: s, Env: map[string]string{"PLAIN": s}}}, []string{"/command", "/args/0", "/script/windows", "/workdir", "/shell"}},
 		{schema.Step{Type: schema.StepTypeTool, ToolCall: &schema.ToolCallSpec{Tool: schema.ToolInvocation{Name: s, Action: s, Args: map[string]any{"data": map[string]any{"a/b~c": []any{s}}}}}}, []string{"/tool", "/action", "/arguments/0/value/a~1b~0c/0"}},
-		{schema.Step{Type: schema.StepTypeInclude, IncludeSpec: &schema.IncludeSpec{Include: schema.IncludeConfig{RunbookRef: s, With: map[string]string{"x": s}, When: "vars.other"}}, Capture: map[string]string{"x": s}}, []string{"/common/captures/0/source", "/bindings/0/value", "/reference"}},
+		{schema.Step{Type: schema.StepTypeInclude, IncludeSpec: &schema.IncludeSpec{Include: schema.IncludeConfig{RunbookRef: s, With: map[string]string{"x": s}, When: "other"}}, Capture: map[string]string{"x": s}}, []string{"/common/captures/0/source", "/bindings/0/value", "/reference"}},
 		{schema.Step{Type: schema.StepTypeChoice, ChoiceSpec: &schema.ChoiceSpec{Prompt: s, Default: s, Options: []schema.ChoiceOption{{Label: s, Hint: s, Value: s}}}}, []string{"/prompt", "/default", "/options/0/label", "/options/0/hint"}},
 		{schema.Step{Type: schema.StepTypeDecision, DecisionSpec: &schema.DecisionSpec{Prompt: s, Routes: []schema.DecisionRoute{{Label: s, Hint: s, Runbook: s}}}}, []string{"/prompt", "/routes/0/label", "/routes/0/hint"}},
-		{schema.Step{Type: schema.StepTypeCollector, CollectorSpec: &schema.CollectorSpec{Prompt: s, Fields: []schema.CollectorField{{Name: "x", Label: s, Hint: s, When: "vars.x", Default: s, Options: []schema.ChoiceOption{{Label: s, Hint: s, Value: s}}}}}}, []string{"/prompt", "/fields/0/label", "/fields/0/hint", "/fields/0/when", "/fields/0/default", "/fields/0/options/0/label", "/fields/0/options/0/hint"}},
+		{schema.Step{Type: schema.StepTypeCollector, CollectorSpec: &schema.CollectorSpec{Prompt: s, Fields: []schema.CollectorField{{Name: "x", Label: s, Hint: s, When: "x", Default: s, Options: []schema.ChoiceOption{{Label: s, Hint: s, Value: s}}}}}}, []string{"/prompt", "/fields/0/label", "/fields/0/hint", "/fields/0/when", "/fields/0/default", "/fields/0/options/0/label", "/fields/0/options/0/hint"}},
 		{schema.Step{Type: schema.StepTypeHostAction, HostActionSpec: &schema.HostActionSpec{HostAction: schema.HostActionConfig{Request: map[string]any{"x": []any{s}}}}}, []string{"/request/0/value/0"}},
-		{schema.Step{Type: schema.StepTypeBranch, BranchSpec: &schema.BranchSpec{Branches: []schema.BranchArm{{Condition: "vars.count >= 2", Label: s}}}}, []string{"/arms/0/condition"}},
+		{schema.Step{Type: schema.StepTypeBranch, BranchSpec: &schema.BranchSpec{Branches: []schema.BranchArm{{Condition: "count >= 2", Label: s}}}}, []string{"/arms/0/condition"}},
 		{schema.Step{Type: schema.StepTypeAssert, AssertSpec: &schema.AssertSpec{Assert: []schema.Assertion{{Subject: s, Expected: s, Path: s}}}}, []string{"/assertions/0/subject", "/assertions/0/expected"}},
 		{schema.Step{Type: schema.StepTypeDisplay, DisplaySpec: &schema.DisplaySpec{Display: schema.DisplayConfig{Content: s}}}, []string{"/content"}},
 		{schema.Step{Type: schema.StepTypeWaitForEvent, WaitForEventSpec: &schema.WaitForEventSpec{Event: schema.WaitEventConfig{ID: s, Filter: map[string]string{"x": s}}}}, []string{"/event_id", "/filter/0/value"}},
@@ -32,7 +32,7 @@ func TestExpressionDetailDestinations(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(string(c.step.Type), func(t *testing.T) {
-			c.step.When = "vars.count >= 2"
+			c.step.When = "count >= 2"
 			c.step.Subtitle = s
 			d := detailsForStep(&c.step)
 			if d.ExpressionPresentation == nil {
@@ -54,12 +54,12 @@ func TestExpressionDetailDestinations(t *testing.T) {
 				t.Fatal(got, want)
 			}
 			wire, _ := json.Marshal(d.ExpressionPresentation)
-			if strings.Contains(string(wire), s) || strings.Contains(string(wire), "vars.count") {
+			if strings.Contains(string(wire), s) || strings.Contains(string(wire), "count") {
 				t.Fatal("duplicated authored text")
 			}
 		})
 	}
-	it := DetailsForResolvedStep(engine.ResolvedStep{Kind: "iterate", Spec: &schema.IterateNode{Over: s, Until: "vars.done", Collect: map[string]string{"x": s}}})
+	it := DetailsForResolvedStep(engine.ResolvedStep{Kind: "iterate", Spec: &schema.IterateNode{Over: s, Until: "done", Collect: map[string]string{"x": s}}})
 	if it.ExpressionPresentation == nil || len(it.ExpressionPresentation.Values) != 3 {
 		t.Fatal(it)
 	}
@@ -67,13 +67,13 @@ func TestExpressionDetailDestinations(t *testing.T) {
 
 func TestExpressionProtectionAndLaterInvalidation(t *testing.T) {
 	step := &schema.Step{Type: schema.StepTypeTool, ToolCall: &schema.ToolCallSpec{Tool: schema.ToolInvocation{Name: "db", Action: "query", Args: map[string]any{
-		"safe": "SELECT '${vars.x}'", "token": "${vars.secret}", "opaque": "${vars.hidden}",
-		"nested": map[string]any{"password": "${vars.hidden}", "code": "${vars.ok}"},
+		"safe": "SELECT '${x}'", "token": "${secret}", "opaque": "${hidden}",
+		"nested": map[string]any{"password": "${hidden}", "code": "${ok}"},
 	}}}}
 	d := detailsForStep(step)
 	d.SetCodePresentation(&presentation.Envelope{Arguments: []presentation.Field{{Name: "opaque", ValueType: "secret"}}})
 	for _, v := range d.ExpressionPresentation.Values {
-		if v.TextDigest == presentation.Digest([]byte("${vars.secret}")) || v.TextDigest == presentation.Digest([]byte("${vars.hidden}")) {
+		if v.TextDigest == presentation.Digest([]byte("${secret}")) || v.TextDigest == presentation.Digest([]byte("${hidden}")) {
 			t.Fatal("secret fingerprint", v)
 		}
 	}
@@ -94,14 +94,14 @@ func TestExpressionProtectionAndLaterInvalidation(t *testing.T) {
 	if len(d.ExpressionPresentation.Values) != 1 {
 		t.Fatal(d.ExpressionPresentation)
 	}
-	plain := detailsForStep(&schema.Step{Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Args: []string{"--token", "${vars.private}", "--x", "${vars.public}"}, Run: "password=${vars.private}\necho ${vars.public}"}})
+	plain := detailsForStep(&schema.Step{Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Args: []string{"--token", "${private}", "--x", "${public}"}, Run: "password=${private}\necho ${public}"}})
 	if plain.ExpressionPresentation == nil || len(plain.ExpressionPresentation.Values) != 1 || plain.ExpressionPresentation.Values[0].Path != "/args/3" {
 		t.Fatal(plain.ExpressionPresentation)
 	}
 }
 
 func TestExpressionMetadataHasNoHashException(t *testing.T) {
-	d := detailsForStep(&schema.Step{Type: schema.StepTypeNoop, When: "vars.count >= 2"})
+	d := detailsForStep(&schema.Step{Type: schema.StepTypeNoop, When: "count >= 2"})
 	doc := &Document{Nodes: []Node{{ID: "x", Details: d}}}
 	before, _ := doc.ContentHash()
 	d.ExpressionPresentation.Values[0].Tokens[0].Class = "function"
@@ -144,7 +144,7 @@ func TestExpressionDetailBudgetsAndLegacyBytes(t *testing.T) {
 	if d.ExpressionPresentation != nil {
 		t.Fatal("aggregate token budget")
 	}
-	d = detailsForStep(&schema.Step{Type: schema.StepTypeTool, Capture: map[string]string{"x": "${vars.notGIS}"}, ToolCall: &schema.ToolCallSpec{Tool: schema.ToolInvocation{Args: map[string]any{"x": "literal"}}}})
+	d = detailsForStep(&schema.Step{Type: schema.StepTypeTool, Capture: map[string]string{"x": "${notGIS}"}, ToolCall: &schema.ToolCallSpec{Tool: schema.ToolInvocation{Args: map[string]any{"x": "literal"}}}})
 	if d.ExpressionPresentation != nil {
 		t.Fatal("ordinary GCP capture or literal text highlighted")
 	}
@@ -152,7 +152,7 @@ func TestExpressionDetailBudgetsAndLegacyBytes(t *testing.T) {
 
 func TestExpressionInvalidOptionalMetadataFallsBack(t *testing.T) {
 	for _, kind := range []string{"version", "grammar", "class", "digest", "span"} {
-		d := detailsForStep(&schema.Step{Type: schema.StepTypeNoop, When: "vars.count >= 2"})
+		d := detailsForStep(&schema.Step{Type: schema.StepTypeNoop, When: "count >= 2"})
 		switch kind {
 		case "version":
 			d.ExpressionPresentation.Version = 2
@@ -166,14 +166,14 @@ func TestExpressionInvalidOptionalMetadataFallsBack(t *testing.T) {
 			d.ExpressionPresentation.Values[0].Tokens[0].End = 999
 		}
 		d.PruneExpressionPresentation()
-		if d.ExpressionPresentation != nil || d.Common.When != "vars.count >= 2" {
+		if d.ExpressionPresentation != nil || d.Common.When != "count >= 2" {
 			t.Fatal(kind, d)
 		}
 	}
 }
 
 func TestExpressionAuthoredRedactedKeyIsNotProtectionMetadata(t *testing.T) {
-	d := detailsForStep(&schema.Step{Type: schema.StepTypeTool, ToolCall: &schema.ToolCallSpec{Tool: schema.ToolInvocation{Args: map[string]any{"data": map[string]any{"redacted": true, "code": "${vars.x}"}}}}})
+	d := detailsForStep(&schema.Step{Type: schema.StepTypeTool, ToolCall: &schema.ToolCallSpec{Tool: schema.ToolInvocation{Args: map[string]any{"data": map[string]any{"redacted": true, "code": "${x}"}}}}})
 	d.PruneExpressionPresentation()
 	if d.ExpressionPresentation == nil || len(d.ExpressionPresentation.Values) != 1 || d.ExpressionPresentation.Values[0].Path != "/arguments/0/value/code" {
 		t.Fatal(d.ExpressionPresentation)

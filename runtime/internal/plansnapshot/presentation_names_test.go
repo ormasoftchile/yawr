@@ -19,7 +19,7 @@ func TestPresentationSchemaNamesRoundTripCurrentSnapshot(t *testing.T) {
 			Metadata:    engine.PlanMetadata{RunbookID: "root", RunbookName: "Root"},
 			Steps:       []engine.ResolvedStep{{ID: "n", Kind: "noop", Spec: &schema.NoopSpec{}}},
 			Tools: map[string]*schema.ToolDef{name: {
-				Name: name,
+				Name:    name,
 				Actions: map[string]*schema.ToolAction{name: {Args: map[string]*schema.ArgDef{name: field}}},
 			}},
 		}

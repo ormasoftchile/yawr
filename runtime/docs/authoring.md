@@ -8,19 +8,21 @@ discover live MCP inventories.
 Commands:
 
 ```text
-yawr authoring capabilities
+yawr authoring capabilities --v3
 yawr authoring complete --stdio
 yawr authoring signature --stdio
 yawr authoring required-arguments --stdio
 ```
 
-Each stdio operation consumes one closed `yawr.authoring-request/v1` JSON document and
-returns one closed `yawr.authoring-reply/v1` document. Unknown/duplicate keys, wrong
+Each stdio operation consumes one closed `authoring-request/v3` JSON document and
+returns one closed `authoring-reply/v3` document. Unknown/duplicate keys, wrong
 operations, inconsistent buffer identities, and invalid UTF-16 positions are
 rejected with exit code 2 and categorical stderr. Unavailable replies exit 0.
-Capabilities identify `yawr.core-authoring/v1` and `yawr-expression/v2`.
+Capabilities identify `core-authoring/v3` and `yawr-expression/v2`. Older
+capability flags and request versions are rejected; the helper does not
+negotiate or downgrade.
 
-## Include mappings (opt-in authoring v2)
+## Include mappings
 
 `include:` in a runtime `type: include` step expects a **mapping**, not a
 filename scalar. Completion immediately after the colon offers an explicitly
@@ -46,16 +48,10 @@ imports-alias, package-export, child-input or output discovery**. Author
 No directory scan, target-file read or provider operation is needed. Existing
 GXL/GIS completion remains available at its separately admitted sites.
 
-Use `yawr authoring capabilities --v2` to negotiate
-`authoring-capabilities/v2` / `core-authoring/v2`. Send
-`authoring-request/v2` to receive `authoring-reply/v2`; it adds the closed site
-and item kinds `include-mapping`, `include-key`, and `include-value` and changes
-no other fields, operations, limits or expression grammar. Unflagged
-capabilities and v1 requests retain their historical exact wire and behavior.
-The editor probes v2 only after validating v1 capabilities; an older helper
-rejecting the opt-in flag keeps its existing v1 completions. Invalid v2 replies
-are not downgraded. Capability support is cached only for the same binary
-identity, and cancellation/deadline checks still apply.
+The current v3 contract includes the closed site and item kinds
+`include-mapping`, `include-key`, and `include-value`. Capability support is
+cached only for the same binary identity, and cancellation/deadline checks
+still apply.
 
 ## Available tools means a bounded local scope
 

@@ -60,6 +60,13 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 	if !ok || def == nil {
 		return nil, fmt.Errorf("tool runtime: tool not found: %s", toolName)
 	}
+	actionDef, ok := def.Actions[action]
+	if !ok || actionDef == nil {
+		return nil, fmt.Errorf("tool runtime: action not found: %s", action)
+	}
+	if err := validateToolArguments(actionDef, args); err != nil {
+		return nil, err
+	}
 
 	switch def.Transport {
 	case toolpkg.TransportStdio:
@@ -112,11 +119,7 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 			return NewMCPHTTPTransport(effectiveURL, gate)
 		})
 	case toolpkg.TransportVSCodeMCP:
-		// Apply vscode_input adaptation before the args go onto the bridge
-		// wire. If VSCodeInput is nil, args pass through unchanged (backward
-		// compatible). The extension validates adapted args against the live
-		// registered inputSchema; that is its job, not ours.
-		actionDef := def.Actions[action]
+		// Apply vscode_input adaptation before the args go onto the bridge wire.
 		adaptedArgs, adaptErr := applyVSCodeInputAdaptation(actionDef, args)
 		if adaptErr != nil {
 			return nil, adaptErr

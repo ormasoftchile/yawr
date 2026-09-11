@@ -136,7 +136,7 @@ func TestDecisionExecutor_RejectsUnknownRoute(t *testing.T) {
 	}
 }
 
-// Regression tests for the vars.all_passed bug
+// Regression tests for the all_passed bug
 // These tests verify that choice executors correctly set variables
 // that branch executors check in conditions
 

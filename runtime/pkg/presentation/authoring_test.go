@@ -38,7 +38,7 @@ func authoringFixture(t *testing.T) (authoringVector, string) {
 		t.Fatal(err)
 	}
 	hash := sha256.Sum256(data)
-	if hex.EncodeToString(hash[:]) != "bd37e62d80bcb59ce3fd5835f8e1b8e00dee4575649dc235fe5612c0a107554b" {
+	if hex.EncodeToString(hash[:]) != "08500d8713f80a93e218a1fe8a9ce11953eae9eb0a079af0e86caf4301fb5c4e" {
 		t.Fatal("canonical fixture drift")
 	}
 	var v authoringVector

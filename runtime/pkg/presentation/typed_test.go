@@ -15,7 +15,7 @@ func TestTypedAuthoringDiscriminatorsAndBindingScope(t *testing.T) {
 		{"apiVersion: yawr.runbook/v1\nid: t\nname: T\nbindings:\n  - name: earlier\n    type: string\n    value: hello\n  - name: later\n    type: string\n    value: '${ear|CURSOR|}'\nflow: []\n", "earlier"},
 	} {
 		req := includeRequest(test.source)
-		req.SchemaVersion = AuthoringTypedRequestVersion
+		req.SchemaVersion = AuthoringRequestVersion
 		reply := ResolveAuthoring(context.Background(), req)
 		if reply.SchemaVersion != "authoring-reply/v3" || reply.Status != "resolved" {
 			t.Fatalf("%+v", reply)
@@ -45,14 +45,14 @@ func TestExpressionRegionsIncludeTypedTrees(t *testing.T) {
 	}
 }
 
-func TestTypedCapabilitiesKeepLegacyEnvelopes(t *testing.T) {
-	for _, caps := range []any{AuthoringCapabilities(), AuthoringIncludeCapabilities(), ExpressionsCapabilities()} {
-		body, _ := json.Marshal(caps)
-		if bytes.Contains(body, []byte("typed-results")) || bytes.Contains(body, []byte("/v3")) {
-			t.Fatal("new capability in strict legacy envelope")
-		}
+func TestCapabilitiesExposeOnlyCurrentAuthoringEnvelope(t *testing.T) {
+	body, _ := json.Marshal(AuthoringCapabilities())
+	if !bytes.Contains(body, []byte("authoring-capabilities/v3")) ||
+		bytes.Contains(body, []byte("authoring-capabilities/v1")) ||
+		bytes.Contains(body, []byte("authoring-capabilities/v2")) {
+		t.Fatal("authoring capabilities are not current-only")
 	}
-	body, _ := json.Marshal(TypedResultsCapabilities())
+	body, _ = json.Marshal(TypedResultsCapabilities())
 	for _, cap := range []string{"presentation-capabilities/v3", "execution-plan/v3", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1"} {
 		if !strings.Contains(string(body), cap) {
 			t.Fatal("missing capability", cap)

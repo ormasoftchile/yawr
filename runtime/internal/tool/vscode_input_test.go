@@ -20,17 +20,12 @@ func makeTestAction(argNames []string, input map[string]*schema.VSCodeInputMappi
 	}
 }
 
-// TestVSCodeInputAdaptation_PassThrough verifies that when VSCodeInput is nil
-// the args map is returned unchanged (backward compat).
-func TestVSCodeInputAdaptation_PassThrough(t *testing.T) {
+func TestVSCodeInputAdaptation_UsesDeclaredNamesWithoutMapping(t *testing.T) {
 	action := &toolpkg.ToolAction{VSCodeInput: nil}
 	args := map[string]any{"incident_id": "42"}
 	got, err := applyVSCodeInputAdaptation(action, args)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got["incident_id"] != "42" {
-		t.Errorf("expected args pass-through; got %v", got)
+	if err != nil || got["incident_id"] != "42" {
+		t.Fatalf("declared argument names were not retained: %v, %v", got, err)
 	}
 }
 
@@ -238,14 +233,22 @@ func TestValidateVSCodeInputActions_BadCoerce(t *testing.T) {
 	}
 }
 
-// TestVSCodeInputAdaptation_NilAction verifies nil action → pass args through.
-func TestVSCodeInputAdaptation_NilAction(t *testing.T) {
+func TestVSCodeInputAdaptation_NilActionDoesNotInventMapping(t *testing.T) {
 	args := map[string]any{"x": "y"}
 	got, err := applyVSCodeInputAdaptation(nil, args)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err != nil || got["x"] != "y" {
+		t.Fatalf("unexpected adaptation: %v, %v", got, err)
 	}
-	if got["x"] != "y" {
-		t.Error("nil action should pass args through unchanged")
+}
+
+func TestValidateToolArgumentsRejectsUnknownAndMissing(t *testing.T) {
+	action := &toolpkg.ToolAction{Args: map[string]*toolpkg.ArgDef{
+		"required": {Required: true},
+	}}
+	if err := validateToolArguments(action, map[string]any{"obsolete": true}); err == nil || !strings.Contains(err.Error(), "not declared") {
+		t.Fatalf("unknown argument was not rejected: %v", err)
+	}
+	if err := validateToolArguments(action, map[string]any{}); err == nil || !strings.Contains(err.Error(), "required") {
+		t.Fatalf("missing required argument was not rejected: %v", err)
 	}
 }

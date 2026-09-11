@@ -16,7 +16,6 @@ func TestTemplateEvaluatorResolveCapturePathNativeGCP(t *testing.T) {
 		{name: "stdout", source: "stdout", want: output["stdout"]},
 		{name: "stderr", source: "stderr", want: "warn"},
 		{name: "exit code", source: "exit_code", want: 7},
-		{name: "legacy exitCode alias", source: "exitCode", want: 7},
 		{name: "json suffix", source: "json.items[0].name", want: "first"},
 	}
 
@@ -34,5 +33,8 @@ func TestTemplateEvaluatorResolveCapturePathNativeGCP(t *testing.T) {
 				t.Fatalf("expected %#v, got %#v", test.want, got)
 			}
 		})
+	}
+	if _, _, err := (&TemplateEvaluator{}).ResolveCapturePath("exitCode", output); err == nil {
+		t.Fatal("obsolete exitCode capture alias accepted")
 	}
 }

@@ -20,7 +20,7 @@ var benchGXLEnv = map[string]any{
 func BenchmarkEngineGXLParseEval(b *testing.B) {
 	cases := []string{
 		`service.healthy == true and service.latency < 100`,
-		`str.contains(service.name, "api") and vars.region == "us-east-1"`,
+		`str.contains(service.name, "api") and region == "us-east-1"`,
 		`list.contains(service.tags, "critical") or service.latency < 50`,
 	}
 	scope, err := gxleval.FromAny(benchGXLEnv)

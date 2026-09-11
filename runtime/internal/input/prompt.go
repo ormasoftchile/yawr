@@ -67,15 +67,13 @@ func validateEnum(schema map[string]any, value string) error {
 		return nil
 	}
 	switch vals := raw.(type) {
-	case []string:
-		for _, v := range vals {
-			if v == value {
-				return nil
-			}
-		}
 	case []any:
 		for _, v := range vals {
-			if s, ok := v.(string); ok && s == value {
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("prompt: enum must contain only strings")
+			}
+			if s == value {
 				return nil
 			}
 		}

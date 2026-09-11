@@ -254,7 +254,6 @@ type RunState struct {
 	// They remain recoverable from the checkpoint if projection is interrupted.
 	PendingTraceEvents []Event `json:"pending_trace_events,omitempty"`
 	// PlanSnapshotDigest binds this checkpoint to the exact durable executable plan.
-	// Empty is accepted only for legacy in-memory resume paths without a plan snapshot.
 	PlanSnapshotDigest string              `json:"plan_snapshot_digest,omitempty"`
 	CursorSet          *ExecutionCursorSet `json:"cursor_set,omitempty"`
 	Status             RunStatus

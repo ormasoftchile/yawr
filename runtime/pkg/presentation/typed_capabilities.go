@@ -1,7 +1,5 @@
 package presentation
 
-const AuthoringTypedRequestVersion = "authoring-request/v3"
-
 func TypedResultsCapabilities() any {
 	return struct {
 		SchemaVersion      string   `json:"schema_version"`
@@ -20,7 +18,7 @@ func TypedResultsCapabilities() any {
 		[]string{"execution-plan/v3"},
 		[]string{"execution-plan/v3"},
 		[]string{"yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1"},
-		[]string{"1", "3"}, AuthoringTypedRequestVersion, ExpressionSchemaVersion,
+		[]string{"1", "3"}, AuthoringRequestVersion, ExpressionSchemaVersion,
 		"yawr.stdio/v1", 1 << 20, 64 << 10, 256 << 20}
 }
 

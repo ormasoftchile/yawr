@@ -28,7 +28,9 @@ package tool
 // The guard file excludes itself from both checks by name.
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,77 +74,64 @@ var dotDotAllowlist = map[string]string{
 // repository and fails on any sibling-repo reference or un-allowlisted ".."
 // traversal.
 func TestRepoBoundary_NoExternalPaths(t *testing.T) {
-	root := repoRoot()
-
-	// skipDirs are directory names (not paths) to prune during the walk.
-	skipDirs := map[string]bool{
-		".git":         true,
-		".testtools":   true,
-		"vendor":       true,
-		"node_modules": true,
-	}
-
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if skipDirs[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(d.Name(), "_test.go") {
-			return nil
-		}
-
-		// Relative path from repo root — used in error messages and allowlist keys.
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			rel = path
-		}
-		// Normalise separator to forward slash so allowlist keys are OS-independent.
-		relSlash := filepath.ToSlash(rel)
-
-		// The guard file excludes itself.
-		if d.Name() == "repo_boundary_test.go" {
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Errorf("ReadFile(%s): %v", relSlash, err)
-			return nil
-		}
-		lower := strings.ToLower(string(data))
-
-		// Check 1 — sibling-repo name patterns.
-		for _, pat := range siblingRepoPatterns {
-			if strings.Contains(lower, pat) {
-				t.Errorf("%s: contains cross-repo reference %q — "+
-					"tests must read only files inside the repo root; "+
-					"move the fixture into testdata/ and delete the external path",
-					relSlash, pat)
-			}
-		}
-
-		// Check 2 — ".." traversal.
-		if strings.Contains(string(data), `".."`) {
-			reason, allowed := dotDotAllowlist[relSlash]
-			if !allowed {
-				t.Errorf("%s: contains \"..\" path traversal — "+
-					"if this navigates within the repo, add it to dotDotAllowlist "+
-					"in internal/tool/repo_boundary_test.go with a reason; "+
-					"if it reads from a sibling repo, that is a hermeticity violation",
-					relSlash)
-			} else {
-				t.Logf("%s: \"..\" allowed (%s)", relSlash, reason)
-			}
-		}
-
-		return nil
-	})
+	moduleRoot := repoRoot()
+	rootOutput, err := exec.Command("git", "-C", moduleRoot, "rev-parse", "--show-toplevel").Output()
 	if err != nil {
-		t.Fatalf("WalkDir: %v", err)
+		t.Fatalf("git rev-parse: %v", err)
+	}
+	root := strings.TrimSpace(string(rootOutput))
+	cmd := exec.Command("git", "-C", root, "ls-files", "-z", "--", "runtime/**/*_test.go")
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git ls-files: %v", err)
+	}
+	files := bytes.Split(bytes.TrimSuffix(output, []byte{0}), []byte{0})
+	if len(files) < 100 {
+		t.Fatalf("tracked test source inventory is unexpectedly small: %d", len(files))
+	}
+	for _, raw := range files {
+		relSlash := filepath.ToSlash(string(raw))
+		if relSlash == "runtime/internal/tool/repo_boundary_test.go" || relSlash == "internal/tool/repo_boundary_test.go" {
+			continue
+		}
+		path := filepath.Join(root, filepath.FromSlash(relSlash))
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			t.Errorf("ReadFile(%s): %v", relSlash, readErr)
+			continue
+		}
+		for _, violation := range repoBoundaryViolations(strings.TrimPrefix(relSlash, "runtime/"), data) {
+			t.Errorf("%s: %s", relSlash, violation)
+		}
+	}
+}
+
+func repoBoundaryViolations(relSlash string, data []byte) []string {
+	var violations []string
+	lower := strings.ToLower(string(data))
+	for _, pat := range siblingRepoPatterns {
+		if strings.Contains(lower, pat) {
+			violations = append(violations, "contains cross-repo reference "+pat)
+		}
+	}
+	if strings.Contains(string(data), `".."`) {
+		if _, allowed := dotDotAllowlist[relSlash]; !allowed {
+			violations = append(violations, `contains ".." path traversal`)
+		}
+	}
+	return violations
+}
+
+func TestRepoBoundaryMutationDetectsExternalPaths(t *testing.T) {
+	data := []byte(`package fixture
+var sibling = "yawr-private"
+var outside = filepath.Join("..", "fixture")
+`)
+	violations := repoBoundaryViolations("mutation/external_test.go", data)
+	if len(violations) != 2 {
+		t.Fatalf("mutation produced %d violations, want 2: %v", len(violations), violations)
 	}
 }

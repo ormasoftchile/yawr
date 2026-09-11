@@ -9,8 +9,8 @@ import (
 
 func TestExpressionRegexAuthoredDetails(t *testing.T) {
 	d := &StepDetails{Kind: "assert", Assertions: []AssertionDetails{
-		{Type: "matches", Subject: "${vars.name}", Expected: "^ab+$"},
-		{Type: "eq", Subject: `${regex.match(vars.name, "^ab+$")}`, Expected: "^ab+$"},
+		{Type: "matches", Subject: "${name}", Expected: "^ab+$"},
+		{Type: "eq", Subject: `${regex.match(name, "^ab+$")}`, Expected: "^ab+$"},
 		{Type: "matches", Expected: "<redacted>"},
 	}}
 	d.ProjectExpressions()

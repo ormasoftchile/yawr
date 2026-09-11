@@ -12,7 +12,7 @@ import (
 )
 
 func TestExpressionDocumentTransportAndSanitization(t *testing.T) {
-	details := graphdoc.DetailsForResolvedStep(engine.ResolvedStep{Kind: "display", When: "vars.count >= 2", Spec: &schema.DisplaySpec{Display: schema.DisplayConfig{Content: "Hi ${vars.name}!"}}})
+	details := graphdoc.DetailsForResolvedStep(engine.ResolvedStep{Kind: "display", When: "count >= 2", Spec: &schema.DisplaySpec{Display: schema.DisplayConfig{Content: "Hi ${name}!"}}})
 	doc := &graphdoc.Document{Nodes: []graphdoc.Node{{ID: "message", Kind: "display", Details: details}}}
 	doc.Hash, _ = doc.ContentHash()
 	priorETag := ""

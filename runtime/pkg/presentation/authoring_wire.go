@@ -9,9 +9,8 @@ import (
 	"unicode/utf8"
 )
 
-const AuthoringRequestVersion = "yawr.authoring-request/v1"
-const AuthoringResolverVersion = "yawr.core-authoring/v1"
-const AuthoringIncludeRequestVersion = "authoring-request/v2"
+const AuthoringRequestVersion = "authoring-request/v3"
+const AuthoringResolverVersion = "core-authoring/v3"
 
 type AuthoringRequest struct {
 	SchemaVersion string   `json:"schema_version"`
@@ -104,30 +103,7 @@ func (r AuthoringReply) MarshalJSON() ([]byte, error) {
 }
 
 func AuthoringCapabilities() any {
-	return authoringCapabilities(false)
-}
-
-func AuthoringIncludeCapabilities() any {
-	return authoringCapabilities(true)
-}
-
-func authoringCapabilities(include bool) any {
-	schema, resolver := "yawr.authoring-capabilities/v1", AuthoringResolverVersion
-	if include {
-		schema, resolver = "authoring-capabilities/v2", "core-authoring/v2"
-	}
-	return struct {
-		SchemaVersion     string   `json:"schema_version"`
-		ResolverVersion   string   `json:"resolver_version"`
-		GrammarVersion    string   `json:"grammar_version"`
-		Operations        []string `json:"operations"`
-		DiscoveryScope    string   `json:"discovery_scope"`
-		MaxBytes          int      `json:"max_bytes"`
-		MaxOverlays       int      `json:"max_overlays"`
-		MaxItems          int      `json:"max_items"`
-		MaxValueCodeUnits int      `json:"max_value_code_units"`
-		MaxDepth          int      `json:"max_depth"`
-	}{schema, resolver, "yawr-expression/v2", []string{"complete", "signature", "required-arguments"}, "explicit-local-catalog", MaxBytes, 128, MaxEntries, 32768, 128}
+	return AuthoringTypedCapabilities()
 }
 
 func DecodeAuthoringRequest(r io.Reader, operation string) (AuthoringRequest, error) {
@@ -163,7 +139,7 @@ func DecodeAuthoringRequest(r io.Reader, operation string) (AuthoringRequest, er
 	}
 	d = json.NewDecoder(bytes.NewReader(data))
 	d.DisallowUnknownFields()
-	if d.Decode(&req) != nil || (req.SchemaVersion != AuthoringRequestVersion && req.SchemaVersion != AuthoringIncludeRequestVersion && req.SchemaVersion != AuthoringTypedRequestVersion) || req.Operation != operation ||
+	if d.Decode(&req) != nil || req.SchemaVersion != AuthoringRequestVersion || req.Operation != operation ||
 		(operation != "complete" && operation != "signature" && operation != "required-arguments") {
 		return req, invalid
 	}

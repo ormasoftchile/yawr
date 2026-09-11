@@ -64,11 +64,10 @@ func nativeScope(vars map[string]any) (*gxleval.Scope, error) {
 	if vars == nil {
 		vars = map[string]any{}
 	}
-	scopeVars := make(map[string]any, len(vars)+1)
+	scopeVars := make(map[string]any, len(vars))
 	for key, value := range vars {
 		scopeVars[key] = value
 	}
-	scopeVars["vars"] = vars
 	return gxleval.FromAny(scopeVars)
 }
 
@@ -80,11 +79,7 @@ type captureInput struct {
 }
 
 func resolveCaptureNative(source string, input captureInput) (any, bool, error) {
-	canonical := source
-	if source == "exitCode" {
-		canonical = "exit_code"
-	}
-	path, err := gcpparser.Parse(canonical)
+	path, err := gcpparser.Parse(source)
 	if err != nil {
 		return nil, false, fmt.Errorf("parse capture path %q: %w", source, err)
 	}

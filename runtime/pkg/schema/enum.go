@@ -275,23 +275,6 @@ func CheckCallerInputBindings(inputs map[string]*Input, values map[string]string
 	return nil
 }
 
-// AdvisoryEnumContains is the engine-side helper for client-side advisory
-// (non-blocking) enum membership pre-checks (AR-CE-4 §2, AR-CE-5 §1-2):
-// it reports whether candidate would be accepted by CheckCallerInputBindings/
-// CheckArgEnums for this member list, using the exact ruled comparison
-// (NFC-normalise a COPY of candidate for comparison only, codepoint-wise,
-// case-sensitive — no trim, no case fold, no rewrite of candidate itself).
-// It never mutates or returns a normalised form of candidate: callers that
-// pre-validate for UX MUST still submit the operator's original,
-// byte-for-byte input, and MUST treat this result as a hint only — final
-// enforcement remains exclusively in CheckCallerInputBindings/CheckArgEnums
-// at the real binding site. A client MUST NOT invent its own comparison
-// algorithm (a near-miss client algorithm is worse than none, AR-CE-4 §2);
-// this is the one, shared, engine-owned implementation of that algorithm.
-func AdvisoryEnumContains(members EnumConstraint, candidate string) bool {
-	return members.Contains(candidate)
-}
-
 // ValidateDeclaration runs the full plan/parse-time well-formedness gate for
 // one enum-constrained declaration: type-site restriction (ENUM-001, C1),
 // then member well-formedness (ENUM-002 is already enforced during

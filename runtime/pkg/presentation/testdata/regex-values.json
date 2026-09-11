@@ -190,7 +190,7 @@
     }
   },
   {
-    "text": "^(?P<label>\\p{Greek}+)\\Q[🚀]\\E\\d{2,4}?$",
+    "text": "^(?P\u003clabel\u003e\\p{Greek}+)\\Q[🚀]\\E\\d{2,4}?$",
     "expected": {
       "mode": "regex",
       "text_length": 39,
@@ -285,11 +285,11 @@
     }
   },
   {
-    "text": "^\\${literal}\\\\${vars.suffix}$",
+    "text": "^\\${literal}\\\\${suffix}$",
     "expected": {
       "mode": "regex",
-      "text_length": 29,
-      "text_digest": "sha256:e46191120f5eef18b373b4efe57f75d7ac88acb22dad617ab9989477b6e6df98",
+      "text_length": 24,
+      "text_digest": "sha256:3bb35200935dcf3caa64cefd037167ad2d2e4dcfcb95b99cce523f0363692c38",
       "tokens": [
         {
           "start": 0,
@@ -318,38 +318,28 @@
         },
         {
           "start": 16,
-          "end": 20,
+          "end": 22,
           "class": "variable"
         },
         {
-          "start": 20,
-          "end": 21,
-          "class": "delimiter"
-        },
-        {
-          "start": 21,
-          "end": 27,
-          "class": "property"
-        },
-        {
-          "start": 27,
-          "end": 28,
+          "start": 22,
+          "end": 23,
           "class": "interpolation"
         },
         {
-          "start": 28,
-          "end": 29,
+          "start": 23,
+          "end": 24,
           "class": "keyword"
         }
       ]
     }
   },
   {
-    "text": "regex.match(vars.name, \"^ab+$\")",
+    "text": "regex.match(name, \"^ab+$\")",
     "expected": {
       "mode": "gxl",
-      "text_length": 31,
-      "text_digest": "sha256:91d3817ca3038b6e55d7f4f61b8173af10b17204b50844f20e9c26be8919d43e",
+      "text_length": 26,
+      "text_digest": "sha256:921b03ac9bfb7ffe8f147a7d10c7f10813ae51c70b6d6a977f81670b06c43ecf",
       "tokens": [
         {
           "start": 0,
@@ -382,59 +372,49 @@
           "class": "delimiter"
         },
         {
-          "start": 17,
-          "end": 21,
-          "class": "property"
+          "start": 18,
+          "end": 19,
+          "class": "string"
         },
         {
-          "start": 21,
+          "start": 19,
+          "end": 20,
+          "class": "keyword"
+        },
+        {
+          "start": 20,
           "end": 22,
-          "class": "delimiter"
+          "class": "string"
+        },
+        {
+          "start": 22,
+          "end": 23,
+          "class": "operator"
         },
         {
           "start": 23,
           "end": 24,
-          "class": "string"
+          "class": "keyword"
         },
         {
           "start": 24,
           "end": 25,
-          "class": "keyword"
+          "class": "string"
         },
         {
           "start": 25,
-          "end": 27,
-          "class": "string"
-        },
-        {
-          "start": 27,
-          "end": 28,
-          "class": "operator"
-        },
-        {
-          "start": 28,
-          "end": 29,
-          "class": "keyword"
-        },
-        {
-          "start": 29,
-          "end": 30,
-          "class": "string"
-        },
-        {
-          "start": 30,
-          "end": 31,
+          "end": 26,
           "class": "delimiter"
         }
       ]
     }
   },
   {
-    "text": "${regex.match(vars.name, \"^ab+$\")}",
+    "text": "${regex.match(name, \"^ab+$\")}",
     "expected": {
       "mode": "gis",
-      "text_length": 34,
-      "text_digest": "sha256:1895c680a5ef9287fe2880705b979932517adf594a232c5ada2df77119578d2a",
+      "text_length": 29,
+      "text_digest": "sha256:66cbd4a3d7529c69a4a96a925afe50dffd7f804eba8067591c48da3de40e1472",
       "tokens": [
         {
           "start": 0,
@@ -472,64 +452,54 @@
           "class": "delimiter"
         },
         {
-          "start": 19,
-          "end": 23,
-          "class": "property"
+          "start": 20,
+          "end": 21,
+          "class": "string"
         },
         {
-          "start": 23,
+          "start": 21,
+          "end": 22,
+          "class": "keyword"
+        },
+        {
+          "start": 22,
           "end": 24,
-          "class": "delimiter"
+          "class": "string"
+        },
+        {
+          "start": 24,
+          "end": 25,
+          "class": "operator"
         },
         {
           "start": 25,
           "end": 26,
-          "class": "string"
+          "class": "keyword"
         },
         {
           "start": 26,
           "end": 27,
-          "class": "keyword"
+          "class": "string"
         },
         {
           "start": 27,
-          "end": 29,
-          "class": "string"
-        },
-        {
-          "start": 29,
-          "end": 30,
-          "class": "operator"
-        },
-        {
-          "start": 30,
-          "end": 31,
-          "class": "keyword"
-        },
-        {
-          "start": 31,
-          "end": 32,
-          "class": "string"
-        },
-        {
-          "start": 32,
-          "end": 33,
+          "end": 28,
           "class": "delimiter"
         },
         {
-          "start": 33,
-          "end": 34,
+          "start": 28,
+          "end": 29,
           "class": "interpolation"
         }
       ]
     }
   },
   {
-    "text": "${list.order(vars.items, 'regex.match(left.name, \"^\\\\\\\\d+🚀$\")')}",
+    "text": "${list.order(items, 'regex.match(left.name, \"^\\\\\\\\d+🚀$\")')}",
     "expected": {
       "mode": "gis",
-      "text_length": 65,
-      "text_digest": "sha256:e2e813506341a5e7176ff82adffa131fb9e5c7b5cf4f748233b98287ec4dd5ce",
+      "text_length": 60,
+      "text_digest": "sha256:b03fc6a785173189518f62ad72ca6a2161941db23343685ece286b2809b90a48",
       "tokens": [
         {
           "start": 0,
@@ -558,43 +528,43 @@
         },
         {
           "start": 13,
-          "end": 17,
+          "end": 18,
           "class": "variable"
         },
         {
-          "start": 17,
-          "end": 18,
-          "class": "delimiter"
-        },
-        {
           "start": 18,
-          "end": 23,
-          "class": "property"
-        },
-        {
-          "start": 23,
-          "end": 24,
+          "end": 19,
           "class": "delimiter"
         },
         {
-          "start": 25,
-          "end": 26,
+          "start": 20,
+          "end": 21,
           "class": "string"
         },
         {
-          "start": 26,
-          "end": 31,
+          "start": 21,
+          "end": 26,
           "class": "namespace"
         },
         {
-          "start": 31,
-          "end": 32,
+          "start": 26,
+          "end": 27,
           "class": "delimiter"
         },
         {
-          "start": 32,
-          "end": 37,
+          "start": 27,
+          "end": 32,
           "class": "function"
+        },
+        {
+          "start": 32,
+          "end": 33,
+          "class": "delimiter"
+        },
+        {
+          "start": 33,
+          "end": 37,
+          "class": "variable"
         },
         {
           "start": 37,
@@ -604,7 +574,7 @@
         {
           "start": 38,
           "end": 42,
-          "class": "variable"
+          "class": "property"
         },
         {
           "start": 42,
@@ -613,83 +583,73 @@
         },
         {
           "start": 43,
-          "end": 47,
-          "class": "property"
-        },
-        {
-          "start": 47,
-          "end": 48,
-          "class": "delimiter"
-        },
-        {
-          "start": 48,
-          "end": 49,
+          "end": 44,
           "class": "string"
         },
         {
-          "start": 49,
-          "end": 50,
+          "start": 44,
+          "end": 45,
           "class": "string"
         },
         {
-          "start": 50,
+          "start": 45,
+          "end": 46,
+          "class": "keyword"
+        },
+        {
+          "start": 46,
           "end": 51,
           "class": "keyword"
         },
         {
           "start": 51,
-          "end": 56,
+          "end": 52,
+          "class": "operator"
+        },
+        {
+          "start": 52,
+          "end": 54,
+          "class": "string"
+        },
+        {
+          "start": 54,
+          "end": 55,
           "class": "keyword"
+        },
+        {
+          "start": 55,
+          "end": 56,
+          "class": "string"
         },
         {
           "start": 56,
           "end": 57,
-          "class": "operator"
+          "class": "delimiter"
         },
         {
           "start": 57,
-          "end": 59,
+          "end": 58,
           "class": "string"
+        },
+        {
+          "start": 58,
+          "end": 59,
+          "class": "delimiter"
         },
         {
           "start": 59,
           "end": 60,
-          "class": "keyword"
-        },
-        {
-          "start": 60,
-          "end": 61,
-          "class": "string"
-        },
-        {
-          "start": 61,
-          "end": 62,
-          "class": "delimiter"
-        },
-        {
-          "start": 62,
-          "end": 63,
-          "class": "string"
-        },
-        {
-          "start": 63,
-          "end": 64,
-          "class": "delimiter"
-        },
-        {
-          "start": 64,
-          "end": 65,
           "class": "interpolation"
         }
       ]
     }
   },
   {
-    "text": "regex.match(vars.x, \"^${notGIS}$\")",
+    "text": "regex.match(x, \"^${notGIS}$\")",
     "expected": {
       "mode": "gxl",
-      "text_length": 34,
-      "text_digest": "sha256:230211dab7ee06e62ee4cfaeea57e0868e514a9f48a26ad08ce44707fb59e9a0",
+      "text_length": 29,
+      "text_digest": "sha256:f6872939455e8fbf09e43b6f5303930e3f739acc51af51e890d0f8003977725c",
       "tokens": [
         {
           "start": 0,
@@ -713,62 +673,52 @@
         },
         {
           "start": 12,
-          "end": 16,
+          "end": 13,
           "class": "variable"
+        },
+        {
+          "start": 13,
+          "end": 14,
+          "class": "delimiter"
+        },
+        {
+          "start": 15,
+          "end": 16,
+          "class": "string"
         },
         {
           "start": 16,
           "end": 17,
-          "class": "delimiter"
+          "class": "keyword"
         },
         {
           "start": 17,
           "end": 18,
-          "class": "property"
+          "class": "keyword"
         },
         {
           "start": 18,
           "end": 19,
-          "class": "delimiter"
-        },
-        {
-          "start": 20,
-          "end": 21,
           "class": "string"
         },
         {
-          "start": 21,
-          "end": 22,
+          "start": 19,
+          "end": 26,
+          "class": "string"
+        },
+        {
+          "start": 26,
+          "end": 27,
           "class": "keyword"
         },
         {
-          "start": 22,
-          "end": 23,
-          "class": "keyword"
-        },
-        {
-          "start": 23,
-          "end": 24,
+          "start": 27,
+          "end": 28,
           "class": "string"
         },
         {
-          "start": 24,
-          "end": 31,
-          "class": "string"
-        },
-        {
-          "start": 31,
-          "end": 32,
-          "class": "keyword"
-        },
-        {
-          "start": 32,
-          "end": 33,
-          "class": "string"
-        },
-        {
-          "start": 33,
-          "end": 34,
+          "start": 28,
+          "end": 29,
           "class": "delimiter"
         }
       ]

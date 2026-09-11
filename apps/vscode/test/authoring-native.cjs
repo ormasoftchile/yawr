@@ -51,7 +51,7 @@ exports.run = async () => {
   const signature = probe => vscode.commands.executeCommand('vscode.executeSignatureHelpProvider', probe.doc.uri, probe.position);
   const rawReply = async (probe, operation) => {
     const captured = captureAuthoringContext(probe.doc, extension.extensionPath, 700);
-    return client.resolve(config.helper, { schema_version: 'authoring-request/v2', request_id: `native-${++sequence}`,
+    return client.resolve(config.helper, { schema_version: 'authoring-request/v3', request_id: `native-${++sequence}`,
       operation, context: captured.context, document: captured.document, overlays: captured.overlays, position: probe.doc.offsetAt(probe.position) });
   };
   const accept = async (probe, expectedItem) => {

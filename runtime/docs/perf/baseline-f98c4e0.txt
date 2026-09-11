@@ -7,11 +7,11 @@ BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24
 BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  279963	      4645 ns/op	    7320 B/op	      42 allocs/op
 BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  262028	      4776 ns/op	    7320 B/op	      42 allocs/op
 BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  268365	      4612 ns/op	    7320 B/op	      42 allocs/op
-BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  132253	      8878 ns/op	    9616 B/op	      69 allocs/op
-BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  151480	      8273 ns/op	    9616 B/op	      69 allocs/op
-BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  148261	      7702 ns/op	    9616 B/op	      69 allocs/op
-BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  139515	      7675 ns/op	    9616 B/op	      69 allocs/op
-BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  194305	      7946 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_region_==_"us-east-1"-24         	  132253	      8878 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_region_==_"us-east-1"-24         	  151480	      8273 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_region_==_"us-east-1"-24         	  148261	      7702 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_region_==_"us-east-1"-24         	  139515	      7675 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_region_==_"us-east-1"-24         	  194305	      7946 ns/op	    9616 B/op	      69 allocs/op
 BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  139429	      7308 ns/op	    8944 B/op	      68 allocs/op
 BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  123007	      8342 ns/op	    8944 B/op	      68 allocs/op
 BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  161374	      8047 ns/op	    8944 B/op	      68 allocs/op

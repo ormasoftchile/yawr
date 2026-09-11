@@ -68,6 +68,9 @@ func (e *IterateExecutor) Execute(ctx context.Context, step engine.ResolvedStep,
 
 	// Dispatch to concurrent or sequential based on concurrency setting
 	if spec.Concurrency > 1 {
+		if spec.Until != "" {
+			return nil, fmt.Errorf("iterate executor: until is not supported with concurrent execution")
+		}
 		return e.executeConcurrent(ctx, step, spec, items, loopVar, vars)
 	}
 	return e.executeSequential(ctx, step, spec, items, loopVar, vars)
@@ -237,9 +240,9 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 
 	// Shared state protected by mutex
 	var mu sync.Mutex
-	collected := map[string]any{}
+	collections := make([]map[string]any, len(items))
 	typedCollections := make([]map[string]any, len(items))
-	iterationVars := map[string]any{}
+	iterationResults := make([]map[string]any, len(items))
 	status := engine.StepStatusCompleted
 	var firstErr error
 	iterations := 0
@@ -247,8 +250,6 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 	// WaitGroup to track all workers
 	var wg sync.WaitGroup
 
-	// Note: Until condition is evaluated after each iteration completes in concurrent mode.
-	// The evaluation order is non-deterministic across workers.
 	for i, item := range items {
 		// Check if we should stop due to error
 		mu.Lock()
@@ -343,6 +344,7 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 			}
 
 			// Check step results for failure
+			produced := make(map[string]any)
 			for _, res := range results {
 				if res == nil {
 					continue
@@ -350,15 +352,15 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 				// Merge vars from this iteration — include into iterVars so collect
 				// expressions below can reference vars set by sub-steps.
 				for k, v := range res.Vars {
-					iterationVars[k] = v
 					iterVars[k] = v
+					produced[k] = v
 				}
 				if res.Status == engine.StepStatusFailed {
 					status = engine.StepStatusFailed
 				}
 			}
 
-			// Collect aggregation (mutex-protected)
+			values := make(map[string]any, len(spec.Collect))
 			for key, tmpl := range spec.Collect {
 				val := tmpl
 				if e.evaluator != nil {
@@ -371,9 +373,10 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 					}
 					val = resolved
 				}
-				collected[key] = appendCollect(collected[key], val)
+				values[key] = val
 			}
-			values := make(map[string]any, len(spec.CollectValues))
+			collections[iterNum-1] = values
+			typedValues := make(map[string]any, len(spec.CollectValues))
 			for key, template := range spec.CollectValues {
 				value, err := resolveTypedValue(e.evaluator, template, iterVars)
 				if err != nil {
@@ -384,25 +387,11 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 					cancel()
 					return
 				}
-				values[key] = value
+				typedValues[key] = value
 			}
-			typedCollections[iterNum-1] = values
-
-			iterations = iterNum
-
-			// Until condition check (non-deterministic across workers)
-			if spec.Until != "" {
-				ok, err := evalCondition(e.condition, spec.Until, iterVars)
-				if err != nil && firstErr == nil {
-					firstErr = err
-					status = engine.StepStatusFailed
-					cancel()
-					return
-				}
-				if ok {
-					cancel() // Stop other workers
-				}
-			}
+			typedCollections[iterNum-1] = typedValues
+			iterationResults[iterNum-1] = produced
+			iterations++
 		}()
 	}
 
@@ -416,11 +405,15 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 
 	result := newResult(step, status)
 	result.Output["iterations"] = iterations
-	for k, v := range iterationVars {
-		result.Vars[k] = v
+	for _, iterVars := range iterationResults {
+		for k, v := range iterVars {
+			result.Vars[k] = v
+		}
 	}
-	for k, v := range collected {
-		result.Vars[k] = v
+	for _, values := range collections {
+		for key, value := range values {
+			result.Vars[key] = appendCollect(result.Vars[key], value)
+		}
 	}
 	for key := range spec.CollectValues {
 		result.Vars[key] = []any{}

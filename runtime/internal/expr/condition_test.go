@@ -89,24 +89,24 @@ func TestSimpleConditionEvaluator(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "vars.field syntax (backward compat)",
-			condition: `vars.all_passed == "dns_fail"`,
+			name:      "field syntax (backward compat)",
+			condition: `all_passed == "dns_fail"`,
 			vars:      map[string]any{"all_passed": "dns_fail"},
 			want:      true,
 		},
 		{
-			name:      "vars.field numeric",
-			condition: `vars.count > 40`,
+			name:      "field numeric",
+			condition: `count > 40`,
 			vars:      map[string]any{"count": 42},
 			want:      true,
 		},
 		{
-			name:      "mixed direct and vars. syntax",
-			condition: `vars.status == "ok" and count > 10`,
+			name:      "mixed direct and  syntax",
+			condition: `status == "ok" and count > 10`,
 			vars:      map[string]any{"status": "ok", "count": 15},
 			want:      true,
 		},
-		// Regression tests for the vars.all_passed bug
+		// Regression tests for the all_passed bug
 		{
 			name:      "bare variable match true - dns_fail",
 			condition: `all_passed == "dns_fail"`,
@@ -133,19 +133,19 @@ func TestSimpleConditionEvaluator(t *testing.T) {
 		},
 		{
 			name:      "vars prefix with dns_fail (defensive fix)",
-			condition: `vars.all_passed == "dns_fail"`,
+			condition: `all_passed == "dns_fail"`,
 			vars:      map[string]any{"all_passed": "dns_fail"},
 			want:      true,
 		},
 		{
 			name:      "vars prefix with routing_fail (defensive fix)",
-			condition: `vars.all_passed == "routing_fail"`,
+			condition: `all_passed == "routing_fail"`,
 			vars:      map[string]any{"all_passed": "routing_fail"},
 			want:      true,
 		},
 		{
 			name:      "vars prefix mismatch (defensive fix)",
-			condition: `vars.all_passed == "dns_fail"`,
+			condition: `all_passed == "dns_fail"`,
 			vars:      map[string]any{"all_passed": "all_pass"},
 			want:      false,
 		},
@@ -267,7 +267,7 @@ func TestSimpleConditionEvaluatorNativeGXL(t *testing.T) {
 		{name: "equality", condition: `env == "prod"`, vars: map[string]any{"env": "prod"}, want: true},
 		{name: "and", condition: `env == "prod" and count > 1`, vars: map[string]any{"env": "prod", "count": 5}, want: true},
 		{name: "not", condition: `not ready`, vars: map[string]any{"ready": false}, want: true},
-		{name: "vars namespace", condition: `vars.status == "ok"`, vars: map[string]any{"status": "ok"}, want: true},
+		{name: "vars namespace", condition: `status == "ok"`, vars: map[string]any{"status": "ok"}, want: true},
 		{name: "str namespace", condition: `str.contains(output, "200")`, vars: map[string]any{"output": "HTTP 200"}, want: true},
 	}
 

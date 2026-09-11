@@ -41,11 +41,11 @@ transport: {mode: native, command: must-not-dispatch}
 actions:
   - name: cpu
     args: {}
-    outputs: {result: {type: object}}
+    outputs: {result: {type: string}}
     execute: {kind: runbook, path: parent.runbook.yaml}
   - name: memory
     args: {}
-    outputs: {result: {type: object}}
+    outputs: {result: {type: string}}
     execute: {kind: runbook, path: parent.runbook.yaml}
 `)
 	writeFile(t, filepath.Join(pkgDir, "helper.tool.yaml"), `apiVersion: yawr.tool/v1
@@ -56,20 +56,20 @@ actions:
     args:
       hash: {type: string, required: false, default: ""}
       verified: {type: boolean, required: false, default: false}
-    outputs: {result: {type: object}}
+    outputs: {result: {type: string}}
     execute: {kind: runbook, path: helper.runbook.yaml}
   - name: low
     args:
       hash: {type: string, required: false, default: ""}
       verified: {type: boolean, required: false, default: false}
-    outputs: {result: {type: object}}
+    outputs: {result: {type: string}}
     execute: {kind: runbook, path: helper.runbook.yaml}
 `)
 	writeFile(t, filepath.Join(pkgDir, "parent.runbook.yaml"), `apiVersion: yawr.runbook/v1
 id: parent
 name: Parent
 toolRefs: [{name: private-helper}]
-outputs: {result: {type: object, value_expr: child_result}}
+outputs: {result: {type: string, value_expr: child_result}}
 flow:
   - step:
       id: high_child
@@ -89,7 +89,7 @@ inputs:
   hash: {type: string, required: false, default: ""}
   verified: {type: boolean, required: false, default: false}
 outputs:
-  result: {type: object, value_expr: vars}
+  result: {type: string, value_expr: hash}
 flow:
   - step: {id: marker, type: noop, capture: {synthetic: no-provider}}
   - step:
@@ -118,7 +118,7 @@ flow:
       id: verify_output
       type: assert
       assert:
-        - {type: eq, subject: '${result.hash == "" and result.verified == false and result.synthetic == "no-provider"}', expected: "true"}
+        - {type: eq, subject: '${result == ""}', expected: "true"}
 `, action, action, action))
 	}
 	parserImpl, err := internalparser.New(platform.Real())
@@ -231,8 +231,8 @@ flow:
 			}
 			switch state.Status {
 			case "completed":
-				result, ok := state.Vars["result"].(map[string]any)
-				if !ok || result["hash"] != "" || result["verified"] != false || result["synthetic"] != "no-provider" {
+				result, ok := state.Vars["result"].(string)
+				if !ok || result != "" {
 					return fmt.Errorf("invalid typed result: %#v", state.Vars)
 				}
 				return nil

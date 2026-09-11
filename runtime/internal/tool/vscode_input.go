@@ -2,6 +2,7 @@ package tool
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
@@ -10,9 +11,6 @@ import (
 
 // applyVSCodeInputAdaptation translates logical tool action args into the
 // provider-keyed (MCP) parameter set declared in action.VSCodeInput.
-//
-// When VSCodeInput is nil or empty, args are returned unchanged so callers
-// that shipped before vscode_input existed continue to work without edits.
 //
 // Semantics (all fail-closed):
 //   - required: true and value absent → error before any bridge request.
@@ -32,6 +30,37 @@ func applyMCPInputAdaptation(action *toolpkg.ToolAction, args map[string]any) (m
 		return args, nil
 	}
 	return applyMappedMCPInput("mcp-http", "mcp_input", action.MCPInput, args)
+}
+
+func validateToolArguments(action *toolpkg.ToolAction, args map[string]any) error {
+	if action == nil {
+		return fmt.Errorf("tool runtime: action not found")
+	}
+	supplied := make([]string, 0, len(args))
+	for name := range args {
+		supplied = append(supplied, name)
+	}
+	sort.Strings(supplied)
+	for _, name := range supplied {
+		if _, declared := action.Args[name]; !declared {
+			return fmt.Errorf("tool runtime: argument %q is not declared by the action", name)
+		}
+	}
+	declared := make([]string, 0, len(action.Args))
+	for name := range action.Args {
+		declared = append(declared, name)
+	}
+	sort.Strings(declared)
+	for _, name := range declared {
+		def := action.Args[name]
+		if def == nil || !def.Required {
+			continue
+		}
+		if value, present := args[name]; !present || value == nil {
+			return fmt.Errorf("tool runtime: required argument %q is missing", name)
+		}
+	}
+	return nil
 }
 
 func applyMappedMCPInput(prefix, field string, mappings map[string]*schema.VSCodeInputMapping, args map[string]any) (map[string]any, error) {

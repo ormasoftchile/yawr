@@ -378,6 +378,9 @@ func (p *parser) argList(depth int, allowEmpty bool) ([]Node, error) {
 
 func (p *parser) pathRef(depth int) (Node, error) {
 	root := p.peek()
+	if root.lit == "vars" {
+		return nil, parseErr("GXL-PARSE-010", root.start, "obsolete vars namespace is not supported; use bare variables")
+	}
 	if root.kind == tokKeyword && !isNamespaceRoot(root.lit) {
 		return nil, parseErr("GXL-PARSE-010", root.start, "keyword %q cannot be used as an identifier", root.lit)
 	}

@@ -40,9 +40,8 @@ are copied recursively. Mixed templates such as `item-${iteration}` remain
 strings. Missing required paths and expression errors fail the step.
 
 Every `collect_values` destination produces an array, including `[]` for zero
-iterations. Typed collections preserve input iteration order even with
-`concurrency > 1`; legacy concurrent `collect` retains its completion-order
-behavior. A destination cannot occur in both maps.
+iterations. All collections preserve input iteration order even with
+`concurrency > 1`. A destination cannot occur in both maps.
 
 Collection sees the existing iteration scope, including child captures.
 Conditional bodies must explicitly initialize their outputs or use a

@@ -67,12 +67,12 @@ test('actual canonical regex fixture maps plain, single, double, literal, folded
 });
 test('actual literal argument semantics preserve comparator composition, RE2 classes and computed/property negatives', async () => {
   const cases = [
-    { expr: 'regex.match(vars.name, "^ab+$")', regex: true },
+    { expr: 'regex.match(name, "^ab+$")', regex: true },
     { expr: 'list.order(items, "regex.match(a.name, \\"^ab+$\\")")', regex: true },
-    { expr: 'obj.regex.match(vars.name, "^ab+$")', regex: false },
-    { expr: 'regex.match(vars.name, "^ab" + "+$")', regex: false },
-    { expr: 'regex.match(vars.name, ("^ab+$"))', regex: false },
-    { expr: 'regex.match(vars.name, vars.pattern)', regex: false },
+    { expr: 'obj.regex.match(name, "^ab+$")', regex: false },
+    { expr: 'regex.match(name, "^ab" + "+$")', regex: false },
+    { expr: 'regex.match(name, ("^ab+$"))', regex: false },
+    { expr: 'regex.match(name, pattern)', regex: false },
   ];
   for (const entry of cases) {
     const source = stringify({ flow: [{ step: { type: 'noop', when: entry.expr } }] });

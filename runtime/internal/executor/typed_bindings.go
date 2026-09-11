@@ -16,11 +16,10 @@ import (
 type pureEvaluator struct{ remaining int }
 
 func pureScope(vars map[string]any) (*gxleval.Scope, error) {
-	all := make(map[string]any, len(vars)+1)
+	all := make(map[string]any, len(vars))
 	for name, value := range vars {
 		all[name] = value
 	}
-	all["vars"] = vars
 	return gxleval.FromAny(all)
 }
 

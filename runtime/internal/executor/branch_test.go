@@ -130,10 +130,10 @@ func TestBranchExecutor_MergesVars(t *testing.T) {
 	}
 }
 
-// Regression tests for the vars.all_passed bug
+// Regression tests for the all_passed bug
 // These tests use the actual SimpleConditionEvaluator to verify
 // that branch conditions work correctly with both bare variables
-// and vars. prefix syntax
+// and  prefix syntax
 
 func TestBranchExecutor_ConditionMatchesCorrectArm_DnsFail(t *testing.T) {
 	var calledArm string
@@ -239,8 +239,8 @@ func TestBranchExecutor_VarsPrefixCondition(t *testing.T) {
 	exec := NewBranchExecutor(cond, runner)
 
 	step := engine.ResolvedStep{ID: "branch", Kind: "branch", Spec: &schema.BranchSpec{Branches: []schema.BranchArm{
-		{Condition: `vars.all_passed == "dns_fail"`, Label: "dns_fail_arm", Steps: []schema.FlowNode{{Step: &schema.Step{ID: "dns_fail_step", Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Command: "echo dns_fail"}}}}},
-		{Condition: `vars.all_passed == "all_pass"`, Label: "all_pass_arm", Steps: []schema.FlowNode{{Step: &schema.Step{ID: "all_pass_step", Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Command: "echo all_pass"}}}}},
+		{Condition: `all_passed == "dns_fail"`, Label: "dns_fail_arm", Steps: []schema.FlowNode{{Step: &schema.Step{ID: "dns_fail_step", Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Command: "echo dns_fail"}}}}},
+		{Condition: `all_passed == "all_pass"`, Label: "all_pass_arm", Steps: []schema.FlowNode{{Step: &schema.Step{ID: "all_pass_step", Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Command: "echo all_pass"}}}}},
 	}}}
 
 	vars := map[string]any{"all_passed": "dns_fail"}
@@ -249,7 +249,7 @@ func TestBranchExecutor_VarsPrefixCondition(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 	if calledArm != "dns_fail_step" {
-		t.Fatalf("expected dns_fail_step to run with vars. prefix, got %s", calledArm)
+		t.Fatalf("expected dns_fail_step to run with  prefix, got %s", calledArm)
 	}
 	if res.Output["matched_arm"] != "dns_fail_arm" {
 		t.Fatalf("expected matched_arm dns_fail_arm, got %v", res.Output["matched_arm"])

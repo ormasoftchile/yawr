@@ -13,8 +13,7 @@ func TestTemplateVariables(t *testing.T) {
 		wantAll  bool
 	}{
 		{name: "transformed", template: "Bearer ${root_token}", want: []string{"root_token"}},
-		{name: "calls and paths", template: "${str.trim(vars.root_token)}-${region.name}", want: []string{"region", "root_token"}},
-		{name: "complete vars map", template: "${vars}", want: []string{}, wantAll: true},
+		{name: "calls and paths", template: "${str.trim(root_token)}-${region.name}", want: []string{"region", "root_token"}},
 		{name: "escaped interpolation", template: `\${literal}`, want: []string{}},
 	}
 	for _, test := range tests {
@@ -27,5 +26,8 @@ func TestTemplateVariables(t *testing.T) {
 				t.Fatalf("TemplateVariables(%q) = %#v, %v; want %#v, %v", test.template, got, all, test.want, test.wantAll)
 			}
 		})
+	}
+	if _, _, err := TemplateVariables("${vars}"); err == nil {
+		t.Fatal("obsolete vars namespace accepted")
 	}
 }

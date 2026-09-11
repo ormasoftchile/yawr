@@ -3,8 +3,10 @@ package executor
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	internalexpr "github.com/ormasoftchile/yawr/runtime/internal/expr"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
@@ -151,18 +153,21 @@ func TestIterateExecutor_ConcurrentWithCollect(t *testing.T) {
 	counter := 0
 
 	runner := func(ctx context.Context, _ SubStepParent, steps []schema.FlowNode, vars map[string]any) ([]*engine.StepResult, error) {
+		if vars["item"] == "a" {
+			time.Sleep(20 * time.Millisecond)
+		}
 		mu.Lock()
 		counter++
 		mu.Unlock()
 		return []*engine.StepResult{{StepID: "child", Status: engine.StepStatusCompleted}}, nil
 	}
-	exec := NewIterateExecutor(nil, nil, runner)
+	exec := NewIterateExecutor(&internalexpr.TemplateEvaluator{}, nil, runner)
 
 	step := engine.ResolvedStep{ID: "iterate", Kind: "iterate", Spec: &schema.IterateNode{
 		Over:        "a,b,c",
 		As:          "item",
 		Concurrency: 2,
-		Collect:     map[string]string{"last": "item"},
+		Collect:     map[string]string{"items": "${item}"},
 		Steps:       []schema.FlowNode{{Step: &schema.Step{ID: "s1", Type: schema.StepTypeCLI, CLI: &schema.CLISpec{Command: "echo"}}}},
 	}}
 
@@ -173,9 +178,20 @@ func TestIterateExecutor_ConcurrentWithCollect(t *testing.T) {
 	if counter != 3 {
 		t.Fatalf("expected 3 iterations, got %d", counter)
 	}
-	// With concurrent execution, collect map should have one of the items
-	if res.Vars["last"] == nil {
-		t.Fatalf("expected collect var 'last' to be set")
+	if got, want := res.Vars["items"], []any{"a", "b", "c"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("collect order = %#v, want %#v", got, want)
+	}
+}
+
+func TestIterateExecutor_ConcurrentRejectsUntil(t *testing.T) {
+	exec := NewIterateExecutor(nil, nil, func(context.Context, SubStepParent, []schema.FlowNode, map[string]any) ([]*engine.StepResult, error) {
+		return nil, nil
+	})
+	step := engine.ResolvedStep{ID: "iterate", Kind: "iterate", Spec: &schema.IterateNode{
+		Over: "a,b", Concurrency: 2, Until: "done",
+	}}
+	if _, err := exec.Execute(context.Background(), step, map[string]any{}); err == nil {
+		t.Fatal("concurrent until accepted with nondeterministic scheduling")
 	}
 }
 

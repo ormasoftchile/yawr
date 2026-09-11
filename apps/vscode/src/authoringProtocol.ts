@@ -8,7 +8,7 @@ export type AuthoringOperation = typeof operations[number];
 export interface AuthoringRange { start: number; end: number }
 export interface AuthoringEdit { range: AuthoringRange; new_text: string }
 export interface AuthoringRequest {
-  schema_version: 'yawr.authoring-request/v1' | 'authoring-request/v2' | 'authoring-request/v3'; request_id: string; operation: AuthoringOperation;
+  schema_version: 'authoring-request/v3'; request_id: string; operation: AuthoringOperation;
   context: ResolveContext; document: SourceBuffer; overlays: SourceBuffer[]; position: number;
 }
 export interface AuthoringItem {
@@ -23,7 +23,7 @@ export interface AuthoringSignature {
 }
 export interface RequiredEdit { edit: AuthoringEdit; placeholders: AuthoringRange[] }
 export interface AuthoringReply {
-  schema_version: 'yawr.authoring-reply/v1' | 'authoring-reply/v2' | 'authoring-reply/v3'; resolver_version: 'yawr.core-authoring/v1' | 'core-authoring/v2' | 'core-authoring/v3'; grammar_version: 'yawr-expression/v2';
+  schema_version: 'authoring-reply/v3'; resolver_version: 'core-authoring/v3'; grammar_version: 'yawr-expression/v2';
   operation: AuthoringOperation; request_id: string; context: ResolveContext;
   document: { uri: string; version: number; digest: string };
   status: 'resolved' | 'unavailable' | 'stale'; reason?: string;
@@ -166,32 +166,25 @@ export function visitJSONWire(source: string, options: {
   };
   value(0); whitespace(); if (cursor !== source.length) return invalid();
 }
-export function decodeAuthoringCapabilities(value: unknown, version: 1 | 2 | 3 = 1): void {
+export function decodeAuthoringCapabilities(value: unknown): void {
   const v = closed(value, ['schema_version', 'resolver_version', 'grammar_version', 'operations', 'discovery_scope',
     'max_bytes', 'max_overlays', 'max_items', 'max_value_code_units', 'max_depth',
-    ...(version === 3 ? ['capabilities', 'capture_roots', 'typed_operations'] : [])]);
-  const schemaVersion = version === 1 ? 'yawr.authoring-capabilities/v1' : `authoring-capabilities/v${version}`;
-  const resolverVersion = version === 1 ? 'yawr.core-authoring/v1' : `core-authoring/v${version}`;
-  if (v.schema_version !== schemaVersion || v.resolver_version !== resolverVersion ||
+    'capabilities', 'capture_roots', 'typed_operations']);
+  if (v.schema_version !== 'authoring-capabilities/v3' || v.resolver_version !== 'core-authoring/v3' ||
     v.grammar_version !== 'yawr-expression/v2' || v.discovery_scope !== 'explicit-local-catalog' ||
     JSON.stringify(v.operations) !== JSON.stringify(operations) || v.max_bytes !== AUTHORING_MAX_BYTES ||
     v.max_overlays !== 128 || v.max_items !== 4096 || v.max_value_code_units !== 32768 || v.max_depth !== 128) return invalid();
-  if (version === 3) {
-    if (JSON.stringify(v.capabilities) !== '["yawr.typed-results/v1"]' || JSON.stringify(v.capture_roots) !== '["outputs"]') return invalid();
-    const typed = list(v.typed_operations, raw => closed(raw, ['kind', 'role', 'terminal'], ['title']));
-    if (typed.length !== 2 || typed[0].kind !== 'assign' || typed[0].role !== 'technical' || typed[0].terminal !== false ||
-        typed[0].title !== undefined || typed[1].kind !== 'results' || typed[1].role !== 'operator' ||
-        typed[1].terminal !== true || typed[1].title !== 'Results') return invalid();
-  }
+  if (JSON.stringify(v.capabilities) !== '["yawr.typed-results/v1"]' || JSON.stringify(v.capture_roots) !== '["outputs"]') return invalid();
+  const typed = list(v.typed_operations, raw => closed(raw, ['kind', 'role', 'terminal'], ['title']));
+  if (typed.length !== 2 || typed[0].kind !== 'assign' || typed[0].role !== 'technical' || typed[0].terminal !== false ||
+      typed[0].title !== undefined || typed[1].kind !== 'results' || typed[1].role !== 'operator' ||
+      typed[1].terminal !== true || typed[1].title !== 'Results') return invalid();
 }
 export function decodeAuthoringReply(value: unknown, request: AuthoringRequest): AuthoringReply {
-  const version = request.schema_version === 'authoring-request/v3' ? 3 : request.schema_version === 'authoring-request/v2' ? 2 : 1;
   if (Buffer.byteLength(JSON.stringify(value), 'utf8') > AUTHORING_MAX_BYTES) return invalid();
   const v = closed(value, ['schema_version', 'resolver_version', 'grammar_version', 'operation', 'request_id',
     'context', 'document', 'status', 'discovery', 'dependencies', 'site', 'items', 'signature', 'required_edit'], ['reason']);
-  const schemaVersion = version === 1 ? 'yawr.authoring-reply/v1' : `authoring-reply/v${version}`;
-  const resolverVersion = version === 1 ? 'yawr.core-authoring/v1' : `core-authoring/v${version}`;
-  if (v.schema_version !== schemaVersion || v.resolver_version !== resolverVersion ||
+  if (v.schema_version !== 'authoring-reply/v3' || v.resolver_version !== 'core-authoring/v3' ||
     v.grammar_version !== 'yawr-expression/v2' || v.operation !== request.operation || v.request_id !== request.request_id) return invalid();
   const ctx = closed(v.context, ['project_root', 'generation'], ['package_map_path', 'entrypoint_path', 'package_root']);
   for (const key of ['project_root', 'generation', 'package_map_path', 'entrypoint_path', 'package_root'] as const) {
@@ -213,8 +206,7 @@ export function decodeAuthoringReply(value: unknown, request: AuthoringRequest):
     const pointer = text(s.yaml_path);
     if (!pointer.startsWith('/') || /~(?![01])/.test(pointer)) return invalid();
     site = { kind: oneOf(s.kind, ['tool-reference', 'tool', 'action', 'argument', 'expression',
-      ...(version >= 2 ? ['include-mapping', 'include-key', 'include-value'] as const : []),
-      ...(version === 3 ? ['typed-key', 'typed-value'] as const : [])]), yaml_path: pointer, range: range(s.range, source) };
+      'include-mapping', 'include-key', 'include-value', 'typed-key', 'typed-value']), yaml_path: pointer, range: range(s.range, source) };
     for (const key of ['binding_id', 'tool_id', 'action'] as const) if (s[key] !== undefined) site[key] = text(s[key]);
     if (s.tool_digest !== undefined) site.tool_digest = digest(s.tool_digest);
   }
@@ -223,14 +215,13 @@ export function decodeAuthoringReply(value: unknown, request: AuthoringRequest):
     const i = closed(raw, ['id', 'kind', 'name', 'edit'], ['description', 'value_type', 'required', 'default_info']);
     const id = text(i.id); if (ids.has(id)) return invalid(); ids.add(id);
     const item: AuthoringItem = { id, kind: oneOf(i.kind, ['tool', 'action', 'argument', 'namespace', 'function',
-      ...(version >= 2 ? ['include-mapping', 'include-key', 'include-value'] as const : []),
-      ...(version === 3 ? ['variable', 'typed-key', 'typed-value'] as const : [])]),
+      'include-mapping', 'include-key', 'include-value', 'variable', 'typed-key', 'typed-value']),
       name: text(i.name), edit: edit(i.edit, source, site), ...description(i) };
     if (i.required !== undefined) { if (typeof i.required !== 'boolean') return invalid(); item.required = i.required; }
     if (i.value_type !== undefined) item.value_type = text(i.value_type);
     if (i.default_info !== undefined) item.default_info = oneOf(i.default_info, ['absent', 'declared-redacted'] as const);
     if (site && !({ 'tool-reference': ['tool'], tool: ['tool'], action: ['action'], argument: ['argument'],
-      expression: ['namespace', 'function', ...(version === 3 ? ['variable'] : [])], 'typed-key': ['typed-key'], 'typed-value': ['typed-value'],
+      expression: ['namespace', 'function', 'variable'], 'typed-key': ['typed-key'], 'typed-value': ['typed-value'],
       'include-mapping': ['include-mapping'], 'include-key': ['include-key'],
       'include-value': ['include-value'] }[site.kind].includes(item.kind))) return invalid();
     return item;

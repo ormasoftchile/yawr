@@ -13,7 +13,7 @@ function pair() {
   const request = { ...vectors.base_request, operation: vector.operation, position,
     document: { ...vectors.document_identity, text } };
   const range = { start: position - 1, end: position };
-  const reply = { schema_version: 'yawr.authoring-reply/v1', resolver_version: 'yawr.core-authoring/v1',
+  const reply = { schema_version: 'authoring-reply/v3', resolver_version: 'core-authoring/v3',
     grammar_version: 'yawr-expression/v2', operation: request.operation, request_id: request.request_id,
     context: { ...request.context }, document: { uri: request.document.uri, version: request.document.version, digest: digest(text) },
     status: 'resolved', discovery: { scope: 'explicit-local-catalog', status: 'complete' },
@@ -23,7 +23,7 @@ function pair() {
   return { request, reply };
 }
 test('canonical fixture bytes pinned, strict edit retains entire surrounding source', () => {
-  assert.equal(createHash('sha256').update(raw).digest('hex'), 'bd37e62d80bcb59ce3fd5835f8e1b8e00dee4575649dc235fe5612c0a107554b');
+  assert.equal(createHash('sha256').update(raw).digest('hex'), '08500d8713f80a93e218a1fe8a9ce11953eae9eb0a079af0e86caf4301fb5c4e');
   const { request, reply } = pair();
   const decoded = protocol.decodeAuthoringReply(reply, request);
   const { range, new_text } = decoded.items[0].edit;

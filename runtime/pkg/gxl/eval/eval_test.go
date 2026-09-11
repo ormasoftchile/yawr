@@ -33,7 +33,7 @@ func TestEvalOperatorsAndFunctions(t *testing.T) {
 		{"list contains", "list.contains(items, 2)", map[string]any{"items": []any{1, 2, 3}}, true},
 		{"list index", "list.indexOf(items, 3)", map[string]any{"items": []any{1, 2, 3}}, float64(2)},
 		{"regex match", `regex.match("abc123", "^[a-z]+\\d+$")`, nil, true},
-		{"path ref", "vars.user.id == 42", map[string]any{"vars": map[string]any{"user": map[string]any{"id": 42}}}, true},
+		{"path ref", "user.id == 42", map[string]any{"user": map[string]any{"id": 42}}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

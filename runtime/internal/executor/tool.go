@@ -661,10 +661,10 @@ func (e *ToolExecutor) executePlannedSubstitution(
 	// resolution used everywhere else GCP paths are consumed (step
 	// Capture blocks), not the plain ${...} templating mechanism (which
 	// has no "step" root and cannot see raw per-step stdout/json). A
-	// value that isn't parseable as a GCP path falls back to the
-	// template evaluator for backward compatibility with any literal or
-	// ${var}-style output declaration. Either path's rendered value is
-	// then coerced to the declared type via coerceOutputAny. The result
+	// Values parseable as GCP paths resolve against the child run. Other
+	// values use the template evaluator, which provides the canonical literal
+	// and interpolation semantics for output declarations. The rendered value
+	// is then coerced to the declared type via coerceOutputAny. The result
 	// lands in result.Output, which is what the ratified outputs.<name>
 	// GCP capture root (pkg/gcp/parser, pkg/capture) resolves against for
 	// this step.
@@ -792,9 +792,6 @@ func sortedOutputNames(outputs map[string]*schema.Output) []string {
 // CheckArgEnums returns an ENUM-008 error for the first materialized
 // (post-GIS-interpolation) tool arg value that is bound to an
 // enum-constrained action arg but is not one of its declared members. Only
-// string-valued args are checked: a non-string bound value is not this
-// runtime's concern here (type-before-enum, AR-ENUM-7) since no general
-// tool-arg type coercion/validation exists elsewhere in this runtime yet.
 // Exported (barbara-enum-mvp-implementation-gate.md R5) so
 // internal/replay's ReplayExecutor can perform the identical check at the
 // same moment the real ToolExecutor does, rather than bypassing it.
@@ -809,7 +806,7 @@ func CheckArgEnums(actionDef *tool.ToolAction, args map[string]any) error {
 		}
 		s, ok := v.(string)
 		if !ok {
-			continue
+			return errkit.New("ENUM-008", fmt.Sprintf("tool arg %q must be a string for enum validation", name))
 		}
 		if !argDef.Enum.Contains(s) {
 			return errkit.New("ENUM-008", fmt.Sprintf("tool arg %q value is not a declared enum member", name))
@@ -827,8 +824,14 @@ func CheckSchemaArgEnums(actionDef *schema.ToolAction, args map[string]any) erro
 			continue
 		}
 		value, found := args[name]
+		if !found {
+			continue
+		}
 		text, isText := value.(string)
-		if found && isText && !argDef.Enum.Contains(text) {
+		if !isText {
+			return errkit.New("ENUM-008", fmt.Sprintf("tool arg %q must be a string for enum validation", name))
+		}
+		if !argDef.Enum.Contains(text) {
 			return errkit.New("ENUM-008", fmt.Sprintf("tool arg %q value is not a declared enum member", name))
 		}
 	}

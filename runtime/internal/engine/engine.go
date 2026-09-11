@@ -371,10 +371,13 @@ func (e *impl) Resume(ctx context.Context, runID string, opts enginepkg.RunOptio
 	if err := plansnapshot.ValidateResumeSafetyForState(plan, state); err != nil {
 		return nil, fmt.Errorf("engine: resume %s: %w", runID, err)
 	}
-	if state.PlanSnapshotDigest != "" && durablePlanDigest == "" {
+	if state.PlanSnapshotDigest == "" {
+		return nil, fmt.Errorf("engine: checkpoint for %s is missing plan snapshot digest", runID)
+	}
+	if durablePlanDigest == "" {
 		return nil, fmt.Errorf("engine: checkpoint for %s requires its durable execution plan", runID)
 	}
-	if durablePlanDigest != "" && state.PlanSnapshotDigest != durablePlanDigest {
+	if state.PlanSnapshotDigest != durablePlanDigest {
 		return nil, fmt.Errorf("engine: checkpoint plan digest %q does not match durable plan %q", state.PlanSnapshotDigest, durablePlanDigest)
 	}
 	if err := validateRestoredTypedState(plan, state); err != nil {
@@ -1081,7 +1084,7 @@ func (h *runHandle) Next(ctx context.Context) (result *enginepkg.StepResult, err
 	// Advance to next step, skipping sub-steps (Depth > 0).
 	// Sub-steps belong to their parent container (iterate, branch, parallel)
 	// and are executed via SubStepRunner with the correct loop variable scope.
-	// Executing them here would double-execute them without loop vars.
+	// Executing them here would double-execute them without loop
 	h.run.CurrentStepIndex++
 	for h.run.CurrentStepIndex < len(h.run.Plan.Steps) && h.run.Plan.Steps[h.run.CurrentStepIndex].Depth > 0 {
 		h.run.CurrentStepIndex++

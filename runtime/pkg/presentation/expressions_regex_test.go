@@ -91,7 +91,7 @@ func TestExpressionRegexSemanticSource(t *testing.T) {
 }
 
 func TestExpressionRegexGISMapping(t *testing.T) {
-	for _, text := range []string{`^\d+${vars.suffix}$`, `^\${literal}$`, `^\\${vars.x}$`, `^\n\t\r\\d+$`, `^ab$${bad}`, "🚀${vars.x}", `^${regex.match(vars.x, "^${notGIS}$")}+$`, `^${vars.x`} {
+	for _, text := range []string{`^\d+${suffix}$`, `^\${literal}$`, `^\\${x}$`, `^\n\t\r\\d+$`, `^ab$${bad}`, "🚀${x}", `^${regex.match(x, "^${notGIS}$")}+$`, `^${x`} {
 		value, ok := HighlightExpression(context.Background(), text, ExpressionRegex, false)
 		if !ok {
 			t.Fatal(text)
@@ -118,7 +118,7 @@ func TestExpressionRegexGISMapping(t *testing.T) {
 		if opens != len(blocks) {
 			t.Fatal("diverged from GIS boundary authority", text, value)
 		}
-		if text == `^\\${vars.x}$` && (value.Tokens[1].Start != 1 || value.Tokens[1].End != 3) {
+		if text == `^\\${x}$` && (value.Tokens[1].Start != 1 || value.Tokens[1].End != 3) {
 			t.Fatal("split decoded GIS backslash")
 		}
 		if text == `^\${literal}$` && (value.Tokens[1].Start != 1 || value.Tokens[1].End != 4 || value.Tokens[1].Class != "string") {

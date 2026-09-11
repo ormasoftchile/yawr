@@ -251,7 +251,7 @@ type ToolAction struct {
 	// MCP provider input parameters for vscode-mcp transport invocations.
 	// Map key = provider (MCP) parameter name; value = mapping descriptor.
 	// Only valid when the transport mode is vscode-mcp (VSCODE-002).
-	// Absent = pass args through unchanged (backward compatible).
+	// When absent, declared logical argument names are the provider names.
 	// Validated at scan/plan time; applied in core before bridge wire.
 	VSCodeInput map[string]*VSCodeInputMapping `yaml:"vscode_input,omitempty" json:"vscode_input,omitempty"`
 
@@ -261,7 +261,7 @@ type ToolAction struct {
 
 	// MCPInput declares the parameter mapping from logical action args to remote
 	// MCP tool arguments for mcp-http. Map key = remote MCP parameter name.
-	// Absent = pass args through unchanged.
+	// When absent, declared logical argument names are the remote names.
 	MCPInput map[string]*VSCodeInputMapping `yaml:"mcp_input,omitempty" json:"mcp_input,omitempty"`
 }
 

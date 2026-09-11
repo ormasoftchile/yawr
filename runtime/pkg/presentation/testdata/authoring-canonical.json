@@ -1,6 +1,6 @@
 {
   "base_request": {
-    "schema_version": "yawr.authoring-request/v1",
+    "schema_version": "authoring-request/v3",
     "request_id": "autocomplete-canonical-1",
     "context": {"project_root": "C:\\autocomplete-contract", "generation": 7},
     "overlays": [{

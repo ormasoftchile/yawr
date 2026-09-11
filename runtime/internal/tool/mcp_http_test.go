@@ -409,7 +409,7 @@ func TestMCPHTTPTransport_RuntimeWiring(t *testing.T) {
 		Transport: toolpkg.TransportMCPHTTP,
 		URL:       ts.URL,
 		Actions: map[string]*toolpkg.ToolAction{
-			"echo": {Description: "echo"},
+			"echo": {Description: "echo", Args: map[string]*toolpkg.ArgDef{"text": {Type: "string"}}},
 		},
 	})
 
@@ -586,7 +586,7 @@ func TestMCPHTTPTransport_SchemaRuntimeWiring(t *testing.T) {
 			URL:  ts.URL, // http:// is fine here; we skip ValidateTransportConfig
 		},
 		Actions: map[string]*schemapkg.ToolAction{
-			"echo": {Description: "echo"},
+			"echo": {Description: "echo", Args: map[string]*schemapkg.ArgDef{"text": {Type: "string"}}},
 		},
 	}
 

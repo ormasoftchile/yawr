@@ -15,7 +15,7 @@ func TestExpressionRegexUTCAndBoundaries(t *testing.T) {
 	if _, err := syntax.Parse(utc, syntax.Perl); err != nil {
 		t.Fatal(err)
 	}
-	text := "flow:\n  - step:\n      type: assert\n      assert:\n        - {type: matches, subject: '${vars.start}', expected: &utc '" + utc + "'}\n        - {type: matches, subject: '${vars.end}', expected: *utc}\n"
+	text := "flow:\n  - step:\n      type: assert\n      assert:\n        - {type: matches, subject: '${start}', expected: &utc '" + utc + "'}\n        - {type: matches, subject: '${end}', expected: *utc}\n"
 	got := ResolveExpressions(context.Background(), expressionRequest(t, text))
 	if got.Status != "resolved" {
 		t.Fatal(got)
@@ -44,7 +44,7 @@ func TestExpressionRegexUTCAndBoundaries(t *testing.T) {
 }
 
 func TestExpressionRegexNestedEscapedLiteralMapping(t *testing.T) {
-	text := `${list.order(vars.items, 'regex.match(left.name, "^\\\\d+🚀$")')}`
+	text := `${list.order(items, 'regex.match(left.name, "^\\\\d+🚀$")')}`
 	value, ok := HighlightExpression(context.Background(), text, ExpressionGIS, false)
 	if !ok {
 		t.Fatal("nested regex rejected")

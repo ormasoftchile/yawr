@@ -74,9 +74,13 @@ actions:
   - name: status-query
     description: "Query status for a target (Action A: 5-field typed output)"
     classification: read-only
+    args:
+      target: {type: string, required: true}
   - name: pattern-search
     description: "Search for a pattern (Action B: match-found or no-match)"
     classification: read-only
+    args:
+      query: {type: string, required: true}
 `)
 }
 

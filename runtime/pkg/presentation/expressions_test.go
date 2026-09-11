@@ -46,9 +46,9 @@ func TestExpressionCanonicalValues(t *testing.T) {
 
 func TestExpressionLexicalToleranceAndUTF16(t *testing.T) {
 	for _, text := range []string{
-		"vars.count >= 2", `str.contains(vars.name, "🚀}") and true or null == false`,
-		"vars?.[0]?.name + # comment 🚀\r\n 2", `vars.name + "unfinished`,
-		`date.compare("a", "b")`, `list.order(vars.items, "name")`, "len(vars.x) > 0",
+		"count >= 2", `str.contains(name, "🚀}") and true or null == false`,
+		"vars?.[0]?.name + # comment 🚀\r\n 2", `name + "unfinished`,
+		`date.compare("a", "b")`, `list.order(items, "name")`, "len(x) > 0",
 	} {
 		value, ok := HighlightExpression(context.Background(), text, ExpressionGXL, false)
 		if !ok || len(value.Tokens) == 0 {
@@ -68,11 +68,11 @@ func TestExpressionLexicalToleranceAndUTF16(t *testing.T) {
 			last = token.End
 		}
 	}
-	value, _ := HighlightExpression(context.Background(), `🚀 ${vars.name + }`, ExpressionGIS, false)
+	value, _ := HighlightExpression(context.Background(), `🚀 ${name + }`, ExpressionGIS, false)
 	if value.Tokens[0].Start != 3 || value.Tokens[0].End != 5 || value.Tokens[len(value.Tokens)-1].Class != "interpolation" {
 		t.Fatal(value)
 	}
-	wrapped, _ := HighlightExpression(context.Background(), " {{ vars.x }} ", ExpressionGXL, true)
+	wrapped, _ := HighlightExpression(context.Background(), " {{ x }} ", ExpressionGXL, true)
 	if len(wrapped.Tokens) != 0 {
 		t.Fatal(wrapped)
 	}
@@ -81,79 +81,79 @@ func TestExpressionLexicalToleranceAndUTF16(t *testing.T) {
 func TestExpressionStructuralInventory(t *testing.T) {
 	text := `apiVersion: yawr.runbook/v1
 outputs:
-  expr: {value_expr: 'vars.count >= 2'}
-  template: {value: '${vars.name}'}
-vars: {condition: '${vars.no}', when: vars.no}
-inputs: {x: {default: '${vars.no}'}}
+  expr: {value_expr: 'count >= 2'}
+  template: {value: '${name}'}
+vars: {condition: '${no}', when: no}
+inputs: {x: {default: '${no}'}}
 flow:
   - step:
       id: cli
       type: cli
-      title: 'Hi ${vars.name}'
-      when: vars.count >= 2
-      command: '${vars.command}'
-      args: ['${vars.arg}']
-      run: {windows: '${vars.script}'}
-      stdin: '${vars.in}'
-      env: {KEY: '${vars.env}'}
-      shell: '${vars.shell}'
-      workdir: '${vars.dir}'
-      capture: {ordinary: '${vars.no}'}
-      subtitle: '${vars.no}'
+      title: 'Hi ${name}'
+      when: count >= 2
+      command: '${command}'
+      args: ['${arg}']
+      run: {windows: '${script}'}
+      stdin: '${in}'
+      env: {KEY: '${env}'}
+      shell: '${shell}'
+      workdir: '${dir}'
+      capture: {ordinary: '${no}'}
+      subtitle: '${no}'
   - step:
       type: tool
       tool:
-        name: '${vars.tool}'
-        action: '${vars.action}'
-        args: {nested: [{a/b~c: '${vars.value}'}], condition: '${vars.yes}'}
+        name: '${tool}'
+        action: '${action}'
+        args: {nested: [{a/b~c: '${value}'}], condition: '${yes}'}
   - step:
       type: include
-      when: vars.ready
+      when: ready
       include:
-        when: vars.ready
-        runbook_ref: '${vars.book}'
-        with: {x: '${vars.x}'}
-        gate: {stop_if: ['${vars.no}']}
-      capture: {value: '${vars.x}'}
-      capture_defaults: {value: '${vars.no}'}
+        when: ready
+        runbook_ref: '${book}'
+        with: {x: '${x}'}
+        gate: {stop_if: ['${no}']}
+      capture: {value: '${x}'}
+      capture_defaults: {value: '${no}'}
   - step:
       type: choice
-      prompt: '${vars.prompt}'
-      default: '${vars.default}'
-      options: [{label: '${vars.label}', hint: '${vars.hint}', value: '${vars.no}'}]
+      prompt: '${prompt}'
+      default: '${default}'
+      options: [{label: '${label}', hint: '${hint}', value: '${no}'}]
   - step:
       type: decision
-      prompt: '${vars.prompt}'
-      routes: [{label: '${vars.label}', hint: '${vars.hint}', runbook: '${vars.no}'}]
+      prompt: '${prompt}'
+      routes: [{label: '${label}', hint: '${hint}', runbook: '${no}'}]
   - step:
       type: collector
-      prompt: '${vars.prompt}'
+      prompt: '${prompt}'
       fields:
         - name: a
-          when: vars.ready
-          label: '${vars.label}'
-          hint: '${vars.hint}'
-          default: '${vars.default}'
-          value_expr: vars.no
-          options: [{label: '${vars.label}', hint: '${vars.hint}', value: '${vars.no}'}]
+          when: ready
+          label: '${label}'
+          hint: '${hint}'
+          default: '${default}'
+          value_expr: no
+          options: [{label: '${label}', hint: '${hint}', value: '${no}'}]
         - name: b
-          default: {condition: '${vars.no}'}
+          default: {condition: '${no}'}
   - step:
       type: host_action
-      host_action: {request: {data: [{condition: '${vars.value}'}]}}
+      host_action: {request: {data: [{condition: '${value}'}]}}
   - step:
       type: handoff
-      handoff: {with: {x: '${vars.x}'}, facts: {x: '${vars.x}'}, reason: {summary: '${vars.no}'}}
+      handoff: {with: {x: '${x}'}, facts: {x: '${x}'}, reason: {summary: '${no}'}}
   - step:
       type: branch
       branches:
-        - condition: vars.ready
+        - condition: ready
           steps:
             - iterate:
-                over: '${vars.items}'
-                until: vars.done
-                collect: {x: '${vars.x}'}
-                collect_values: {x: ['${vars.x}']}
+                over: '${items}'
+                until: done
+                collect: {x: '${x}'}
+                collect_values: {x: ['${x}']}
                 steps:
                   - parallel:
                       branches:
@@ -162,12 +162,12 @@ flow:
                                 type: compensate
                                 compensate:
                                   steps:
-                                    - step: {type: noop, capture: {x: '${vars.x}'}}
+                                    - step: {type: noop, capture: {x: '${x}'}}
   - step:
       type: assert
-      assert: [{subject: '${vars.a}', expected: '${vars.b}'}]
-  - step: {type: display, display: {content: '${vars.text}'}}
-  - step: {type: wait_for_event, event: {id: '${vars.id}', filter: {x: '${vars.x}'}}}
+      assert: [{subject: '${a}', expected: '${b}'}]
+  - step: {type: display, display: {content: '${text}'}}
+  - step: {type: wait_for_event, event: {id: '${id}', filter: {x: '${x}'}}}
 `
 	reply := ResolveExpressions(context.Background(), expressionRequest(t, text))
 	if reply.Status != "resolved" {
@@ -227,7 +227,7 @@ flow:
 
 func TestExpressionScalarOwnership(t *testing.T) {
 	for _, eol := range []string{"\n", "\r\n"} {
-		for _, scalar := range []string{`${vars.name}`, `'Hi ${vars.name} 🚀'`, `"Hi ${vars.name} \U0001F680"`, ">-\n        Hi ${vars.name}\n        🚀\n", "|+\n        Hi ${vars.name}\n        🚀\n\n", "|2-\n        ${vars.name}\n"} {
+		for _, scalar := range []string{`${name}`, `'Hi ${name} 🚀'`, `"Hi ${name} \U0001F680"`, ">-\n        Hi ${name}\n        🚀\n", "|+\n        Hi ${name}\n        🚀\n\n", "|2-\n        ${name}\n"} {
 			scalar = strings.ReplaceAll(scalar, "\n        ", "\n          ")
 			text := strings.ReplaceAll("flow:\n  - step:\n      type: display\n      display:\n        content: "+scalar+"\n", "\n", eol)
 			reply := ResolveExpressions(context.Background(), expressionRequest(t, text))
@@ -249,7 +249,7 @@ func TestExpressionScalarOwnership(t *testing.T) {
 }
 
 func TestExpressionProtocolLimitsAndRecovery(t *testing.T) {
-	req := expressionRequest(t, "apiVersion: yawr.runbook/v1\nflow:\n  - step: {type: noop, when: 'vars.x +'}\n")
+	req := expressionRequest(t, "apiVersion: yawr.runbook/v1\nflow:\n  - step: {type: noop, when: 'x +'}\n")
 	data, _ := json.Marshal(req)
 	if _, err := DecodeExpressionRequest(strings.NewReader(string(data))); err != nil {
 		t.Fatal(err)
@@ -277,14 +277,14 @@ func TestExpressionProtocolLimitsAndRecovery(t *testing.T) {
 		if got := ResolveExpressions(context.Background(), expressionRequest(t, text)); got.Reason != "incomplete-source" {
 			t.Fatal(got)
 		}
-		aliases := "inputs: {x: &text {type: string}, y: *text}\nflow: [{step: {type: noop, when: vars.x}}, {step: &s {type: noop, when: vars.y}}, {step: *s}]"
+		aliases := "inputs: {x: &text {type: string}, y: *text}\nflow: [{step: {type: noop, when: x}}, {step: &s {type: noop, when: y}}, {step: *s}]"
 		if got := ResolveExpressions(context.Background(), expressionRequest(t, aliases)); got.Status != "resolved" || len(got.Regions) != 1 {
 			t.Fatal("unrelated aliases or ambiguous source sites", got)
 		}
 	}
 	large := "flow:\n"
 	for i := 0; i < MaxEntries+1; i++ {
-		large += fmt.Sprintf("  - step: {type: noop, when: 'vars.x', id: n%d}\n", i)
+		large += fmt.Sprintf("  - step: {type: noop, when: 'x', id: n%d}\n", i)
 	}
 	if got := ResolveExpressions(context.Background(), expressionRequest(t, large)); got.Reason != "limit-exceeded" || len(got.Regions) != 0 {
 		t.Fatal("region cap", got.Status, got.Reason, len(got.Regions))
@@ -300,14 +300,14 @@ func TestExpressionProtocolLimitsAndRecovery(t *testing.T) {
 	if got := ResolveExpressions(context.Background(), expressionRequest(t, large)); got.Status != "resolved" || len(got.Regions) != 0 {
 		t.Fatal("value cap", got.Status, got.Reason)
 	}
-	deep := "flow: [{step: {type: tool, tool: {args: {x: " + strings.Repeat("[", 130) + "'${vars.x}'" + strings.Repeat("]", 130) + "}}}}]"
+	deep := "flow: [{step: {type: tool, tool: {args: {x: " + strings.Repeat("[", 130) + "'${x}'" + strings.Repeat("]", 130) + "}}}}]"
 	if got := ResolveExpressions(context.Background(), expressionRequest(t, deep)); got.Reason != "limit-exceeded" {
 		t.Fatal("depth cap", got.Status, got.Reason)
 	}
 }
 
 func TestExpressionClosedRequestAndMetadataIndependence(t *testing.T) {
-	req := expressionRequest(t, "toolRefs: [{name: missing, path: missing.tool.yaml}]\nflow: [{step: {type: tool, tool: {name: missing, action: query, args: {query: '${vars.x}'}}}}]")
+	req := expressionRequest(t, "toolRefs: [{name: missing, path: missing.tool.yaml}]\nflow: [{step: {type: tool, tool: {name: missing, action: query, args: {query: '${x}'}}}}]")
 	tool := filepath.Join(req.Context.ProjectRoot, "missing.tool.yaml")
 	req.Overlays = []Buffer{{URI: FileURI(tool), Path: tool, Version: 99, Text: "broken: ["}}
 	reply := ResolveExpressions(context.Background(), req)
@@ -336,14 +336,14 @@ func TestExpressionAnchoredAncestorsDoNotOwnScalars(t *testing.T) {
 	text := `flow:
   - step:
       type: tool
-      tool: &tool {name: literal, action: query, args: {text: '${vars.no}'}}
+      tool: &tool {name: literal, action: query, args: {text: '${no}'}}
   - step:
       type: branch
       branches:
         - &arm
-          condition: vars.no
-          steps: [{step: {type: noop, when: vars.no}}]
-  - step: {type: noop, when: vars.yes}
+          condition: no
+          steps: [{step: {type: noop, when: no}}]
+  - step: {type: noop, when: yes}
 `
 	got := ResolveExpressions(context.Background(), expressionRequest(t, text))
 	if got.Status != "resolved" || len(got.Regions) != 1 || got.Regions[0].YAMLPath != "/flow/2/step/when" {

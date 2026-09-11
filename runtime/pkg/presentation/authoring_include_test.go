@@ -13,7 +13,7 @@ import (
 
 func includeRequest(template string) AuthoringRequest {
 	pos := strings.Index(template, "|CURSOR|")
-	return AuthoringRequest{SchemaVersion: AuthoringIncludeRequestVersion, Operation: "complete", RequestID: "include",
+	return AuthoringRequest{SchemaVersion: AuthoringRequestVersion, Operation: "complete", RequestID: "include",
 		Document: Buffer{Text: strings.Replace(template, "|CURSOR|", "", 1)}, Position: utf16Length(template[:pos])}
 }
 
@@ -135,18 +135,18 @@ func TestAuthoringIncludeSchemaParityAndV1(t *testing.T) {
 		}
 	}
 	req := includeRequest(includePrefix + "|CURSOR|\n")
-	req.SchemaVersion = AuthoringRequestVersion
 	reply := ResolveAuthoring(context.Background(), req)
-	if reply.SchemaVersion != "yawr.authoring-reply/v1" || len(reply.Items) != 0 || reply.Site != nil {
-		t.Fatal("v1 changed")
+	if reply.SchemaVersion != "authoring-reply/v3" || len(reply.Items) == 0 || reply.Site == nil {
+		t.Fatal("current authoring contract changed")
 	}
 	data, _ := json.Marshal(AuthoringCapabilities())
-	if strings.Contains(string(data), "authoring/v2") || strings.Contains(string(data), "capabilities/v2") {
-		t.Fatal("historical capabilities changed")
+	if !strings.Contains(string(data), "authoring-capabilities/v3") ||
+		strings.Contains(string(data), "authoring-capabilities/v1") ||
+		strings.Contains(string(data), "authoring-capabilities/v2") {
+		t.Fatal("capabilities must advertise only v3")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	req.SchemaVersion = AuthoringIncludeRequestVersion
 	reply = ResolveAuthoring(ctx, req)
 	if reply.Status != "stale" || len(reply.Items) != 0 {
 		t.Fatal("cancelled completion escaped")

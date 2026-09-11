@@ -50,8 +50,8 @@ func TestHighlightRegexRE2(t *testing.T) {
 
 func TestHighlightRegexExactArgumentRole(t *testing.T) {
 	for _, text := range []string{
-		`regex.match(vars.x, "^ab+$")`,
-		`list.order(vars.items, 'regex.match(left, "^ab+$")')`,
+		`regex.match(x, "^ab+$")`,
+		`list.order(items, 'regex.match(left, "^ab+$")')`,
 	} {
 		got := Highlight(context.Background(), text)
 		found := false
@@ -65,9 +65,9 @@ func TestHighlightRegexExactArgumentRole(t *testing.T) {
 		}
 	}
 	for _, text := range []string{
-		`regex.match("^ab+$", vars.pattern)`, `regex.match(vars.x, ("^ab+$"))`,
-		`regex.match(vars.x, "^ab+$" + "")`, `obj.regex.match(vars.x, "^ab+$")`,
-		`obj?.regex.match(vars.x, "^ab+$")`, `"^ab+$"`,
+		`regex.match("^ab+$", pattern)`, `regex.match(x, ("^ab+$"))`,
+		`regex.match(x, "^ab+$" + "")`, `obj.regex.match(x, "^ab+$")`,
+		`obj?.regex.match(x, "^ab+$")`, `"^ab+$"`,
 	} {
 		for _, token := range Highlight(context.Background(), text) {
 			if token.Class == "keyword" && text[token.Start:token.End] == "^" {
@@ -75,13 +75,13 @@ func TestHighlightRegexExactArgumentRole(t *testing.T) {
 			}
 		}
 	}
-	text := `regex.match(vars.x, "^${vars.no}\\\\d+🚀$")`
+	text := `regex.match(x, "^${no}\\\\d+🚀$")`
 	for _, token := range Highlight(context.Background(), text) {
 		if token.Class == "interpolation" || token.Class == "property" && text[token.Start:token.End] == "no" {
 			t.Fatal("GXL literal acquired nested GIS", token)
 		}
 	}
-	if _, err := Parse(`regex.match(vars.x, "^ab+$")`); err != nil {
+	if _, err := Parse(`regex.match(x, "^ab+$")`); err != nil {
 		t.Fatal("regex role entered comparator validation", err)
 	}
 }

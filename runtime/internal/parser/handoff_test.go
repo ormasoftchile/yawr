@@ -156,7 +156,7 @@ flow:
       handoff:
         runbook: next.runbook.yaml
         reason: { code: next, summary: Continue }
-        with: { server: "${vars.opaque}" }
+        with: { server: "${opaque}" }
 `
 	_, err = parserImpl.ParseBytes(context.Background(), []byte(source))
 	if err == nil || !strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "secret-value") {

@@ -86,7 +86,7 @@ does not change root input conversion.
 
 GXL conditions and `value_expr` lookups are strict. Do **not** use
 `vars?.query_hash == null` as a missing-field guard. Flat `query_hash` and
-`vars.query_hash` both work when the binding exists; neither spelling makes
+`query_hash` both work when the binding exists; neither spelling makes
 an absent binding valid.
 
 GIS interpolation supports optional GDP reads. For optional *text* with no

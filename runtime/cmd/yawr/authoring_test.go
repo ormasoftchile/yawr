@@ -30,13 +30,13 @@ func TestAuthoringIncludeCLIProtocol(t *testing.T) {
 		{"\n        runbook_ref: child\n        resolve_from: |CURSOR|\n", "include-value"},
 	} {
 		source := prefix + v.source
-		req := presentation.AuthoringRequest{SchemaVersion: presentation.AuthoringIncludeRequestVersion, RequestID: "include",
+		req := presentation.AuthoringRequest{SchemaVersion: presentation.AuthoringRequestVersion, RequestID: "include",
 			Operation: "complete", Context: presentation.Context{ProjectRoot: root},
 			Document: presentation.Buffer{Path: filepath.Join(root, "new.runbook.yaml"), Version: 1,
 				Text: strings.Replace(source, "|CURSOR|", "", 1)}, Overlays: []presentation.Buffer{},
 			Position: len(utf16.Encode([]rune(source[:strings.Index(source, "|CURSOR|")])))}
 		req.Document.URI = presentation.FileURI(req.Document.Path)
-		for _, version := range []string{presentation.AuthoringIncludeRequestVersion, presentation.AuthoringRequestVersion, "authoring-request/v4"} {
+		for _, version := range []string{presentation.AuthoringRequestVersion, "yawr.authoring-request/v1", "authoring-request/v2", "authoring-request/v4"} {
 			req.SchemaVersion = version
 			input, _ := json.Marshal(req)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -47,7 +47,7 @@ func TestAuthoringIncludeCLIProtocol(t *testing.T) {
 			cmd.Stderr = &stderr
 			out, err := cmd.Output()
 			cancel()
-			if version == "authoring-request/v4" {
+			if version != presentation.AuthoringRequestVersion {
 				exit, ok := err.(*exec.ExitError)
 				if !ok || exit.ExitCode() != 2 || len(out) != 0 || strings.TrimSpace(stderr.String()) != "authoring: invalid-request" {
 					t.Fatal("unknown version did not fail closed")
@@ -61,16 +61,12 @@ func TestAuthoringIncludeCLIProtocol(t *testing.T) {
 			if json.Unmarshal(out, &reply) != nil || reply.Status != "resolved" {
 				t.Fatal("invalid reply")
 			}
-			if version == presentation.AuthoringIncludeRequestVersion {
-				if reply.SchemaVersion != "authoring-reply/v2" || reply.Site == nil || reply.Site.Kind != v.kind || len(reply.Items) == 0 {
-					t.Fatalf("missing include reply %+v", reply)
-				}
-			} else if reply.SchemaVersion != "yawr.authoring-reply/v1" || reply.Site != nil || len(reply.Items) != 0 {
-				t.Fatal("v1 behavior changed")
+			if reply.SchemaVersion != "authoring-reply/v3" || reply.Site == nil || reply.Site.Kind != v.kind || len(reply.Items) == 0 {
+				t.Fatalf("missing include reply %+v", reply)
 			}
 		}
 	}
-	for _, args := range [][]string{{"authoring", "capabilities"}, {"authoring", "capabilities", "--v2"}} {
+	for _, args := range [][]string{{"authoring", "capabilities", "--v3"}} {
 		data, stderr, err := presentationDirectCLI(t, root, args...)
 		if err != nil || stderr != "" {
 			t.Fatal(err, stderr)
@@ -80,9 +76,6 @@ func TestAuthoringIncludeCLIProtocol(t *testing.T) {
 			t.Fatal("invalid capability JSON")
 		}
 		expected := presentation.AuthoringCapabilities()
-		if len(args) == 3 {
-			expected = presentation.AuthoringIncludeCapabilities()
-		}
 		want, _ := json.Marshal(expected)
 		got, _ := json.Marshal(actual)
 		var wantMap any
@@ -90,6 +83,12 @@ func TestAuthoringIncludeCLIProtocol(t *testing.T) {
 		want, _ = json.Marshal(wantMap)
 		if !bytes.Equal(got, want) {
 			t.Fatal("capability contract drift")
+		}
+		for _, args := range [][]string{{"authoring", "capabilities"}, {"authoring", "capabilities", "--v2"}} {
+			data, stderr, err := presentationDirectCLI(t, root, args...)
+			if err == nil || len(data) != 0 || strings.TrimSpace(stderr) != "authoring: unsupported-version" {
+				t.Fatalf("%v accepted obsolete authoring capabilities: err=%v stderr=%q", args, err, stderr)
+			}
 		}
 	}
 }
@@ -99,7 +98,7 @@ func TestAuthoringCLIProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if presentation.Digest(data) != "sha256:bd37e62d80bcb59ce3fd5835f8e1b8e00dee4575649dc235fe5612c0a107554b" {
+	if presentation.Digest(data) != "sha256:08500d8713f80a93e218a1fe8a9ce11953eae9eb0a079af0e86caf4301fb5c4e" {
 		t.Fatal("canonical drift")
 	}
 	var fixture struct {
@@ -191,12 +190,12 @@ func TestAuthoringCLIProtocol(t *testing.T) {
 			}
 		})
 	}
-	capability, stderr, err := presentationDirectCLI(t, root, "authoring", "capabilities")
+	capability, stderr, err := presentationDirectCLI(t, root, "authoring", "capabilities", "--v3")
 	if err != nil || stderr != "" {
 		t.Fatal(err, stderr)
 	}
 	var caps map[string]any
-	if json.Unmarshal(capability, &caps) != nil || caps["schema_version"] != "yawr.authoring-capabilities/v1" || caps["max_items"] != float64(4096) {
+	if json.Unmarshal(capability, &caps) != nil || caps["schema_version"] != "authoring-capabilities/v3" || caps["max_items"] != float64(4096) {
 		t.Fatal("bad capabilities")
 	}
 }

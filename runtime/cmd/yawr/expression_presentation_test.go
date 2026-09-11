@@ -18,7 +18,7 @@ import (
 func TestExpressionCLIProtocol(t *testing.T) {
 	root := findRepoRoot(t)
 	path := filepath.Join(root, "not-on-disk.runbook.yaml")
-	req := presentation.ExpressionResolveRequest{SchemaVersion: presentation.ExpressionSchemaVersion, RequestID: "expression-cli", Context: presentation.Context{ProjectRoot: root, Generation: 7}, Document: presentation.Buffer{URI: presentation.FileURI(path), Path: path, Version: 3, Text: "flow: [{step: {type: noop, when: 'vars.count >= 2'}}]"}, Overlays: []presentation.Buffer{}}
+	req := presentation.ExpressionResolveRequest{SchemaVersion: presentation.ExpressionSchemaVersion, RequestID: "expression-cli", Context: presentation.Context{ProjectRoot: root, Generation: 7}, Document: presentation.Buffer{URI: presentation.FileURI(path), Path: path, Version: 3, Text: "flow: [{step: {type: noop, when: 'count >= 2'}}]"}, Overlays: []presentation.Buffer{}}
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

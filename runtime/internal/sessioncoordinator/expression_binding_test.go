@@ -13,8 +13,8 @@ import (
 
 func TestExpressionFrozenGraphAndBinding(t *testing.T) {
 	plan := &engine.ExecutionPlan{RunbookPath: "source-no-longer-exists.runbook.yaml", Metadata: engine.PlanMetadata{RunbookID: "frozen", RunbookName: "Frozen"}, Steps: []engine.ResolvedStep{
-		{ID: "gate", Kind: "noop", When: "vars.count >= 2", Spec: &schema.NoopSpec{}},
-		{ID: "message", Kind: "display", Spec: &schema.DisplaySpec{Display: schema.DisplayConfig{Content: "Hi ${vars.name}!"}}},
+		{ID: "gate", Kind: "noop", When: "count >= 2", Spec: &schema.NoopSpec{}},
+		{ID: "message", Kind: "display", Spec: &schema.DisplaySpec{Display: schema.DisplayConfig{Content: "Hi ${name}!"}}},
 	}}
 	if err := planner.ValidateExecutionPlan(plan); err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestExpressionFrozenGraphAndBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retained.Nodes[1].Details.Content != "Hi ${vars.name}!" || retained.Nodes[1].Details.ExpressionPresentation == nil {
+	if retained.Nodes[1].Details.Content != "Hi ${name}!" || retained.Nodes[1].Details.ExpressionPresentation == nil {
 		t.Fatal("frozen authored definition changed")
 	}
 	plan = restored

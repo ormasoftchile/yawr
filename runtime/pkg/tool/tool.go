@@ -99,10 +99,8 @@ type ToolAction struct {
 	// behavior.
 	Result *schema.ActionResultContract
 
-	// VSCodeInput carries the per-action vscode_input mapping declared in the
-	// tool definition. Only populated for vscode-mcp transport actions. nil
-	// means pass args through unchanged (backward compatible). Applied in
-	// internal/tool/runtime.go before args go onto the bridge wire.
+	// VSCodeInput carries the required per-action vscode_input mapping for
+	// vscode-mcp actions that accept arguments.
 	VSCodeInput map[string]*schema.VSCodeInputMapping
 
 	// MCPTool and MCPInput carry the per-action mcp-http remote tool name and

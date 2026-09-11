@@ -543,7 +543,7 @@ flow:
 		raw, _ := io.ReadAll(response.Body)
 		t.Fatalf("status = %d, want 400; body=%s", response.StatusCode, raw)
 	}
-	if _, err := os.Stat(filepath.Join(workspace, ".yawr", "debug-profiles", "dynamic-vars.yaml")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(workspace, ".yawr", "debug-profiles", "dynamic-yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("dynamic profile variables reached disk: %v", err)
 	}
 }
