@@ -15,6 +15,7 @@ How to decide who handles what for Lightweight workflow runtime.
 | Semantic identity removal, protocol cleanup, isolated package validation | Identity | Identity Purge Engineer |
 | Compatibility-code removal, repository tracking, clean provenance | Sanitizer | Repository Sanitization Engineer |
 | Remove obsolete format fallbacks and approval bypasses | Modernizer | Legacy Format Purge Implementation Specialist |
+| Remove residual fallback behavior and stabilize repository-boundary tests | Wayfinder | Go Compatibility & Concurrency Specialist |
 | Executable specifications, adversarial cases, non-vacuity | Tester | Conformance Tester |
 | Decisions, memory, and session records | Scribe | Session Logger |
 | Backlog and continuous work coordination | Ralph | Work Monitor |
@@ -32,7 +33,8 @@ How to decide who handles what for Lightweight workflow runtime.
 7. Identity owns semantic legacy-identity removal and isolated package validation after purge rejection.
 8. Sanitizer owns removal of neutral-named compatibility code and clean repository provenance after final purge rejection.
 9. Modernizer owns deletion of executable old-format fallbacks and approval bypasses after final sanitization rejection.
-10. Scribe records decisions and propagates durable context without performing domain work.
-11. Ralph monitors work continuity and backlog state without inventing backlog items.
-12. Rai reviews safety and responsible-release concerns; Fact Checker verifies claims and assumptions.
-13. Apply the team principles: fail closed, minimize blast radius, prove real production paths, reject vacuous tests, and separate contracts from implementations.
+10. Wayfinder owns residual Go fallback removal and repository-boundary stability after format-purge rejection.
+11. Scribe records decisions and propagates durable context without performing domain work.
+12. Ralph monitors work continuity and backlog state without inventing backlog items.
+13. Rai reviews safety and responsible-release concerns; Fact Checker verifies claims and assumptions.
+14. Apply the team principles: fail closed, minimize blast radius, prove real production paths, reject vacuous tests, and separate contracts from implementations.

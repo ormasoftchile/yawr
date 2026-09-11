@@ -19,6 +19,7 @@
         "identity": "Identity",
         "sanitizer": "Sanitizer",
         "modernizer": "Modernizer",
+        "wayfinder": "Wayfinder",
         "tester": "Tester",
         "scribe": "Scribe",
         "ralph": "Ralph",
