@@ -15,9 +15,7 @@
 //                         src/enumInputs.ts) and runs `yawr dry-run` against
 //                         the real CLI so ENUM-0xx errors and ENUM-W001
 //                         warnings are the engine's own, verbatim, never a
-//                         client-side reimplementation
-//                         (barbara-client-enum-compatibility-ruling.md,
-//                         AR-CE-1..6).
+//                         client-side reimplementation.
 
 import * as vscode from 'vscode';
 import { execFile, spawn } from 'child_process';
@@ -97,7 +95,6 @@ import {
   chooseAffordance,
   extractInputDecls,
   nfcEquals,
-  parseVarPairs,
   stderrOf,
   deriveFailureMessage,
   firstLine,
@@ -544,14 +541,12 @@ async function previewProse() {
 
 // validateInputs runs `yawr dry-run` against the active runbook so
 // declared inputs (including `enum`-constrained ones) are checked through
-// the real CLI/engine path — never a client-side re-implementation
-// (AR-CE-1, AR-CE-4 §1). Declared-input metadata is read from the preview
-// document's `inputs[]` array (AR-CE-2, pkg/preview/render/graphjson.
-// Document.Inputs, F-1/F-2): a closed selector is offered for each
+// the real CLI/engine path — never a client-side re-implementation.
+// Declared-input metadata is read from the current preview document's
+// `inputs[]` array: a closed selector is offered for each
 // enum-constrained input, in declared order, with no auto-select and no
-// client-side normalisation (AR-CE-3, AR-CE-5). Whenever that metadata is
-// redacted or absent for a given input, the operator gets a mandatory
-// free-text fallback and the engine adjudicates the value (AR-CE-3 §3).
+// client-side normalisation. Redacted enum metadata uses free text and the
+// engine adjudicates the value.
 async function validateInputs() {
   const editor = vscode.window.activeTextEditor;
   if (!editor || !editor.document.fileName.endsWith('.runbook.yaml')) {
@@ -572,7 +567,13 @@ async function validateInputs() {
     return;
   }
 
-  const vars = await collectInputs(doc);
+  let vars: Record<string, string> | undefined;
+  try {
+    vars = await collectInputs(doc);
+  } catch (err) {
+    reportEngineFailure('yawr preview', err);
+    return;
+  }
   if (vars === undefined) return; // operator cancelled a prompt
 
   // NOTE: must be `--var`, not `-var` — `yawr`'s own arg splitter
@@ -594,20 +595,10 @@ async function validateInputs() {
 }
 
 // collectInputs prompts for a value per declared input (selector for
-// non-redacted enum, free text otherwise) or, if no declaration metadata
-// is available at all, a single free-text `-var` overrides fallback.
-// Returns undefined if the operator cancelled.
+// non-redacted enum, free text otherwise). Returns undefined if the operator
+// cancelled.
 async function collectInputs(doc: unknown): Promise<Record<string, string> | undefined> {
   const decls = extractInputDecls(doc);
-  if (!decls || decls.length === 0) {
-    const raw = await vscode.window.showInputBox({
-      prompt: 'Variable overrides for yawr dry-run (key=value, comma-separated). Leave empty for none.',
-      placeHolder: 'env=prod,region=us-east-1',
-      ignoreFocusOut: true,
-    });
-    if (raw === undefined) return undefined;
-    return parseVarPairs(raw);
-  }
 
   const vars: Record<string, string> = {};
   for (const decl of decls) {

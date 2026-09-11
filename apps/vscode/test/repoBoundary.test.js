@@ -1,9 +1,7 @@
 // repoBoundary.test.js — repo-wide guard against cross-repo path leaks,
 // unconditional skips, and orphaned test files.
 //
-// Mirrors yawr/internal/tool/repo_boundary_test.go
-// (TestRepoBoundary_NoExternalPaths), which Don added in response to the
-// same systemic defect class.
+// Mirrors the runtime's repository-boundary checks.
 //
 // **Rules enforced (one top-level test per rule — failures name the rule):**
 //
@@ -18,8 +16,7 @@
 //     hatch to a sibling-repo binary; prohibited in test/*.test.js.
 //
 //  4. `skip:` in test declarations — the { skip: ... } option passed to
-//     `test(name, opts, fn)`; a skipping test is the defect pattern
-//     described in .squad/decisions/inbox/ken-skip-defect.md.
+//     `test(name, opts, fn)`; configured unit tests must execute.
 //
 //  5. Orphaned test files — every test/**/*.test.js file must be reachable
 //     by at least one glob in a `node --test <glob>` npm script.  A file
@@ -323,7 +320,7 @@ test('repoBoundary/rule4: no skip: in test declarations in test/*.test.js', () =
       if (!reason) {
         violations.push(
           `${rel}:${skippedLines.join(',')}: contains a skipped test declaration or enabled skip option — ` +
-          `a skip must never be the default outcome (ken-skip-defect.md). ` +
+          `a skip must never be the default outcome. ` +
           `Tests that require an unavailable precondition must FAIL with an ` +
           `actionable message. ` +
           `If a justified exception is truly needed, add the file to SKIP_ALLOWLIST ` +

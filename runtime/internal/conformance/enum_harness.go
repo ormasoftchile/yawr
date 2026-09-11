@@ -22,12 +22,12 @@ import (
 )
 
 // EnumHarness runs tv-enum.yaml vectors against the real yawr CLI binary
-// built from this checkout (barbara-enum-mvp-implementation-gate.md R2):
+// built from this checkout:
 // each vector's `variables` map is materialized as a real, disposable
 // workspace directory and `input` is run with `yawr run` exactly the way
 // a user would invoke it, so the harness exercises the true CLI/API
-// caller-binding, plan, and runtime layers -- the same code paths R1/R3/
-// R4/R5 changed -- rather than a bespoke in-process shortcut. The three
+// caller-binding, plan, and runtime layers rather than a bespoke in-process
+// shortcut. The three
 // TV-ENUM-SUBST catalog vectors are the sole exception: they assert on
 // pkgcatalog.Catalog contents, which the CLI's own output does not
 // expose, so those are resolved via the identical pkgcatalog.Build/
@@ -169,7 +169,7 @@ func (h *EnumHarness) runCLI(workDir, entry string) (cliResult, error) {
 		// Windows env var names are case-insensitive but os.Environ()
 		// preserves whatever case the OS actually used (commonly "Path",
 		// not "PATH"); simply prepending a new "PATH=..." entry without
-		// removing the pre-existing "Path"/"PATH" entry leaves TWO PATH
+		// removing the inherited "Path"/"PATH" entry leaves TWO PATH
 		// variables in the child's environment block, and Windows/the Go
 		// runtime does not guarantee the prepended one wins for the
 		// child's own lookups -- in practice the child process (yawr.exe)
@@ -203,38 +203,19 @@ func (h *EnumHarness) runCLI(workDir, entry string) (cliResult, error) {
 	return cliResult{exitCode: exitCode, stdout: stdout.String(), stderr: stderr.String()}, nil
 }
 
-// enumRuntimeGapSkips lists the vectors with no reachable runtime site in
-// this revision, per the current conformance decision
-// findings: `from: env/prompt/<provider>.<field>` input sourcing
-// (Input.From) is never read anywhere in the runtime, and root-level
-// (S4) runbook output production/validation is a pre-existing, separately
-// ticketed limitation this task explicitly excludes
-// ("Do not implement accepted root-output behavior; that is ticketed
-// pre-existing limitation"). Each entry cites the ticket covering the gap
-// so the skip is a named, tracked disposition rather than a silent drop.
+// enumRuntimeGapSkips lists vectors with no reachable runtime site. Each skip
+// has a concrete current reason so the harness never drops a vector silently.
 var enumRuntimeGapSkips = map[string]string{
 	"TV-ENUM-RUNTIME-001": "no runtime site reads Input.From ('from: env')",
 	"TV-ENUM-RUNTIME-002": "no runtime site reads Input.From ('from: prompt')",
 	"TV-ENUM-RUNTIME-003": "no runtime site reads Input.From ('from: <provider>.<field>')",
-	"TV-ENUM-RUNTIME-006": "root-output (S4) production/validation is a pre-existing, separately ticketed limitation explicitly out of scope for this revision -- ticket T-ENUM-ROOT-OUTPUTS",
-	"TV-ENUM-MOCK-005":    "no runtime site: exercises 'from: prompt' answered via a replay scenario's inputs: map; Input.From is never read (same gap as RUNTIME-001..003) so there is no prompt-binding moment for replay to intercept -- ticket T-ENUM-FROM-SOURCING",
-
-	// Below: five vectors whose corpus fixture (frozen, not editable by
-	// this task)
-	// conflicts with the ratified architecture ruling itself, diagnosed
-	// and confirmed against barbara-enum-constraint-mvp-architecture-ruling.md
-	// this session. Each is a corpus authoring inconsistency, not a
-	// runtime defect -- the runtime's behavior in every case is the one
-	// the ruling actually mandates.
-	"TV-ENUM-UNICODE-005": "corpus fixture defect: kubectl.tool.yaml/drain-node.yaml declare default: graceful alongside enum: [\"\\u00e1\",\"force\"]; graceful is not a member, so AR-ENUM-6 (\"default present with enum present -> default MUST be a member... at plan time\") unconditionally mandates ENUM-006 here -- the vector's own expected success is inconsistent with the ratified rule it is meant to exercise (a leftover default not updated when the enum members were changed to accented Unicode for the comparison test)",
-
-	"TV-ENUM-PLAN-003": "harness/vector-methodology limitation, not a runtime defect: the caller runbook.yaml never declares 'strategy' as a vars:/inputs: binding (no --var is supplied either), so its args.strategy: \"${strategy}\" template has no runtime site to resolve against and GIS-PATH-MISSING is the correct, designed outcome of the actual materialized run; expected.value: ${strategy} describes the *plan-time* literal (unevaluated) representation of the arg, which this harness's full 'yawr run'-to-completion methodology has no way to observe/assert without a plan-only inspection mode",
-
-	"TV-ENUM-PLAN-005": "corpus fixture defect: the child's inputs.env_name.enum: [yes, no] relies on YAML 1.1 core-schema boolean resolution (yes/no -> bool) to trigger ENUM-002 well-formedness; this runtime's YAML parser (gopkg.in/yaml.v3) implements YAML 1.2 core schema, under which bare 'yes'/'no' are plain strings (only true/false resolve as booleans, exercised correctly by TV-ENUM-DECL-003 which does pass) -- no malformation exists under the ratified YAML-1.2 semantics this runtime correctly implements, so ENUM-002 legitimately does not fire",
-
-	"TV-ENUM-RUNTIME-004": "corpus fixture defect: the substitute's own input 'strategy' enum ([\"graceful\",\"force\",\"aggressive\"]) and the action's arg 'strategy' enum ([\"graceful\",\"force\"]) are unequal sets; AR-ENUM-8 is unconditional (\"Both declare enums with unequal sets -> PKG-013... No variance. Not subset, not superset.\") so this fixture legitimately raises PKG-013 at plan time exactly as B1 mandates, contradicting the vector's own note that this is 'not an ENUM-SUBST/PKG-013 vector' -- the runtime's behavior is what AR-ENUM-8 requires",
-
-	"TV-ENUM-RUNTIME-007": "root-output (S4) production/validation is the same pre-existing, separately ticketed limitation as TV-ENUM-RUNTIME-006 (a non-substituted root runbook never evaluates its own top-level outputs: block, so neither the expected GCP-TYPE-001 nor any other S4 check is ever reached) -- ticket T-ENUM-ROOT-OUTPUTS",
+	"TV-ENUM-RUNTIME-006": "root runbooks do not evaluate their top-level outputs block",
+	"TV-ENUM-MOCK-005":    "Input.From is not read, so replay has no prompt-binding event to intercept",
+	"TV-ENUM-UNICODE-005": "fixture default 'graceful' is not a member of enum [\"\\u00e1\",\"force\"], so current validation returns ENUM-006",
+	"TV-ENUM-PLAN-003":    "caller declares no strategy binding, so a full run returns GIS-PATH-MISSING; the vector expects an unevaluated plan-only value",
+	"TV-ENUM-PLAN-005":    "under YAML 1.2 bare yes/no are strings, so the fixture has no malformed enum member and ENUM-002 does not fire",
+	"TV-ENUM-RUNTIME-004": "substitute input and action argument declare unequal enum sets, so package validation returns PKG-013",
+	"TV-ENUM-RUNTIME-007": "root runbooks do not evaluate their top-level outputs block, so the expected output check is unreachable",
 
 	// Governance vectors: skip entries for vectors that are valid
 	// schema contracts but cannot be executed by the CLI harness today.

@@ -5,7 +5,6 @@
 // HAB-11 (end-to-end with VS Code extension host) lives in test/suite/hostActionBridge.test.ts.
 //
 // Spec ref: design/yawr/sections/18-host-action-bridge.tex
-// Decision: .squad/decisions/inbox/barbara-host-action-bridge.md (APPROVED 2026-08-22)
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -126,9 +125,9 @@ test('HAB-02c: wrong version ("host-action/v2") is silently dropped', async () =
   assert.equal(acks.length, 0);
 });
 
-test('HAB-02d: legacy integer version (1) is silently dropped', async () => {
+test('HAB-02d: the current wire version is matched exactly', async () => {
   const { bridge, acks } = makeBridge(echoRegistry());
-  await bridge.receive({ ...request(), version: 1 });
+  await bridge.receive({ ...request(), version: WIRE_VERSION.toUpperCase() });
   assert.equal(acks.length, 0);
 });
 

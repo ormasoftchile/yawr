@@ -29,12 +29,14 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(manifest.scripts['test:e2e'], /extension-lifecycle\.mjs source/);
   assert.match(manifest.scripts['test:e2e:vsix'], /extension-lifecycle\.mjs installed/);
   assert.match(manifest.scripts.package, /extension-lifecycle\.mjs package/);
+  assert.match(manifest.scripts['package:validate'], /extension-lifecycle\.mjs package-check/);
   const lifecycle = fs.readFileSync(path.join(root, 'scripts', 'extension-lifecycle.mjs'), 'utf8');
   assert.match(lifecycle, /finally\s*\{/);
   assert.match(lifecycle, /media\/graph\.css/);
   assert.match(lifecycle, /restoreFiles\(snapshot\)/);
   assert.match(lifecycle, /rm\(join\(root, 'out'\)/);
   assert.match(lifecycle, /rm\(join\(root, '\.vscode-test'\)/);
+  assert.match(lifecycle, /if \(mode !== 'package'\) await rm\(vsixPath/);
 });
 
 test('component wiring uses the monorepo runtime without a second checkout', () => {

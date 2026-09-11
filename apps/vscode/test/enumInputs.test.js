@@ -1,8 +1,5 @@
 // Unit tests for the pure enum-affordance/error-passthrough helpers in
-// src/enumInputs.ts (compiled to out/enumInputs.js). These cover a subset
-// of the client-parity acceptance matrix (AR-CE-9 §9 in
-// barbara-client-enum-compatibility-ruling.md) that does not require a
-// running VS Code host: CE-D-03, CE-R-01/02/03/05, CE-U-03/U-04, CE-V-05.
+// src/enumInputs.ts (compiled to out/enumInputs.js).
 //
 // No schema, struct, or member-validation logic is exercised or asserted
 // here — these are rendering/transport decisions only (CE-C-02).
@@ -14,7 +11,6 @@ const {
   extractInputDecls,
   filterRequiredInputs,
   nfcEquals,
-  parseVarPairs,
   deriveFailureMessage,
   firstLine,
   warningLines,
@@ -86,13 +82,13 @@ test('CE-U-03: nfcEquals is case-sensitive — no folding anywhere on the client
   assert.ok(!nfcEquals('PROD', 'prod'));
 });
 
-test('CE-D-03 (absence rule): no `inputs` array at all yields undefined, not []', () => {
-  assert.equal(extractInputDecls({}), undefined);
-  assert.equal(extractInputDecls({ inputs: null }), undefined);
-  assert.equal(extractInputDecls(null), undefined);
+test('current graphjson requires an inputs array', () => {
+  assert.throws(() => extractInputDecls({}), /invalid-preview-inputs/);
+  assert.throws(() => extractInputDecls({ inputs: null }), /invalid-preview-inputs/);
+  assert.throws(() => extractInputDecls(null), /invalid-preview-inputs/);
 });
 
-test('extractInputDecls tolerates unknown sibling keys on the document (forward compatibility, AR-CE-7)', () => {
+test('extractInputDecls accepts current declarations and ignores document sibling keys', () => {
   const decls = extractInputDecls({
     schema_version: 'x',
     some_future_field: { anything: true },
@@ -102,14 +98,12 @@ test('extractInputDecls tolerates unknown sibling keys on the document (forward 
   assert.equal(decls[0].name, 'env');
 });
 
-test('parseVarPairs splits on comma and first "=" only, never trims the value', () => {
-  const parsed = parseVarPairs('env= prod ,region=us-east-1,broken');
-  assert.deepEqual(parsed, { env: ' prod ', region: 'us-east-1' });
+test('extractInputDecls accepts the current no-declarations shape', () => {
+  assert.deepEqual(extractInputDecls({ inputs: [] }), []);
 });
 
-test('CE-U-02: parseVarPairs preserves leading/trailing whitespace in a value verbatim', () => {
-  const parsed = parseVarPairs('name= leading-space');
-  assert.equal(parsed.name, ' leading-space');
+test('extractInputDecls rejects malformed declarations instead of dropping them', () => {
+  assert.throws(() => extractInputDecls({ inputs: [{ enum: ['a'] }] }), /invalid-preview-inputs/);
 });
 
 test('deriveFailureMessage prefers the raw stderr capture over the combined execFile message (D-3-shaped fix)', () => {

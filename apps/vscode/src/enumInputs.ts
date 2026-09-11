@@ -1,30 +1,18 @@
-// enumInputs.ts — pure (no `vscode` import) helpers for AR-CE-2/3 client
-// obligations: deciding how to collect a value for one declared runbook
-// input, given whatever metadata the engine surfaces.
+// enumInputs.ts — pure (no `vscode` import) helpers for deciding how to
+// collect a value for one declared runbook input from current engine metadata.
 //
 // This module deliberately owns NO schema, NO member-validation logic, and
 // NO runbook parsing. It only shapes UI affordances from a DTO the engine
-// already produced. The engine remains the sole enum authority
-// (AR-CE-4 §1); nothing here decides whether a value is valid.
+// already produced. The engine remains the sole enum authority; nothing here
+// decides whether a value is valid.
 //
-// DTO shape (normative, AR-CE-2 in
-// .squad/decisions/inbox/barbara-client-enum-compatibility-ruling.md):
-// an `inputs[]` array, each entry carrying `name`, `type`, `required`,
+// The preview document carries an `inputs[]` array. Each entry has `name`,
+// `type`, `required`,
 // `default`, `description`, and — when the input is enum-constrained —
 // either `enum: string[]` (declared order, verbatim) or, for a redacted
-// declaration, `enumRedacted: true` plus `enumMemberCount`. This DTO now
-// ships from `yawr preview --format graphjson`
-// (pkg/preview/render/graphjson.Document.Inputs, F-1/F-2,
-// barbara-client-enum-parity-gate-review.md) via extension.ts's
-// `validateInputs`. extractInputDecls still tolerates its absence (an
-// older engine binary without the field) per the forward-compatibility
-// rule (AR-CE-7 §1) — see enumRuntimeRegression.test.js's
-// `TestExtractInputDecls_RealGraphJSON_*` coverage for the live-binary
-// path.
+// declaration, `enumRedacted: true` plus `enumMemberCount`.
 
-/** One declared runbook input, as (eventually) carried by the preview
- * document's `inputs[]` array. All fields are optional so this stays
- * forward-compatible with an engine that has not shipped the DTO yet. */
+/** One declared runbook input carried by the preview document's `inputs[]` array. */
 export interface InputDecl {
   name: string;
   type?: string;
@@ -80,34 +68,17 @@ export function chooseAffordance(decl: InputDecl): Affordance {
   return { kind: 'freetext', defaultValue: typeof decl.default === 'string' ? decl.default : undefined };
 }
 
-/** extractInputDecls reads the `inputs[]` array off a parsed preview
- * document (now shipped by `yawr preview --format graphjson`, F-1/F-2),
- * tolerating its absence (an older engine binary without the field) per
- * the forward-compatibility rule (AR-CE-7 §1): absence means "no metadata
- * available", never "unconstrained". */
-export function extractInputDecls(doc: unknown): InputDecl[] | undefined {
-  if (!doc || typeof doc !== 'object') return undefined;
+/** Reads the required `inputs[]` array from a current graphjson document. */
+export function extractInputDecls(doc: unknown): InputDecl[] {
+  if (!doc || typeof doc !== 'object') throw new Error('invalid-preview-inputs');
   const inputs = (doc as Record<string, unknown>).inputs;
-  if (!Array.isArray(inputs)) return undefined;
-  return inputs.filter((i): i is InputDecl => !!i && typeof i === 'object' && typeof (i as InputDecl).name === 'string');
-}
-
-/** parseVarPairs parses the free-text `key=value,key2=value2` fallback
- * surface used when no input declarations are available at all. Only the
- * separators (`,` between pairs, first `=` inside a pair) are interpreted;
- * the value itself is never trimmed, case-folded, or otherwise normalised
- * (AR-CE-5 §1) — it is passed through to `-var` verbatim. */
-export function parseVarPairs(raw: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!raw) return out;
-  for (const pair of raw.split(',')) {
-    const idx = pair.indexOf('=');
-    if (idx <= 0) continue;
-    const key = pair.slice(0, idx).trim();
-    const value = pair.slice(idx + 1);
-    if (key) out[key] = value;
+  if (!Array.isArray(inputs)) throw new Error('invalid-preview-inputs');
+  for (const input of inputs) {
+    if (!input || typeof input !== 'object' || typeof (input as InputDecl).name !== 'string') {
+      throw new Error('invalid-preview-inputs');
+    }
   }
-  return out;
+  return inputs as InputDecl[];
 }
 
 /** Shape of the (subset of) fields Node's `child_process` attaches to a

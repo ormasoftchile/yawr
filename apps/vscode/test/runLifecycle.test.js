@@ -251,7 +251,8 @@ test('C5: canonical validateInputs command is contributed once', () => {
 
 test('C5: validateInputs presents the canonical yawr dry-run command', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
-  assert.match(source, /Variable overrides for yawr dry-run/);
+  assert.match(source, /extractInputDecls\(doc\)/);
+  assert.doesNotMatch(source, /Variable overrides for yawr dry-run/);
   assert.match(source, /reportEngineFailure\('yawr dry-run', err\)/);
 });
 

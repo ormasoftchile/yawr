@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const mode = process.argv[2];
-const supported = new Set(['unit', 'source', 'installed', 'package']);
+const supported = new Set(['unit', 'source', 'installed', 'package', 'package-check']);
 if (!supported.has(mode)) {
   throw new Error(`expected lifecycle mode: ${[...supported].join(', ')}`);
 }

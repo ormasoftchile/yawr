@@ -1,33 +1,5 @@
-// Hermetic regression tests for the extension's enum-error-derivation and
-// declared-input helpers (CE-V-04/D-3, CE-W-01, CE-D-01/CE-D-02).
-//
-// Previously these tests invoked the real `yawr` binary at runtime, which
-// made them dependent on a sibling-repo build output and caused them to
-// silently skip in any CI environment where that binary was absent.  That
-// is the ninth instance of the team's systemic "appears covered but is not
-// reachable" bug class — see .squad/decisions/inbox/ken-skip-defect.md.
-//
-// **Option chosen: (a) — committed CLI-output fixtures.**
-//
-// Three of the four tests exercised a client-side helper function
-// (deriveFailureMessage, warningLines, extractInputDecls) against live CLI
-// output.  For each, the relevant CLI output has been captured once and
-// committed under test/fixtures/ so the client-side logic can be verified
-// without spawning a binary.  The fixtures represent the engine output at
-// commit f1e5c51 / yawr binary now built from ../../../runtime on 2026-08-18.
-//
-// **Drift risk (stated plainly):** if the CLI changes its output shape
-// (e.g., renames `inputs[]` to something else, changes the ENUM-008
-// prefix, or alters ENUM-W001 formatting), these fixtures will diverge and
-// the tests will continue to pass against stale data.  The live-binary
-// variants (see test/integration/cli.test.js) are the defence against that
-// drift; they must be run wherever `yawr` is available.
-//
-// **CE-S-01/CE-V-01** (a declared enum member is accepted by the CLI) was
-// the fourth skipping test.  It exercises only CLI behaviour — no
-// extension client function is in the loop — so (a) is not applicable:
-// there is no client-side code to assert against a fixture.  That test has
-// been moved to test/integration/cli.test.js where it fails (never skips)
+// Hermetic regression tests for current enum error derivation and declared
+// input metadata. Live integration tests separately exercise the CLI path.
 // when YAWR_BIN is absent.  See that file for the CE-S-01/CE-V-01
 // contract.
 const assert = require('node:assert/strict');
@@ -102,6 +74,5 @@ test('CE-D-01/CE-D-02 regression: extractInputDecls parses the graphjson inputs[
   assert.equal(envDecl.required, true);
   assert.ok(!envDecl.enumRedacted, 'a non-redacted declaration must not carry enumRedacted:true');
 });
-
 
 

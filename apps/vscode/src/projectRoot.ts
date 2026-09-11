@@ -11,13 +11,11 @@ function hasDirectory(dir: string, name: string): boolean {
 
 function isYawrProjectRoot(dir: string): boolean {
   const hasRunbooks = hasDirectory(dir, 'runbooks');
-  if (hasDirectory(dir, '.yawr') && hasRunbooks) return true;
-  if (hasDirectory(dir, 'packages') && hasRunbooks) return true;
-
-  // A generic directory named "tools" (for example C:\tools) is not a Yawr
-  // project. Legacy Yawr projects need either sibling runbooks or .yawr config.
-  return hasDirectory(dir, 'tools')
-    && (hasRunbooks || fs.existsSync(path.join(dir, '.yawr')));
+  return hasRunbooks && (
+    hasDirectory(dir, '.yawr') ||
+    hasDirectory(dir, 'packages') ||
+    hasDirectory(dir, 'tools')
+  );
 }
 
 function findYawrProjectRoot(start: string): string | undefined {

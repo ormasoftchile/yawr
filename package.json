@@ -17,6 +17,7 @@
     "extension:package-helper": "npm run package:helper --workspace apps/vscode --",
     "extension:verify-authoring-parity": "npm run verify:authoring-parity --workspace apps/vscode --",
     "extension:package": "npm run package --workspace apps/vscode",
+    "extension:package:validate": "npm run package:validate --workspace apps/vscode",
     "extension:e2e": "npm run test:e2e --workspace apps/vscode",
     "extension:e2e:vsix": "npm run test:e2e:vsix --workspace apps/vscode",
     "runtime:build": "go build -C runtime -trimpath -buildvcs=false ./cmd/yawr",

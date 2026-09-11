@@ -31,12 +31,11 @@ func TestLoadEnumSuite(t *testing.T) {
 	}
 }
 
-// TestEnumConformance is the authoritative R2 vector execution report: it
+// TestEnumConformance is the vector execution report: it
 // runs every tv-enum.yaml vector through the real yawr CLI (or, for the
 // three ENUM-SUBST catalog vectors, the identical pkgcatalog.Build path
-// the CLI uses) and requires an explicit, named reason for every skip
-// (barbara-enum-mvp-implementation-gate.md R2: "explicitly map any
-// design-level/non-executable vectors rather than ignoring them").
+// the CLI uses) and requires an explicit, named reason for every skip rather
+// than ignoring non-executable vectors.
 func TestEnumConformance(t *testing.T) {
 	vectors, err := LoadEnumSuite(context.Background(), enumDataDir(t))
 	if err != nil {

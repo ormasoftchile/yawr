@@ -12,8 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// EnumVector is one tv-enum.yaml conformance vector (AR-ENUM-1..15,
-// barbara-enum-mvp-implementation-gate.md R2). Its shape differs from the
+// EnumVector is one tv-enum.yaml conformance vector. Its shape differs from the
 // GXL/GIS/GCP Vector type: variables models a synthetic workspace
 // filesystem (a flat map from workspace-relative POSIX path to file
 // content string) rather than a PJVM evaluation scope, and input is the

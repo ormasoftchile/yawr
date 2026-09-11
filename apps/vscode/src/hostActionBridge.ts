@@ -1,14 +1,13 @@
 // yawr.host-action/v1 generic bridge.
 //
 // This module implements the VS Code extension side of the yawr.host-action/v1
-// contract as defined in design/yawr/sections/18-host-action-bridge.tex and
-// approved by Barbara (2026-08-22). It contains no XTS-specific logic.
+// contract as defined in design/yawr/sections/18-host-action-bridge.tex.
+// It contains no XTS-specific logic.
 // Capability handlers are registered externally and injected at construction.
 //
 // Wire protocol versions: the bridge only accepts messages with
 //   version: "yawr.host-action/v1"
-// Messages with any other version (including the legacy integer version: 1)
-// are silently dropped per §2.7 of the spec.
+// Messages with any other version are silently dropped.
 
 // ─── Wire envelope types ─────────────────────────────────────────────────────
 

@@ -176,7 +176,8 @@ Or use the pre-wired npm scripts:
 
 ```sh
 npm run package          # produces yawr-preview.vsix (uses version from package.json)
-npm run package:clean    # wipes out/ first, recompiles, then packages
+npm run package:clean    # validates packaging in disposable state and leaves no artifact
+npm run package:validate # same self-cleaning packaging validation used by automation
 ```
 
 **Local install:**

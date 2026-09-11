@@ -2114,15 +2114,24 @@ function GraphView({
         const firstStep = window.document.querySelector<HTMLElement>('.step-node');
         const firstEdge = window.document.querySelector<SVGElement>('.react-flow__edge');
         const edgeClassName = firstEdge?.getAttribute('class') ?? '';
-        if (++attempts < 12 && layout.edges.length > 0 && !edgeClassName.includes('react-flow__edge-')) {
+        const nodeCount = window.document.querySelectorAll('.react-flow__node-yawrStep').length;
+        const frameCount = window.document.querySelectorAll('.react-flow__node-frameBox').length;
+        const edgeCount = window.document.querySelectorAll('.react-flow__edge').length;
+        const expectedNodeCount = layout.nodes.filter(node => node.type === 'yawrStep').length;
+        const expectedFrameCount = layout.nodes.filter(node => node.type === 'frameBox').length;
+        const rendered = nodeCount === expectedNodeCount &&
+          frameCount === expectedFrameCount &&
+          edgeCount === layout.edges.length &&
+          (layout.edges.length === 0 || edgeClassName.includes('react-flow__edge-'));
+        if (++attempts < 120 && !rendered) {
           report();
           return;
         }
         vscode.postMessage({
           type: 'rendered',
-          nodeCount: window.document.querySelectorAll('.react-flow__node-yawrStep').length,
-          frameCount: window.document.querySelectorAll('.react-flow__node-frameBox').length,
-          edgeCount: window.document.querySelectorAll('.react-flow__edge').length,
+          nodeCount,
+          frameCount,
+          edgeCount,
           style,
           nodeBorderRadius: firstStep ? getComputedStyle(firstStep).borderRadius : '',
           edgeClassName,

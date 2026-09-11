@@ -36,7 +36,7 @@ for (const token of [
   'YAWR_CORE_ROOT',
   'YAWR_AUTHORING_HELPER',
   'YAWR_E2E_BINARY',
-  'yawr-preview.vsix',
+  'extension:package:validate',
 ]) {
   if (!workflow.includes(token)) {
     throw new Error(`Root CI is missing required Yawr token: ${token}`);

@@ -53,9 +53,8 @@ export function decodePresentationState(value: unknown): PresentationState {
       const explicit = Object.prototype.hasOwnProperty.call(occurrence, 'display_presentation') ||
         Object.prototype.hasOwnProperty.call(occurrence, 'display_presentation_diagnostic');
       const retainedMetadata = decodeDisplayPresentation(projection.display_presentation, snapshotDigest);
-      // Metadata-only history adapters must carry explicit withdrawal through
-      // normalization. This authorizes no value; absent legacy metadata remains
-      // unclassified rather than becoming a withdrawal.
+      // Preserve an explicit metadata withdrawal through normalization without
+      // authorizing an output value.
       const withdrawnMetadata: DisplayPresentationV1 | undefined = explicit && !retainedMetadata ? {
         version: 1, format: 'markdown', output_field: 'content', origin: 'frozen',
         plan_snapshot_digest: snapshotDigest, value_status: 'unavailable',
