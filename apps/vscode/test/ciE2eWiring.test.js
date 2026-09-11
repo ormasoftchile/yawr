@@ -33,13 +33,16 @@ test('component wiring uses the monorepo runtime without a second checkout', () 
   const powershellBuild = fs.readFileSync(path.join(root, 'scripts', 'build-cli.ps1'), 'utf8');
   const shellBuild = fs.readFileSync(path.join(root, 'scripts', 'build-cli.sh'), 'utf8');
   const highlightingBuild = fs.readFileSync(path.join(root, 'scripts', 'build-highlighting.mjs'), 'utf8');
+  const helperPackaging = fs.readFileSync(path.join(root, 'scripts', 'package-helper.mjs'), 'utf8');
   const cacheTest = fs.readFileSync(path.join(root, 'test', 'previewDocumentCache.test.js'), 'utf8');
   const wireTest = fs.readFileSync(path.join(root, 'test', 'crossRepoHostActionWire.js'), 'utf8');
 
   assert.match(powershellBuild, /Join-Path \$ExtensionRoot '\.\.\\\.\.\\runtime'/);
   assert.match(shellBuild, /\$EXTENSION_ROOT\/\.\.\/\.\.\/runtime/);
   assert.match(highlightingBuild, /environmentValue\('CORE_ROOT'\) \|\| resolve\(root, '\.\.', '\.\.', 'runtime'\)/);
+  assert.match(helperPackaging, /\['authoring', 'capabilities', '--v3'\]/);
+  assert.match(helperPackaging, /assertAuthoringParity\(sourceAuthoring, packagedAuthoring\)/);
   assert.match(cacheTest, /value\('CORE_ROOT'\) \|\| path\.resolve\(__dirname, '\.\.', '\.\.', '\.\.', 'runtime'\)/);
   assert.match(wireTest, /value\('CORE_ROOT'\) \|\| path\.resolve\(__dirname, '\.\.', '\.\.', '\.\.', 'runtime'\)/);
-  assert.doesNotMatch(powershellBuild + shellBuild, /yawr-core|Clone https:\/\/github\.com\/ormasoftchile\/yawr/);
+  assert.doesNotMatch(powershellBuild + shellBuild, /Clone https:\/\/github\.com\/ormasoftchile\/yawr/);
 });

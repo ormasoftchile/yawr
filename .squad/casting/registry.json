@@ -1,109 +1,12 @@
 {
   "agents": {
-    "lead": {
-      "persistent_name": "Lead",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "runtime": {
-      "persistent_name": "Runtime",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "tooling": {
-      "persistent_name": "Tooling",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "integrator": {
-      "persistent_name": "Integrator",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T07:01:12.738-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "release": {
-      "persistent_name": "Release",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T08:22:42.768-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "quality": {
-      "persistent_name": "Quality",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T08:22:42.768-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "identity": {
-      "persistent_name": "Identity",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T10:41:47.536-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "sanitizer": {
-      "persistent_name": "Sanitizer",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T10:41:47.536-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "modernizer": {
-      "persistent_name": "Modernizer",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T10:41:47.536-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "wayfinder": {
-      "persistent_name": "Wayfinder",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T10:41:47.536-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "tester": {
-      "persistent_name": "Tester",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "scribe": {
-      "persistent_name": "Scribe",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "ralph": {
-      "persistent_name": "Ralph",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "rai": {
-      "persistent_name": "Rai",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    },
-    "fact-checker": {
-      "persistent_name": "Fact Checker",
-      "universe": "descriptive",
-      "created_at": "2026-09-11T06:23:57.672-07:00",
-      "legacy_named": false,
-      "status": "active"
-    }
+    "lead": {"persistent_name": "Lead", "universe": "descriptive", "status": "active"},
+    "runtime": {"persistent_name": "Runtime", "universe": "descriptive", "status": "active"},
+    "tooling": {"persistent_name": "Tooling", "universe": "descriptive", "status": "active"},
+    "tester": {"persistent_name": "Tester", "universe": "descriptive", "status": "active"},
+    "scribe": {"persistent_name": "Scribe", "universe": "descriptive", "status": "active"},
+    "ralph": {"persistent_name": "Ralph", "universe": "descriptive", "status": "active"},
+    "rai": {"persistent_name": "Rai", "universe": "descriptive", "status": "active"},
+    "fact-checker": {"persistent_name": "Fact Checker", "universe": "descriptive", "status": "active"}
   }
 }

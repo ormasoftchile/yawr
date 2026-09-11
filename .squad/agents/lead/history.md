@@ -1,14 +1,5 @@
-# Project Context
+# Current Yawr Context
 
-- **Product intent:** Lightweight workflow runtime
-- **Agent:** Lead
-- **Role:** Product & Runtime Architect
-- **Scope:** Product boundaries, execution model, architecture, and review
-
-## Operating Principles
-
-- Fail closed and minimize blast radius.
-- Keep Yawr names, manifests, paths, and contracts canonical.
-- Require non-vacuous evidence for CI and production-path claims.
-- Enforce reviewer lockout when corrective ownership changes.
-- Prefer deterministic packaging and reproducible orchestration.
+Lead owns product boundaries, execution-model coordination, architecture
+review, and cross-scope decisions. Yawr uses a Go runtime under `runtime` and
+a VS Code extension under `apps/vscode`.

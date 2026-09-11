@@ -28,17 +28,14 @@ package tool
 // Placement justification: the task permits "place your test in the same
 // package as a NEW file (that is fine, same package, different file)".
 //
-// ops-mock binary: built once per test run via sync.Once so the full-suite
-// overhead is one go build call. The path is stored in opsMockBinOnce so
-// each test can reference it without rebuilding.
+// Each test builds ops-mock in its own temporary directory so the suite
+// never writes generated executables into the repository.
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/ormasoftchile/yawr/runtime/pkg/contractparity"
@@ -46,34 +43,14 @@ import (
 	toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 )
 
-// ─── ops-mock binary (built once per test run) ────────────────────────────────
-
-var (
-	opsMockBinOnce sync.Once
-	opsMockBinPath string
-	opsMockBinErr  error
-)
-
 func opsMockBin(t *testing.T) string {
 	t.Helper()
-	opsMockBinOnce.Do(func() {
-		root := repoRoot()
-		dir := filepath.Join(root, ".testtools", "contractparity-proof")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			opsMockBinErr = fmt.Errorf("mkdir .testtools/contractparity-proof: %w", err)
-			return
-		}
-		out, err := testutil.BuildGoBinary(root, filepath.Join(dir, "ops-mock"), "./cmd/tools/ops-mock")
-		if err != nil {
-			opsMockBinErr = fmt.Errorf("build ops-mock: %w", err)
-			return
-		}
-		opsMockBinPath = out
-	})
-	if opsMockBinErr != nil {
-		t.Fatalf("ops-mock binary unavailable: %v", opsMockBinErr)
+	root := repoRoot()
+	out, err := testutil.BuildGoBinary(root, filepath.Join(t.TempDir(), "ops-mock"), "./cmd/tools/ops-mock")
+	if err != nil {
+		t.Fatalf("ops-mock binary unavailable: %v", fmt.Errorf("build ops-mock: %w", err))
 	}
-	return opsMockBinPath
+	return out
 }
 
 // ─── binding constructors ─────────────────────────────────────────────────────

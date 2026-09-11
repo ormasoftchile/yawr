@@ -667,27 +667,6 @@ func TestBindFile_ByPath_Tier4(t *testing.T) {
 	}
 }
 
-func TestBindFile_DeprecationWarnings(t *testing.T) {
-	ws := t.TempDir()
-	toolPath := filepath.Join(ws, "adhoc", "kubectl.tool.yaml")
-	writeFile(t, toolPath, kubectlToolYAML)
-	runbookPath := filepath.Join(ws, "runbook.yaml")
-	refs := []*schema.ToolRef{{
-		Name:    "kubectl",
-		Path:    "./adhoc/kubectl.tool.yaml",
-		Source:  "legacy-provenance",
-		Actions: []string{"drain"},
-	}}
-	cat, _ := Build(BuildOptions{WorkspaceRoot: ws})
-	_, berrs := BindFile(cat, runbookPath, refs, "")
-	if !hasCode(berrs, "PKG-W001") {
-		t.Fatalf("expected PKG-W001, got %v", berrs)
-	}
-	if !hasCode(berrs, "PKG-W002") {
-		t.Fatalf("expected PKG-W002, got %v", berrs)
-	}
-}
-
 // TestBindFile_ExternalToolRefsPath_PKGW003NotPKG007 exercises Barbara's
 // binding ruling for the tier-4 toolRefs[].path case (TV-PKG-PATH-008's
 // defect class): an ordinary top-level runbook's toolRefs[].path resolving
@@ -718,19 +697,6 @@ func TestBindFile_ExternalToolRefsPath_PKGW003NotPKG007(t *testing.T) {
 	}
 	if len(bindings) != 1 || bindings[0].Def.Actions["drain"] == nil {
 		t.Fatalf("expected kubectl binding to still succeed, got %+v", bindings)
-	}
-}
-
-func TestBindFile_PKG012_MissingDeclaredAction(t *testing.T) {
-	ws := t.TempDir()
-	toolPath := filepath.Join(ws, "adhoc", "kubectl.tool.yaml")
-	writeFile(t, toolPath, kubectlToolYAML)
-	runbookPath := filepath.Join(ws, "runbook.yaml")
-	refs := []*schema.ToolRef{{Name: "kubectl", Path: "./adhoc/kubectl.tool.yaml", Actions: []string{"nonexistent-action"}}}
-	cat, _ := Build(BuildOptions{WorkspaceRoot: ws})
-	_, berrs := BindFile(cat, runbookPath, refs, "")
-	if !hasCode(berrs, "PKG-012") {
-		t.Fatalf("expected PKG-012, got %v", berrs)
 	}
 }
 

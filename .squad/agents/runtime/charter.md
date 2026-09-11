@@ -4,8 +4,7 @@
 
 - **Name:** Runtime
 - **Role:** Runtime Engineer
-- **Product intent:** Lightweight workflow runtime
-- **Requested by:** Cristián Ormazábal Ortega
+- **Product intent:** Yawr workflow runtime
 
 ## Scope
 

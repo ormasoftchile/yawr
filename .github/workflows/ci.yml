@@ -66,12 +66,12 @@ jobs:
         shell: bash
         run: |
           fixture=internal/serve/testdata/host_action_wire_v1.json
-          mkdir -p "$RUNNER_TEMP/yawr-core/$(dirname "$fixture")"
-          cp "runtime/$fixture" "$RUNNER_TEMP/yawr-core/$fixture"
+          mkdir -p "$RUNNER_TEMP/runtime-copy/$(dirname "$fixture")"
+          cp "runtime/$fixture" "$RUNNER_TEMP/runtime-copy/$fixture"
           rm "runtime/$fixture"
       - name: Verify runtime-extension wire contract
         env:
-          YAWR_CORE_ROOT: ${{ runner.temp }}/yawr-core
+          YAWR_CORE_ROOT: ${{ runner.temp }}/runtime-copy
         run: npm run extension:test:cross-repo
 
   extension-authoring-core:
@@ -154,6 +154,7 @@ jobs:
         run: |
           (cd runtime && go build -trimpath -buildvcs=false -o "$RUNNER_TEMP/yawr-e2e" ./cmd/yawr)
           npm run extension:package-helper -- "$RUNNER_TEMP/yawr-e2e"
+          npm run extension:verify-authoring-parity -- "$RUNNER_TEMP/yawr-e2e"
       - name: Run source extension-host tests
         env:
           YAWR_E2E_BINARY: ${{ runner.temp }}/yawr-e2e
@@ -180,6 +181,7 @@ jobs:
         run: |
           (cd runtime && go build -trimpath -buildvcs=false -o "$RUNNER_TEMP/yawr-vsix" ./cmd/yawr)
           npm run extension:package-helper -- "$RUNNER_TEMP/yawr-vsix"
+          npm run extension:verify-authoring-parity -- "$RUNNER_TEMP/yawr-vsix"
       - name: Compile and package VSIX
         run: npm run extension:package
       - name: Verify canonical VSIX artifact name

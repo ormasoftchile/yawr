@@ -132,7 +132,7 @@ func resolveBindingSnapshot(req Request, sourceRoot *yaml.Node, snapshot *bindin
 	}
 	seen := map[string]bool{}
 	for _, r := range refs {
-		if r == nil || r.Name == "" || r.Alias != "" || seen[r.Name] {
+		if r == nil || r.Name == "" || seen[r.Name] {
 			return fail("incomplete-identity")
 		}
 		seen[r.Name] = true

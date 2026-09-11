@@ -10,9 +10,8 @@ import (
 // ScanForbiddenPackageKeys performs the mandated pre-schema raw-document scan
 // (design/yawr/sections/03d-parse-time-enforcement.tex §Parse-gate pre-check
 // for PKG-020/PKG-021) that must run BEFORE JSON Schema validation, because
-// a rejected key like "toolPackages" or "toolRefs[].alias" would otherwise
-// either pass silently (additionalProperties: true) or be reported only as
-// a generic, uninformative schema error.
+// a rejected key like "toolPackages" or "toolRefs[].alias" should receive a
+// specific diagnostic rather than only a generic schema error.
 //
 //   - A top-level "toolPackages" key anywhere in the document is PKG-020.
 //   - Any "toolRefs[].alias" key is PKG-021.

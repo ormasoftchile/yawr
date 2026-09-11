@@ -80,6 +80,24 @@ func TestParser_Fixtures(t *testing.T) {
 	}
 }
 
+func TestParser_RejectsRemovedToolRefFields(t *testing.T) {
+	p, err := parser.New(platform.NewFakePlatform())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"source: obsolete", "actions: [inspect]"} {
+		t.Run(strings.Split(field, ":")[0], func(t *testing.T) {
+			src := "apiVersion: yawr.runbook/v1\nid: removed\nname: Removed\n" +
+				"toolRefs:\n  - name: db\n    package: example.tools\n    " + field + "\nflow: []\n"
+			_, err := p.ParseBytes(context.Background(), []byte(src))
+			if err == nil {
+				t.Fatalf("expected toolRefs field %q to fail structural validation", field)
+			}
+			assertErrorCode(t, err, "schema/structural")
+		})
+	}
+}
+
 // ─── §2.1 — apiVersion ────────────────────────────────────────────────────────
 
 func TestParser_MissingAPIVersion(t *testing.T) {

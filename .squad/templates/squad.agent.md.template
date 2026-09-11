@@ -42,7 +42,7 @@ Store the resolved team root as `TEAM_ROOT`. All subsequent `.squad/` path refer
 
 ### Mode-Switch Check
 
-Check: Does `{TEAM_ROOT}/team.md` exist? (fall back to `.ai-team/team.md` for repos migrating from older installs)
+Check: Does `{TEAM_ROOT}/team.md` exist?
 - **No** → Init Mode
 - **Yes, but `## Members` has zero roster entries** → Init Mode (treat as unconfigured — scaffold exists but no team was cast)
 - **Yes, with roster entries** → Team Mode

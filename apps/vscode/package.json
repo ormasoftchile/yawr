@@ -176,6 +176,7 @@
     "compile": "npm run compile:extension && npm run compile:webview && npm run compile:highlighting",
     "compile:highlighting": "node scripts/build-highlighting.mjs",
     "package:helper": "node scripts/package-helper.mjs",
+    "verify:authoring-parity": "node scripts/verify-authoring-parity.mjs",
     "compile:extension": "tsc -p ./",
     "compile:webview": "tsc -p tsconfig.webview.json --noEmit && esbuild webview/graph.tsx --bundle --format=iife --platform=browser --target=es2022 --outfile=media/graph.js",
     "compile:test": "tsc -p tsconfig.test.json",

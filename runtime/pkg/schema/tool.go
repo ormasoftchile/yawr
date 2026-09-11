@@ -13,17 +13,26 @@ type ToolRef struct {
 	Package string `yaml:"package,omitempty" json:"package,omitempty"`
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 	Path    string `yaml:"path,omitempty"    json:"path,omitempty"`
-	// Alias is REMOVED from the schema (design/yawr/sections/06-tool-runtime.tex
-	// §ToolRef field disposition). The field is retained here only so the
-	// parser's pre-schema raw scan can detect its presence and raise
-	// PKG-021; it MUST NOT be read for any resolution purpose.
-	Alias string `yaml:"alias,omitempty"   json:"alias,omitempty"`
-	// Source is deprecated (D-001): retained as schema-valid, non-enforcing
-	// provenance-only text. Presence emits PKG-W002.
-	Source string `yaml:"source,omitempty"  json:"source,omitempty"`
-	// Actions is deprecated (D-002): a documentation-only, plan-time
-	// reachability assertion, never an allowlist. Presence emits PKG-W001.
-	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
+}
+
+func (r *ToolRef) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("tool reference must be a mapping")
+	}
+	known := map[string]bool{"name": true, "package": true, "version": true, "path": true}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if !known[key] {
+			return fmt.Errorf("tool reference field %q is not recognized", key)
+		}
+	}
+	type toolRef ToolRef
+	var out toolRef
+	if err := node.Decode(&out); err != nil {
+		return err
+	}
+	*r = ToolRef(out)
+	return nil
 }
 
 // ToolMeta is the canonical, nested `meta:` identity block of a .tool.yaml

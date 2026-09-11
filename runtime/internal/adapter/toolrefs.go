@@ -87,10 +87,8 @@ func ResolveToolRefsViaCatalog(cat *pkgcatalog.Catalog, runbookPath string, refs
 	}
 	bindings, errs := pkgcatalog.BindFile(cat, runbookPath, refs, "")
 	fatal, warnings := errkit.SplitWarnings(errs)
-	// Barbara's binding ruling (TV-PKG-PATH-002) and the pre-existing
-	// PKG-W001/PKG-W002 deprecation notices are advisory: they MUST NOT
-	// prevent otherwise-successful bindings from being registered. Only
-	// fatal (non-PKG-W) errors abort resolution.
+	// Advisory catalog warnings must not prevent otherwise-successful
+	// bindings from being registered. Only fatal errors abort resolution.
 	if len(fatal) > 0 {
 		return nil, fatal
 	}

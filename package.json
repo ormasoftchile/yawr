@@ -15,6 +15,7 @@
     "extension:test:authoring:native": "npm run test:authoring:native --workspace apps/vscode",
     "extension:test:relocation": "node --test --test-name-pattern=\"source Extension Host|VS Code test configuration|component wiring|repoBoundary/rule[123456]\" apps/vscode/test/ciE2eWiring.test.js apps/vscode/test/repoBoundary.test.js",
     "extension:package-helper": "npm run package:helper --workspace apps/vscode --",
+    "extension:verify-authoring-parity": "npm run verify:authoring-parity --workspace apps/vscode --",
     "extension:package": "npm run package --workspace apps/vscode",
     "extension:e2e": "npm run test:e2e --workspace apps/vscode",
     "extension:e2e:vsix": "npm run test:e2e:vsix --workspace apps/vscode",

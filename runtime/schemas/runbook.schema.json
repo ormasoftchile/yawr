@@ -212,7 +212,7 @@
       "required": [
         "name"
       ],
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string"
@@ -225,15 +225,6 @@
         },
         "path": {
           "type": "string"
-        },
-        "source": {
-          "type": "string"
-        },
-        "actions": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     },

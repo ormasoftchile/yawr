@@ -35,14 +35,8 @@ toolRefs:
   - name: git
   - name: prometheus
   - name: slack-notify
-    source: builtin://slack
-    actions: [send-message]
   - name: pagerduty-notify
-    source: builtin://pagerduty
-    actions: [trigger-alert, resolve-alert]
   - name: alertmanager-notify
-    source: builtin://alertmanager
-    actions: [resolve-alert]
 
 governance:
   rules:

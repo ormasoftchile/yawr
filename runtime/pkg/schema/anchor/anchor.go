@@ -5,7 +5,7 @@
 //
 // The type is intentionally a passive value — it does NOT compute
 // "next occurrence" by itself; SDKs (Swift, Kotlin) own that logic.
-// yawr-core only standardises the schema shape and the metadata
+// Yawr standardises the schema shape and metadata
 // keys emitted by domain compilers.
 package anchor
 

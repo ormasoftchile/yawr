@@ -27,41 +27,17 @@ inputs:
 
 toolRefs:
   - name: aws
-    source: builtin://aws
-    actions: [revoke-sg-ingress, stop-instances, rotate-iam-keys, create-ebs-snapshots, export-cloudtrail, restore-security-groups, restrict-sg-egress]
   - name: okta
-    source: builtin://okta
-    actions: [disable-vpn-policy, force-password-reset-all, suspend-accounts, unsuspend-all-users]
   - name: palo-alto
-    source: builtin://palo-alto
-    actions: [block-ips]
   - name: auth-service
-    source: tool://auth-service
-    actions: [invalidate-all-tokens]
   - name: internal-api
-    source: tool://internal-api
-    actions: [revoke-all-keys]
   - name: credential-revoker
-    source: tool://credential-revoker
-    actions: [revoke-for-alert]
   - name: log-exporter
-    source: tool://log-exporter
-    actions: [export]
   - name: splunk
-    source: builtin://splunk
-    actions: [search-iocs]
   - name: email-notify
-    source: builtin://email
-    actions: [send]
   - name: pagerduty-notify
-    source: builtin://pagerduty
-    actions: [trigger-alert, resolve-alert]
   - name: slack-notify
-    source: builtin://slack
-    actions: [send-message]
   - name: incident-tracker
-    source: tool://incident-tracker
-    actions: [close]
 
 governance:
   rules:

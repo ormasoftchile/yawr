@@ -87,14 +87,6 @@ func BindFile(base *Catalog, runbookPath string, refs []*schema.ToolRef, package
 			bindings = append(bindings, *b)
 		}
 
-		if len(ref.Actions) > 0 {
-			errs = append(errs, errkit.New("PKG-W001", fmt.Sprintf(
-				"toolRefs[%s].actions is documentation-only in the MVP and does not gate invocation", ref.Name)))
-		}
-		if ref.Source != "" {
-			errs = append(errs, errkit.New("PKG-W002", fmt.Sprintf(
-				"toolRefs[%s].source is deprecated; use package", ref.Name)))
-		}
 	}
 	return bindings, errs
 }
@@ -134,11 +126,6 @@ func (source *Source) bindByPath(runbookDir string, ref *schema.ToolRef, workspa
 	def, err := source.parse(abs)
 	if err != nil {
 		return nil, warnings, errkit.New("PKG-030", fmt.Sprintf("toolRefs[%s]: cannot parse tool file %q: %v", ref.Name, ref.Path, err))
-	}
-	if len(ref.Actions) > 0 {
-		if missing := missingActions(def, ref.Actions); len(missing) > 0 {
-			return nil, warnings, errkit.New("PKG-012", fmt.Sprintf("toolRefs[%s]: declared actions not found on resolved tool: %v", ref.Name, missing))
-		}
 	}
 	runtimeDef, err := source.runtime(def)
 	if err != nil {
@@ -192,11 +179,6 @@ func bindByPackage(base *Catalog, ref *schema.ToolRef) (*Binding, error) {
 			return nil, err
 		}
 	}
-	if len(ref.Actions) > 0 {
-		if missing := missingActionsRuntime(match.Def, ref.Actions); len(missing) > 0 {
-			return nil, errkit.New("PKG-012", fmt.Sprintf("toolRefs[%s]: declared actions not found on resolved tool: %v", ref.Name, missing))
-		}
-	}
 	def := match.Def
 	def.Name = ref.Name
 	return &Binding{Name: ref.Name, Def: def}, nil
@@ -232,34 +214,9 @@ func bindByBareName(base *Catalog, fileBare map[string][]*Entry, ref *schema.Too
 		return nil, errkit.New("PKG-006", fmt.Sprintf("toolRefs[%s]: bare name collides at tier %d", ref.Name, only))
 	}
 	match := tiers[only][0]
-	if len(ref.Actions) > 0 {
-		if missing := missingActionsRuntime(match.Def, ref.Actions); len(missing) > 0 {
-			return nil, errkit.New("PKG-012", fmt.Sprintf("toolRefs[%s]: declared actions not found on resolved tool: %v", ref.Name, missing))
-		}
-	}
 	def := match.Def
 	def.Name = ref.Name
 	return &Binding{Name: ref.Name, Def: def}, nil
-}
-
-func missingActions(def *schema.ToolDef, want []string) []string {
-	var missing []string
-	for _, a := range want {
-		if _, ok := def.Actions[a]; !ok {
-			missing = append(missing, a)
-		}
-	}
-	return missing
-}
-
-func missingActionsRuntime(def toolpkg.ToolDef, want []string) []string {
-	var missing []string
-	for _, a := range want {
-		if _, ok := def.Actions[a]; !ok {
-			missing = append(missing, a)
-		}
-	}
-	return missing
 }
 
 // checkVersionConstraint parses ref's version constraint and validates it

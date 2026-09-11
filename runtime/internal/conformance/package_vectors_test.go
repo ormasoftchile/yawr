@@ -46,7 +46,7 @@ func TestPackageResolutionVectorHarnessLoadsCorpus(t *testing.T) {
 	if err := validateYAML(schema, data); err != nil {
 		t.Fatalf("package vector schema validation: %v", err)
 	}
-	if got, want := len(vectors), 85; got != want {
+	if got, want := len(vectors), 82; got != want {
 		t.Fatalf("package vector count = %d, want %d", got, want)
 	}
 }

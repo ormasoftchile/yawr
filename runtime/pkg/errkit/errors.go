@@ -291,10 +291,6 @@ var (
 	ErrPKG029 = &Error{code: "PKG-029", class: "PKG"}
 	// ErrPKG030 is the PKG-030 sentinel (name resolves to no catalog entry at all).
 	ErrPKG030 = &Error{code: "PKG-030", class: "PKG"}
-	// ErrPKGW001 is the PKG-W001 sentinel (toolRefs[].actions present — documentation-only).
-	ErrPKGW001 = &Error{code: "PKG-W001", class: "PKG-W"}
-	// ErrPKGW002 is the PKG-W002 sentinel (toolRefs[].source present — deprecated).
-	ErrPKGW002 = &Error{code: "PKG-W002", class: "PKG-W"}
 	// ErrPKGW003 is the PKG-W003 sentinel (package root resolves outside the workspace).
 	ErrPKGW003 = &Error{code: "PKG-W003", class: "PKG-W"}
 	// ErrPKGW004 is the PKG-W004 sentinel (tool action has no declared classification).
@@ -420,7 +416,7 @@ var codeOrder = []string{
 	"PKG-001", "PKG-002", "PKG-003", "PKG-004", "PKG-005", "PKG-006", "PKG-007", "PKG-008", "PKG-009", "PKG-010",
 	"PKG-011", "PKG-012", "PKG-013", "PKG-014", "PKG-015", "PKG-016", "PKG-017", "PKG-018", "PKG-020", "PKG-021",
 	"PKG-022", "PKG-023", "PKG-024", "PKG-025", "PKG-026", "PKG-027", "PKG-028", "PKG-029", "PKG-030",
-	"PKG-W001", "PKG-W002", "PKG-W003", "PKG-W004",
+	"PKG-W003", "PKG-W004",
 	"PLAN-010", "PLAN-011", "PLAN-012",
 	"ENUM-001", "ENUM-002", "ENUM-003", "ENUM-004", "ENUM-005", "ENUM-006", "ENUM-007", "ENUM-008", "ENUM-009", "ENUM-W001",
 	"DINC-001", "DINC-002", "DINC-003", "DINC-004", "DINC-005", "DINC-006", "DINC-008", "DINC-009", "DINC-010", "DINC-011", "DINC-012", "DINC-013", "DINC-W001", "DINC-W007",
@@ -450,7 +446,7 @@ var sentinels = map[string]*Error{
 	"PKG-016": ErrPKG016, "PKG-017": ErrPKG017, "PKG-018": ErrPKG018, "PKG-020": ErrPKG020, "PKG-021": ErrPKG021,
 	"PKG-022": ErrPKG022, "PKG-023": ErrPKG023, "PKG-024": ErrPKG024, "PKG-025": ErrPKG025, "PKG-026": ErrPKG026,
 	"PKG-027": ErrPKG027, "PKG-028": ErrPKG028, "PKG-029": ErrPKG029, "PKG-030": ErrPKG030,
-	"PKG-W001": ErrPKGW001, "PKG-W002": ErrPKGW002, "PKG-W003": ErrPKGW003, "PKG-W004": ErrPKGW004,
+	"PKG-W003": ErrPKGW003, "PKG-W004": ErrPKGW004,
 	"PLAN-010": ErrPLAN010, "PLAN-011": ErrPLAN011, "PLAN-012": ErrPLAN012,
 	"ENUM-001": ErrENUM001, "ENUM-002": ErrENUM002, "ENUM-003": ErrENUM003, "ENUM-004": ErrENUM004, "ENUM-005": ErrENUM005,
 	"ENUM-006": ErrENUM006, "ENUM-007": ErrENUM007, "ENUM-008": ErrENUM008, "ENUM-009": ErrENUM009, "ENUM-W001": ErrENUMW001,

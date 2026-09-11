@@ -29,21 +29,13 @@ jobs:
       - name: Run tests
         run: node --test test/*.test.cjs
 
-      - name: Check no .ai-team/ or .squad/ files are tracked
+      - name: Check no Squad state files are tracked
         run: |
-          FOUND_FORBIDDEN=0
-          if git ls-files --error-unmatch .ai-team/ 2>/dev/null; then
-            echo "::error::❌ .ai-team/ files are tracked on preview — this must not ship."
-            FOUND_FORBIDDEN=1
-          fi
           if git ls-files --error-unmatch .squad/ 2>/dev/null; then
             echo "::error::❌ .squad/ files are tracked on preview — this must not ship."
-            FOUND_FORBIDDEN=1
-          fi
-          if [ $FOUND_FORBIDDEN -eq 1 ]; then
             exit 1
           fi
-          echo "✅ No .ai-team/ or .squad/ files tracked — clean for release."
+          echo "✅ No .squad/ files tracked — clean for release."
 
       - name: Validate package.json version
         run: |

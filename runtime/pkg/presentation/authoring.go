@@ -286,7 +286,7 @@ func definitionAuthoringMetadata(snapshot *bindingSnapshot, def runtimetool.Tool
 
 func completeToolReference(ctx context.Context, req AuthoringRequest, s *authoringSource, t *authoringTarget, snapshot *bindingSnapshot, reply *AuthoringReply) {
 	var ref schema.ToolRef
-	if t.ref.Decode(&ref) != nil || ref.Alias != "" {
+	if t.ref.Decode(&ref) != nil {
 		reply.unavailable("incomplete-identity")
 		return
 	}

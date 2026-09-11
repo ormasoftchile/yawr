@@ -88,22 +88,15 @@ func TestResolveToolRefsViaCatalog_EmptyRefs(t *testing.T) {
 	}
 }
 
-// TestResolveToolRefsViaCatalog_WarningsDoNotDiscardBindings guards against
-// regressing to the pre-fix behaviour where any non-empty error slice
-// (including PKG-W-class advisories such as the deprecated toolRefs[].source
-// or Barbara's PKG-W003 workspace-escape report) caused the caller to
-// discard otherwise-successful bindings entirely. Per the binding ruling
-// (TV-PKG-PATH-002) and the pre-existing PKG-W001/PKG-W002 deprecation
-// notices, warnings MUST be reported but MUST NOT prevent registration.
 func TestResolveToolRefsViaCatalog_WarningsDoNotDiscardBindings(t *testing.T) {
 	ws := t.TempDir()
-	toolPath := filepath.Join(ws, "adhoc", "kubectl.tool.yaml")
+	container := filepath.Dir(ws)
+	toolPath := filepath.Join(container, "kubectl.tool.yaml")
 	writeAdapterFile(t, toolPath, adapterKubectlToolYAML)
 	runbookPath := filepath.Join(ws, "runbook.yaml")
 	refs := []*schema.ToolRef{{
-		Name:   "kubectl",
-		Path:   "./adhoc/kubectl.tool.yaml",
-		Source: "deprecated-provenance", // triggers PKG-W002
+		Name: "kubectl",
+		Path: "../kubectl.tool.yaml",
 	}}
 
 	opts := PackageCatalogOptions{WorkspaceRoot: ws}
@@ -114,9 +107,9 @@ func TestResolveToolRefsViaCatalog_WarningsDoNotDiscardBindings(t *testing.T) {
 
 	defs, errs := ResolveToolRefsViaCatalog(cat, runbookPath, refs)
 	if len(defs) != 1 || defs[0].Name != "kubectl" {
-		t.Fatalf("expected the binding to succeed despite the PKG-W002 warning, got defs=%+v errs=%v", defs, errs)
+		t.Fatalf("expected the binding to succeed despite the external-root warning, got defs=%+v errs=%v", defs, errs)
 	}
 	if len(errs) == 0 {
-		t.Fatal("expected the PKG-W002 warning to still be surfaced, got none")
+		t.Fatal("expected the external-root warning to still be surfaced, got none")
 	}
 }

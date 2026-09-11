@@ -1,6 +1,10 @@
 package schema
 
-import "testing"
+import (
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
 
 func TestScanForbiddenPackageKeys_ToolPackages(t *testing.T) {
 	doc := []byte(`
@@ -56,5 +60,20 @@ flow: []
 	errs := ScanForbiddenPackageKeys(doc)
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got %v", errs)
+	}
+}
+
+func TestToolRefRejectsRemovedFields(t *testing.T) {
+	tests := map[string]string{
+		"source":  "name: kubectl\nsource: obsolete\n",
+		"actions": "name: kubectl\nactions: [get]\n",
+	}
+	for name, doc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var ref ToolRef
+			if err := yaml.Unmarshal([]byte(doc), &ref); err == nil {
+				t.Fatalf("expected toolRefs[].%s to be rejected", name)
+			}
+		})
 	}
 }

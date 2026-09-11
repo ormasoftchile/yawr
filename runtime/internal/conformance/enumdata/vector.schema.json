@@ -215,7 +215,7 @@
         },
         "warnings": {
           "type": "array",
-          "description": "The exact, unordered set of non-fatal PKG-W* warning codes (design/yawr/sections/03d-parse-time-enforcement.tex §Error Code Catalog, Warnings table) that MUST appear in the plan report and trace for this vector. Valid alongside either 'catalog' (a warning may accompany a successful resolution, e.g. PKG-W001/PKG-W002 deprecations or PKG-W003 external-root) or 'error' (a warning may be emitted before a fatal error is raised). Absent or empty means no warnings are expected. This closes the gap where PKG-W* codes were otherwise unverifiable by the conformance corpus.",
+          "description": "The exact, unordered set of non-fatal PKG-W* warning codes that MUST appear in the plan report and trace for this vector. Valid alongside either 'catalog' or 'error'. Absent or empty means no warnings are expected.",
           "items": {
             "type": "string",
             "pattern": "^PKG-W\\d{3}$"

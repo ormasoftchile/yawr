@@ -1,69 +1,30 @@
-# Squad Decisions
+# Yawr Decisions
 
-## Active Decisions
+## Current Decisions
 
-### 2026-09-11: Maintain Yawr-only identity and contracts
+### Repository layout
 
-**By:** Cristián Ormazábal Ortega
+The root owns the npm workspace and lockfile. `go.work` references `runtime`.
+Root scripts, editor tasks, and CI use monorepo-relative component paths.
 
-**What:** Preserve implemented functionality while maintaining Yawr-only
-identity and contracts. Do not retain compatibility aliases, historical
-records, provenance artifacts, generated state, or repository memory tied to
-any earlier product identity.
+### Runtime and extension contracts
 
-**Why:** The repository and its operational state must describe only the
-current Yawr product.
+The runtime accepts only current Yawr schemas. Tool references use `name` plus
+optional `package`, `version`, or `path`. Authoring capabilities require the
+explicit `--v3` argument in source and packaged helpers.
 
-### 2026-09-11: Centralize monorepo orchestration at the Yawr root
+### Packaging
 
-**By:** Lead
+VSIX archives use sorted entries and fixed ZIP metadata. Packaged helpers are
+built from the matching runtime source and verified against source behavior
+before packaging.
 
-**What:** The repository root owns the sole npm lockfile and the
-`apps/vscode` workspace, `go.work` references `./runtime`, and root scripts,
-editor tasks, and CI address components through their monorepo paths. CI
-builds each platform runtime helper explicitly for extension packaging.
+### Testing
 
-**Why:** One reproducible dependency graph and path-correct orchestration keep
-the monorepo coherent.
+Tests build executables in test-owned temporary directories. Validation must
+leave tracked files unchanged and the worktree clean.
 
-### 2026-09-11: Resolve extension build dependencies through the workspace
+### Team
 
-**By:** Lead
-
-**What:** `apps/vscode/scripts/build-highlighting.mjs` resolves package roots
-through Node module resolution rather than assuming a nested
-`apps/vscode/node_modules`.
-
-**Why:** npm workspaces may hoist dependencies to the repository root.
-
-### 2026-09-11: Normalize authoritative VSIX archives
-
-**By:** Lead
-
-**What:** Yawr packaging rewrites the VSIX with sorted entries and fixed ZIP
-metadata after `vsce package`.
-
-**Why:** Release artifacts must be byte-reproducible.
-
-### 2026-09-11: Claim mutable authoring workspaces by filesystem marker
-
-**By:** Quality
-
-**What:** Command authoring tests exclusively create a fixed ownership marker
-inside each actual ProjectRoot. Isolation checks use shared and distinct roots
-to prove ownership collision behavior.
-
-**Why:** Filesystem-local exclusive creation proves writable workspace
-identity without relying on names or scheduler order.
-
-## Governance
-
-- Record only current decisions the team has actually made.
-- Preserve implemented functionality and maintain Yawr-only identity and
-  contracts.
-- Do not preserve superseded compatibility, migration, provenance, or
-  historical records.
-- Keep contracts separate from implementations.
-- Fail closed, minimize blast radius, prove real production paths, and reject
-  vacuous tests.
-- Scribe owns durable decisions and concise agent context.
+The active roster is Lead, Runtime, Tooling, Tester, Scribe, Ralph, Rai, and
+Fact Checker. Squad state records only current Yawr project context.
