@@ -124,13 +124,6 @@ func encodeSessionRunProjection(
 		return session.JSONBlob{}, nil, errors.New("session coordinator: invalid run projection")
 	}
 	currentSnapshot := fmt.Sprintf("snapshots/checkpoint-%020d.json", state.CheckpointSequence)
-	if state.CheckpointSequence == 0 {
-		index := state.CurrentStepIndex
-		if index < 0 {
-			index = 0
-		}
-		currentSnapshot = fmt.Sprintf("snapshots/step-%04d.json", index)
-	}
 	referencedStateBlobs := make(map[string]bool)
 	snapshotFound := false
 	for _, file := range archive.Files {
@@ -651,9 +644,6 @@ func sessionProjectionSnapshot(
 		return "", "", errors.New("session coordinator: projection does not match execution mutation")
 	}
 	expectedPath := fmt.Sprintf("snapshots/checkpoint-%020d.json", checkpointSequence)
-	if checkpointSequence == 0 {
-		expectedPath = "snapshots/step-0000.json"
-	}
 	for _, file := range projection.Files {
 		if file.Path == expectedPath {
 			return file.Path, file.Digest, nil

@@ -2,7 +2,6 @@ package presentation
 
 const AuthoringTypedRequestVersion = "authoring-request/v3"
 
-// TypedResultsCapabilities is opt-in; historical strict envelopes stay unchanged.
 func TypedResultsCapabilities() any {
 	return struct {
 		SchemaVersion      string   `json:"schema_version"`
@@ -18,8 +17,8 @@ func TypedResultsCapabilities() any {
 		ResultsChunkBytes  int      `json:"results_chunk_bytes"`
 		ResultsMaxBytes    int      `json:"results_max_bytes"`
 	}{"presentation-capabilities/v3", "core-binding/v3",
-		[]string{"yawr.execution-plan/v1", "execution-plan/v2", "execution-plan/v3"},
-		[]string{"yawr.execution-plan/v1", "execution-plan/v2", "execution-plan/v3"},
+		[]string{"execution-plan/v3"},
+		[]string{"execution-plan/v3"},
 		[]string{"yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1"},
 		[]string{"1", "3"}, AuthoringTypedRequestVersion, ExpressionSchemaVersion,
 		"yawr.stdio/v1", 1 << 20, 64 << 10, 256 << 20}

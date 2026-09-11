@@ -23,7 +23,7 @@ func runPresentation(args []string) int {
 		return runExpressionPresentation(args[1:])
 	}
 	if len(args) == 1 && args[0] == "capabilities" {
-		fmt.Fprintln(os.Stdout, `{"schema_version":"yawr.presentation-capabilities/v1","resolver_version":"yawr.core-binding/v1","execution_plan_read":["yawr.execution-plan/v1","execution-plan/v2"],"execution_plan_write":["yawr.execution-plan/v1","execution-plan/v2"]}`)
+		fmt.Fprintln(os.Stdout, `{"schema_version":"yawr.presentation-capabilities/v1","resolver_version":"yawr.core-binding/v1","execution_plan_read":["execution-plan/v3"],"execution_plan_write":["execution-plan/v3"]}`)
 		return exitSuccess
 	}
 

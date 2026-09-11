@@ -22,7 +22,6 @@ yawr run service-health-branching.runbook.yaml
 
 - **Conditional branching**: Using `type: branch` with `condition:` expressions
 - **Nested branches**: Branches within branches for multi-level decision trees
-- **Template expressions**: Using `{{ contains .variable "text" }}` for conditions
+- **Boolean expressions**: Using `str.contains(variable, "text")` for conditions
 - **Multiple outcomes**: Different terminal states (resolved, escalated) based on path taken
 - **Required evidence**: Collecting evidence with `required_evidence:` on collector steps
-

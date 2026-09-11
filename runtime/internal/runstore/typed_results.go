@@ -245,7 +245,7 @@ func hasTypedReferences(snapshot runStateSnapshotV1) bool {
 		if resolution == nil {
 			continue
 		}
-		if len(resolution.Pin.ResolvedBindings) != 0 || bytes.Contains(resolution.Pin.ExecutableClosure, []byte("execution-flow-closure/v3")) {
+		if len(resolution.Pin.ResolvedBindings) != 0 {
 			return true
 		}
 		for _, output := range resolution.Pin.ResolvedOutputs {

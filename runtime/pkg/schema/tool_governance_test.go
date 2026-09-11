@@ -6,16 +6,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestRequiresApprovalTristate verifies the four tri-state cases for
-// ToolGovernance.RequiresApproval after YAML unmarshal.
+// TestRequiresApprovalValues verifies the current YAML representation.
 //
 // Cases:
 //
 //	(a) governance block absent                       → nil
 //	(b) governance present, other fields, no requires-approval → nil  ← the counterparty catch
-//	(c) explicit requires-approval: false             → &false
-//	(d) explicit requires-approval: true              → &true
-func TestRequiresApprovalTristate(t *testing.T) {
+//	(c) explicit requires-approval: true              → &true
+func TestRequiresApprovalValues(t *testing.T) {
 	t.Run("a_governance_absent", func(t *testing.T) {
 		input := `
 name: test-tool
@@ -59,32 +57,7 @@ actions: []
 		}
 	})
 
-	t.Run("c_explicit_false", func(t *testing.T) {
-		input := `
-name: test-tool
-transport:
-  mode: mcp
-  command: /usr/bin/test
-governance:
-  requires-approval: false
-actions: []
-`
-		var def ToolDef
-		if err := yaml.Unmarshal([]byte(input), &def); err != nil {
-			t.Fatalf("unmarshal: %v", err)
-		}
-		if def.Governance == nil {
-			t.Fatal("expected Governance != nil")
-		}
-		if def.Governance.RequiresApproval == nil {
-			t.Fatal("expected RequiresApproval != nil (explicit opt-out), got nil")
-		}
-		if *def.Governance.RequiresApproval != false {
-			t.Fatalf("expected *RequiresApproval == false, got %v", *def.Governance.RequiresApproval)
-		}
-	})
-
-	t.Run("d_explicit_true", func(t *testing.T) {
+	t.Run("c_explicit_true", func(t *testing.T) {
 		input := `
 name: test-tool
 transport:

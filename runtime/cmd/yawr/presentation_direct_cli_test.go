@@ -107,7 +107,7 @@ func TestPresentationDirectCLIPackageFrozenInspection(t *testing.T) {
 				t.Fatal(err)
 			}
 			var staticPlan plansnapshot.SnapshotV1
-			if err := json.Unmarshal(staticData, &staticPlan); err != nil || staticPlan.SchemaVersion != plansnapshot.SchemaVersionV2 ||
+			if err := json.Unmarshal(staticData, &staticPlan); err != nil || staticPlan.SchemaVersion != plansnapshot.SchemaVersionV3 ||
 				staticPlan.Tools[name] == nil || staticPlan.Tools[name].Actions[sqlAction] == nil {
 				t.Fatalf("static writer did not preserve legal names in v2: %v", err)
 			}
@@ -157,7 +157,7 @@ flow:
 			}
 			for _, resolution := range state.DynamicIncludes {
 				closure := resolution.Pin.ExecutableClosure
-				if !bytes.Contains(closure, []byte(plansnapshot.FlowClosureSchemaV2)) {
+				if !bytes.Contains(closure, []byte(plansnapshot.FlowClosureSchemaV3)) {
 					t.Fatalf("closure not v2: %s", closure)
 				}
 				tools, err := plansnapshot.RestoreFlowTools(closure)

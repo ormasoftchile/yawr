@@ -21,17 +21,6 @@ func stdioExecutionError(message string) map[string]any {
 }
 
 func (p *stdioProtocol) sendFinished(frame map[string]any, state engine.RunState) error {
-	// Preserve the historical frame for runbooks without this opt-in syntax.
-	typed := state.BindingScope != nil || state.Results != nil
-	if state.Plan != nil {
-		typed = typed || len(state.Plan.Bindings) != 0
-		for _, step := range state.Plan.Steps {
-			typed = typed || step.Kind == "results" || step.Kind == "assign"
-		}
-	}
-	if !typed {
-		return p.send(frame)
-	}
 	frame["version"] = stdioProtocolVersion
 	safe, err := p.sanitizeFrame(frame)
 	if err != nil {

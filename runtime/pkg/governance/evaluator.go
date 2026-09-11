@@ -15,15 +15,12 @@ type StepInfo struct {
 	// the two levels compose monotone-increasing: neither can suppress the other.
 	ToolRequiresApproval bool
 
-	// ToolApprovalTriState carries the raw *bool tri-state from the tool schema:
-	//   nil     = unspecified (approval routing determined by classification matrix)
-	//   &false  = explicit explicit opt-out (suppress gate; classification stays unspecified)
-	//   &true   = explicit approval requirement (gate always fires)
-	// Used by the ProfileEvaluator; the base evaluator already handles the bool OR.
+	// ToolApprovalTriState carries the optional explicit approval requirement.
+	// False is invalid and is rejected fail-closed.
 	ToolApprovalTriState *bool
 
 	// ToolClassification carries the tool action's declared classification:
-	// "read-only", "mutating", "destructive", or nil for unspecified.
+	// "read-only", "mutating", or "destructive".
 	// The ProfileEvaluator applies the counterparty-ratified matrix using this field.
 	ToolClassification *string
 }

@@ -15,8 +15,6 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 )
 
-const SchemaVersionV1 = "yawr.execution-plan/v1"
-const SchemaVersionV2 = "execution-plan/v2"
 const SchemaVersionV3 = "execution-plan/v3"
 
 var ErrUnpinnedInclude = errors.New("plan snapshot: unresolved include cannot be resumed safely")
@@ -52,18 +50,6 @@ func (snapshot *SnapshotV1) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*snapshot = SnapshotV1(decoded)
-	if snapshot.SchemaVersion != SchemaVersionV3 {
-		var raw map[string]any
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return err
-		}
-		if typedJSONMetadata(raw) {
-			return errors.New("plan snapshot: typed fields require execution-plan/v3")
-		}
-		if metadata, ok := raw["metadata"].(map[string]any); ok && typedJSONMetadata(metadata["dynamic_includes"]) {
-			return errors.New("plan snapshot: typed dynamic pin requires execution-plan/v3")
-		}
-	}
 	return nil
 }
 
@@ -185,7 +171,7 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 	}
 
 	draft := SnapshotV1{
-		SchemaVersion:    SchemaVersionV1,
+		SchemaVersion:    SchemaVersionV3,
 		RunID:            plan.RunID,
 		RunbookPath:      plan.RunbookPath,
 		Steps:            steps,
@@ -196,12 +182,6 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 		Inputs:           plan.Inputs,
 		Outputs:          plan.Outputs,
 		Bindings:         plan.Bindings,
-	}
-	if HasPresentation(plan.Tools) || hasDynamicPresentation(plan.Metadata.DynamicIncludes) {
-		draft.SchemaVersion = SchemaVersionV2
-	}
-	if hasTypedFeatures(draft.Bindings, draft.Outputs, draft.Steps) || hasTypedMetadata(draft.Tools) || hasTypedMetadata(draft.Metadata.DynamicIncludes) {
-		draft.SchemaVersion = SchemaVersionV3
 	}
 	canonical, err := cloneSnapshot(draft)
 	if err != nil {
@@ -216,14 +196,8 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 }
 
 func Restore(snapshot SnapshotV1) (*engine.ExecutionPlan, error) {
-	if snapshot.SchemaVersion != SchemaVersionV1 && snapshot.SchemaVersion != SchemaVersionV2 && snapshot.SchemaVersion != SchemaVersionV3 {
+	if snapshot.SchemaVersion != SchemaVersionV3 {
 		return nil, fmt.Errorf("plan snapshot: unsupported schema version %q", snapshot.SchemaVersion)
-	}
-	if snapshot.SchemaVersion == SchemaVersionV1 && (HasPresentation(snapshot.Tools) || hasDynamicPresentation(snapshot.Metadata.DynamicIncludes)) {
-		return nil, errors.New("plan snapshot: presentation requires execution-plan/v2")
-	}
-	if snapshot.SchemaVersion != SchemaVersionV3 && (hasTypedFeatures(snapshot.Bindings, snapshot.Outputs, snapshot.Steps) || hasTypedMetadata(snapshot.Tools) || hasTypedMetadata(snapshot.Metadata.DynamicIncludes)) {
-		return nil, errors.New("plan snapshot: typed features require execution-plan/v3")
 	}
 	if snapshot.SnapshotDigest == "" {
 		return nil, errors.New("plan snapshot: snapshot digest is required")

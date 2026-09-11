@@ -549,7 +549,7 @@ func TestValidateDurableHandoffArtifactsDoesNotCanonicalizeSpoofedPlanSnapshot(t
 	})
 	err := validator.ValidateDurableHandoffArtifacts(
 		context.Background(), plan, enginepkg.RunOptions{},
-		json.RawMessage(`{"schema_version":"yawr.execution-plan/v1","snapshot_digest":"opaque","governance":{"redact":"private-ticket-123"}}`),
+		json.RawMessage(`{"schema_version":"execution-plan/v3","snapshot_digest":"opaque","governance":{"redact":"private-ticket-123"}}`),
 	)
 	if err == nil || strings.Contains(err.Error(), "private-ticket-123") {
 		t.Fatalf("ValidateDurableHandoffArtifacts error = %v, want value-free payload refusal", err)
@@ -570,7 +570,7 @@ func TestValidateDurableHandoffArtifactsDoesNotTrustInvalidDynamicClosure(t *tes
 				FileDigest:    enginepkg.InteractionPayloadDigest([]byte("child-file")),
 				PackageDigest: enginepkg.InteractionPayloadDigest([]byte("child-package")),
 				ExecutableClosure: json.RawMessage(`{
-					"schema_version":"yawr.execution-flow-closure/v1",
+					"schema_version":"execution-flow-closure/v3",
 					"closure_digest":"forged",
 					"nodes":[{"step":{"common":{"id":"child","type":"include"},"spec_kind":"include","spec":{
 						"include":{"runbook":"nested.runbook.yaml"},

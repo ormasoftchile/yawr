@@ -45,9 +45,8 @@ type ToolMeta struct {
 type ToolGovernance struct {
 	RequiresCapabilities []string `yaml:"requires-capabilities,omitempty" json:"requires-capabilities,omitempty"`
 	AllowedEnvironments  []string `yaml:"allowed-environments,omitempty"  json:"allowed-environments,omitempty"`
-	// RequiresApproval is tri-state: nil = never expressed (unspecified),
-	// &false = explicit legacy approval opt-out, &true = approval required.
-	// Use pointer so YAML absence is distinguishable from explicit false.
+	// RequiresApproval may explicitly add an approval gate. False is rejected
+	// because current Yawr approval policy cannot opt out of classification.
 	RequiresApproval *bool `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
 	// AllowCommands is the tool-level command allowlist that composes with
 	// a substituted action's own governance per §Substitution Governance
@@ -202,12 +201,8 @@ type ToolAction struct {
 	Args        map[string]*ArgDef `yaml:"args,omitempty"        json:"args,omitempty"`
 	Returns     string             `yaml:"returns,omitempty"     json:"returns,omitempty"`
 
-	// Classification is per-action: "read-only", "mutating", "destructive",
-	// or "unspecified". nil means unspecified. Pointer + omitempty so nil
-	// (absent) is distinguishable from an explicit empty string.
-	// Classification is ORTHOGONAL to RequiresApproval: an explicit
-	// requires-approval: false never implies read-only, and a read-only
-	// classification does not suppress approval requirements.
+	// Classification is the required per-action approval policy:
+	// "read-only", "mutating", or "destructive".
 	Classification *string `yaml:"classification,omitempty" json:"classification,omitempty"`
 
 	// Idempotent declares that this action is safe to retry after a lost or

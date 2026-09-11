@@ -679,7 +679,7 @@ export class McpBridge {
       //   Attempt 1: invoke with the cached toolInvocationToken.
       //   No attempt 2: absence or rejection of the token is surfaced loudly.
       //
-      // The previous Petals-derived fallback retried Canceled failures without
+      // The previous fallback retried Canceled failures without
       // a token, which can trigger an interactive VS Code/MCP prompt. That is
       // unsafe for live ICM use and must remain opt-in-only in any future design.
       const cachedToken = this.lm.getToolInvocationToken();
@@ -841,5 +841,4 @@ function makeCancellationSource(): {
     },
   };
 }
-
 

@@ -142,7 +142,7 @@ func (e *impl) ValidateDurableHandoffArtifacts(
 
 func isExecutionPlanSnapshot(artifact []byte) bool {
 	var snapshot plansnapshot.SnapshotV1
-	if json.Unmarshal(artifact, &snapshot) != nil || (snapshot.SchemaVersion != plansnapshot.SchemaVersionV1 && snapshot.SchemaVersion != plansnapshot.SchemaVersionV2) {
+	if json.Unmarshal(artifact, &snapshot) != nil || snapshot.SchemaVersion != plansnapshot.SchemaVersionV3 {
 		return false
 	}
 	_, err := plansnapshot.Restore(snapshot)

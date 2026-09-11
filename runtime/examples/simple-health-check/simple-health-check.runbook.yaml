@@ -47,8 +47,8 @@ flow:
       title: Review health check results
       prompt: |
         Verify that both ping and HTTP checks passed.
-        Ping output: {{ .ping_output }}
-        HTTP response: {{ .http_status }}
+        Ping output: ${ping_output}
+        HTTP response: ${http_status}
       fields:
         - name: notes
           type: text

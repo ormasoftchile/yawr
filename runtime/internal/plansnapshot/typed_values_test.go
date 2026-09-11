@@ -40,7 +40,7 @@ func TestTypedBindingPlanAndClosurePresenceVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forged := bytes.Replace(data, []byte(plansnapshot.SchemaVersionV3), []byte(plansnapshot.SchemaVersionV2), 1)
+	forged := bytes.Replace(data, []byte(plansnapshot.SchemaVersionV3), []byte("execution-plan/v2"), 1)
 	if err := plansnapshot.Preflight(forged); err == nil {
 		t.Fatal("typed features admitted under old version")
 	}
@@ -62,7 +62,7 @@ func TestTypedBindingPlanAndClosurePresenceVersions(t *testing.T) {
 	if !nodes[0].Step.AssignSpec.Assign[0].ValuePresent {
 		t.Fatal("assignment null presence lost")
 	}
-	forged = bytes.Replace(closure, []byte(plansnapshot.FlowClosureSchemaV3), []byte(plansnapshot.FlowClosureSchemaV2), 1)
+	forged = bytes.Replace(closure, []byte(plansnapshot.FlowClosureSchemaV3), []byte("execution-flow-closure/v2"), 1)
 	if _, err := plansnapshot.RestoreFlowClosure(forged); err == nil {
 		t.Fatal("downgraded typed closure admitted")
 	}

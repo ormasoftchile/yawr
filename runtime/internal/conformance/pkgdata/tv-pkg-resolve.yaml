@@ -58,7 +58,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -111,7 +111,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -159,7 +159,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -210,7 +210,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -257,7 +257,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -308,7 +308,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -356,7 +356,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -406,7 +406,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -454,7 +454,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -505,7 +505,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -553,7 +553,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -606,7 +606,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -659,7 +659,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -709,7 +709,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -762,7 +762,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -810,7 +810,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -858,7 +858,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -906,7 +906,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -961,7 +961,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -975,7 +975,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1034,7 +1034,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1057,7 +1057,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1118,7 +1118,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1176,7 +1176,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1230,7 +1230,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1285,7 +1285,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1333,7 +1333,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1347,7 +1347,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1440,7 +1440,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1488,7 +1488,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1537,7 +1537,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1598,7 +1598,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1654,7 +1654,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1705,7 +1705,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1728,7 +1728,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1782,7 +1782,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1805,7 +1805,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1829,7 +1829,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1867,7 +1867,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1893,7 +1893,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1932,7 +1932,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -1991,7 +1991,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2005,7 +2005,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2058,7 +2058,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2115,7 +2115,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2138,7 +2138,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2218,7 +2218,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2270,7 +2270,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2326,7 +2326,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2391,7 +2391,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2450,7 +2450,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -2526,7 +2526,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -2571,7 +2571,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2614,7 +2614,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2679,7 +2679,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -2754,7 +2754,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2808,7 +2808,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2863,7 +2863,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -2978,7 +2978,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3061,7 +3061,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3143,7 +3143,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3222,7 +3222,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3306,7 +3306,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3386,7 +3386,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3466,7 +3466,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3546,7 +3546,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3632,7 +3632,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3673,7 +3673,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: chain
           execute:
@@ -3741,7 +3741,6 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
         allow-commands: ["kubectl", "bash"]
       actions:
         - name: drain-node
@@ -3828,7 +3827,6 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
         allow-commands: ["kubectl", "bash"]
       actions:
         - name: drain-node
@@ -3912,7 +3910,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -3998,7 +3996,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4056,7 +4054,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4071,8 +4069,8 @@ vectors:
   - determinism
 - id: TV-PKG-DIGEST-003
   category: PKG-DIGEST
-  description: 'Changing a single byte of the exported tool.yaml (governance requires-approval: false
-    -> true) changes the packageDigest to a different, still-recomputable value — the digest is...'
+  description: 'Changing the exported tool argv changes the packageDigest to a different,
+    still-recomputable value.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -4112,7 +4110,7 @@ vectors:
         requires-approval: true
       actions:
         - name: noop
-          argv: ["version"]
+          argv: ["version-current"]
           args: {}
   expected:
     catalog:
@@ -4163,7 +4161,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4230,8 +4228,8 @@ vectors:
     error:
       code: PKG-009
   note: 'resume_state.yaml''s recordedCatalogDigest is the DIGEST-004 ground-truth value computed against
-    the ORIGINAL (requires-approval: false) tool.yaml; the filesystem here instead has the DIGEST-003
-    modified variant, so recomputation at resume time necessarily disagrees with the recorded value.'
+    the baseline tool.yaml; the filesystem here instead has the DIGEST-003 modified variant,
+    so recomputation at resume time necessarily disagrees with the recorded value.'
 - id: TV-PKG-DIGEST-006
   category: PKG-DIGEST
   description: Resuming with a mismatched catalogDigest AND the explicit '--allow-package-drift' override
@@ -4377,7 +4375,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["version"]
@@ -4426,7 +4424,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4475,7 +4473,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4528,7 +4526,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4542,7 +4540,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4673,7 +4671,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: drain-node
           execute:
@@ -4750,7 +4748,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4810,7 +4808,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["version"]
@@ -4864,7 +4862,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: noop
           argv: ["version"]
@@ -4918,7 +4916,7 @@ vectors:
         mode: stdio
       governance:
         allowed-environments: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["version"]

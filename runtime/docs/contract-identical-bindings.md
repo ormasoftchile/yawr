@@ -426,14 +426,13 @@ source control and goes through code review.
 
 ## 7. Classification and Its Consequences
 
-### The four values
+### The three values
 
 | Value | Meaning | Source |
 |---|---|---|
 | `read-only` | Action has no side effects; safe to retry | Explicit declaration in tool definition |
 | `mutating` | Action changes state; cannot be retried automatically | Explicit declaration |
 | `destructive` | Action destroys or irrevocably changes state; gate always fires | Explicit declaration |
-| absent (nil) | `unspecified` — conservative treatment applies | No governance block or no `classification:` key |
 
 `classification` is a **per-action** field on `ToolAction`.  A single tool legitimately has
 `read-only` and `destructive` actions.  Governance does not bucket the whole tool.
@@ -442,11 +441,12 @@ source control and goes through code review.
 
 | `requires-approval` | `classification` | Gate behavior |
 |---|---|---|
-| `true` (explicit) | any | Gate fires — explicit legacy opt-in wins |
-| `false` (explicit) | `read-only` | No gate |
-| `false` / absent | `mutating` | Gate fires in attended contexts; denied in unattended |
-| `false` / absent | `destructive` | Gate **always** fires |
-| `false` / absent | nil (unspecified) | Denied in unattended; warn+proceed in attended (interactive operator present) |
+| `true` (explicit) | any | Gate fires |
+| absent | `read-only` | Allowed only when the profile scope permits reads |
+| absent | `mutating` | Gate fires in attended contexts; denied in unattended unless explicitly scoped |
+| absent | `destructive` | Gate fires in attended contexts; denied in unattended unless explicitly scoped |
+| `false` | any | Rejected as an unsupported approval opt-out |
+| any | absent/unknown | Rejected; approval classification must be explicit |
 
 ### Retry and late-result behavior by classification
 
@@ -455,29 +455,6 @@ source control and goes through code review.
 | `read-only` | Discard; log warning | Continue (or retry if `idempotent: true`) |
 | `mutating` | Record as INDETERMINATE | **Halt.** State is unknown. Operator must verify before resuming. |
 | `destructive` | Record as INDETERMINATE | **Halt.** State is unknown. Operator must verify before resuming. |
-| unspecified | Conservative: INDETERMINATE + halt | Same as mutating |
-
-### `requires-approval: false` is an approval-routing concept only
-
-`requires-approval: false` tells the approval gate to auto-approve this action.  It is an
-explicit legacy opt-out from approval prompting.
-
-**It never implies, coerces, or substitutes for `classification: read-only`.**  These two
-fields are completely orthogonal.  An action can be:
-
-- `requires-approval: false` + `classification: mutating` — approved automatically, but
-  still subject to INDETERMINATE halt semantics on timeout.
-- `requires-approval: true` + `classification: read-only` — prompts for approval, but safe
-  to retry.
-
-Reading `requires-approval: false` as "this action is safe" is incorrect.  The approval
-field governs the interactive prompt; the classification field governs retry, timeout, and
-late-result behavior.  **A consumer that omits `classification:` from an action and sets
-`requires-approval: false` has suppressed the approval prompt but has NOT declared the
-action read-only.  The action is `unspecified` and receives conservative (halt-on-timeout)
-treatment.**
-
-This distinction was formally negotiated with SQL Live-Site Operations and is non-negotiable.
 
 ---
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -118,7 +117,7 @@ func TestOversizedManifestProjectionStillPublishesFrameUpdate(t *testing.T) {
 	}
 }
 
-func TestLoadManifestPublishesRecoveredEventAfterJournalHeadConflict(t *testing.T) {
+func TestLoadManifestRejectsLatestJournalHeadConflict(t *testing.T) {
 	ctx := context.Background()
 	store := NewDirStore(t.TempDir())
 	t.Cleanup(func() { _ = store.Close() })
@@ -133,47 +132,13 @@ func TestLoadManifestPublishesRecoveredEventAfterJournalHeadConflict(t *testing.
 	if err != nil || len(initial) != 1 || headSequence != 1 {
 		t.Fatalf("prime frame cache = %d/%d, %v", len(initial), headSequence, err)
 	}
-	updates := store.SessionUpdates(sessionID)
 	conflictingHead := store.headPath(sessionID, 2)
 	if err := os.WriteFile(conflictingHead, []byte(`{"conflict":true}`), 0o600); err != nil {
 		t.Fatalf("write conflicting head: %v", err)
 	}
-	request := session.AttemptUpdateRequest{
-		SessionID: sessionID, CommandID: uuid.NewString(), WriterEpoch: lease.Epoch(),
-		ExpectedSequence: 1, Status: session.AttemptStatusWaiting,
-	}
-	manifest, err := store.LoadManifest(ctx, sessionID)
-	if err != nil {
-		t.Fatalf("LoadManifest before failed publication: %v", err)
-	}
-	request.RunID = manifest.Session.ActiveRunID
-	if _, err := store.UpdateAttempt(ctx, request); !errors.Is(err, session.ErrProjection) {
-		t.Fatalf("UpdateAttempt error = %v, want ErrProjection", err)
-	}
-	recovered, err := store.LoadManifest(ctx, sessionID)
-	if err != nil {
-		t.Fatalf("LoadManifest recovery: %v", err)
-	}
-	if recovered.Session.Sequence != 2 ||
-		recovered.Attempts[request.RunID].Status != session.AttemptStatusWaiting {
-		t.Fatalf("recovered manifest = %#v", recovered)
-	}
-	select {
-	case <-updates:
-	default:
-		t.Fatal("journal recovery did not publish a session update")
-	}
-	replayed, states, headSequence, err := store.ReadFrameEvents(ctx, sessionID, 1)
-	if err != nil || headSequence != 2 || len(replayed) != 1 || replayed[0].Sequence != 2 || len(states) != 1 {
-		t.Fatalf("recovered frame suffix = %#v states=%d head=%d, %v", replayed, len(states), headSequence, err)
-	}
-	if _, err := store.LoadManifest(ctx, sessionID); err != nil {
-		t.Fatalf("second LoadManifest: %v", err)
-	}
-	select {
-	case <-updates:
-		t.Fatal("journal recovery republished an already-cached event")
-	default:
+	if _, err := store.LoadManifest(ctx, sessionID); err == nil ||
+		!strings.Contains(err.Error(), "invalid latest journal head") {
+		t.Fatalf("LoadManifest error = %v", err)
 	}
 }
 
@@ -396,7 +361,7 @@ func TestReadFrameEventsColdReplayIsBoundedAndRebuildsAllReceipts(t *testing.T) 
 func createManifestProjectionTestSession(t *testing.T, store *DirStore) string {
 	t.Helper()
 	sessionID, segmentID, runID := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.execution-plan/v1"}`))
+	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"execution-plan/v3"}`))
 	graphBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.graph-json/v1","nodes":[],"edges":[]}`))
 	request := session.CreateRequest{
 		SessionID: sessionID, CommandID: uuid.NewString(),

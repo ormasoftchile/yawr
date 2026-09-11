@@ -130,5 +130,5 @@ export async function requireCompatibleExecution(binary: string, document: { sch
   });
   if (!metadata) return;
   try { await verifyPresentationHelper(binary); }
-  catch { throw new Error('This runbook declares code presentation and requires an execution-plan/v2 runtime. Set yawr.binaryPath to the matching upgraded runtime. Authoring uses the bundled helper independently.'); }
+  catch { throw new Error('This runbook requires the current execution-plan/v3 runtime. Set yawr.binaryPath to the matching Yawr runtime. Authoring uses the bundled helper independently.'); }
 }

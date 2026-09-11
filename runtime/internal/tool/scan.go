@@ -159,6 +159,9 @@ func ParseToolBytes(data []byte, path string, metadataOnly bool) (*schema.ToolDe
 	if err := validateActionClassifications(path, def.Actions); err != nil {
 		return nil, err
 	}
+	if def.Governance != nil && def.Governance.RequiresApproval != nil && !*def.Governance.RequiresApproval {
+		return nil, fmt.Errorf("%s: governance requires-approval must be true when specified", path)
+	}
 	if err := validateActionOutputContracts(path, def.Actions); err != nil {
 		return nil, err
 	}
@@ -415,12 +418,10 @@ var validClassifications = map[string]bool{
 	"read-only":   true,
 	"mutating":    true,
 	"destructive": true,
-	"unspecified": true,
 }
 
-// validateActionClassifications checks that every action's classification
-// field, when present, is one of the allowed values. An absent (nil)
-// classification is always valid — nil means unspecified.
+// validateActionClassifications rejects obsolete or unknown policy values.
+// Runtime evaluation fails closed if an action omits classification.
 func validateActionClassifications(path string, actions map[string]*schema.ToolAction) error {
 	for actionName, action := range actions {
 		if action == nil || action.Classification == nil {
@@ -428,7 +429,7 @@ func validateActionClassifications(path string, actions map[string]*schema.ToolA
 		}
 		v := *action.Classification
 		if !validClassifications[v] {
-			return fmt.Errorf("%s: action %q: classification %q is not valid (allowed: read-only, mutating, destructive, unspecified)", path, actionName, v)
+			return fmt.Errorf("%s: action %q: classification %q is not valid (allowed: read-only, mutating, destructive)", path, actionName, v)
 		}
 	}
 	return nil

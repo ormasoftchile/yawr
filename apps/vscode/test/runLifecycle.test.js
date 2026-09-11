@@ -1,4 +1,4 @@
-// petalsLifecycle.test.js — Cristiano's mandatory tests for the Petals lifecycle port.
+// runLifecycle.test.js — lifecycle regression tests.
 //
 // Tests:
 //   C1. Normal Run sends the EXACT form payload to invokeTool (deep equality,
@@ -260,7 +260,7 @@ test('C5: isCanceledError predicate exported from mcpBridge is the fail-closed d
   // It must never authorize an unauthenticated retry.
   assert.equal(typeof isCanceledError, 'function', 'isCanceledError must be exported from mcpBridge');
 
-  // True positives (Petals pattern).
+  // True positives.
   assert.equal(isCanceledError(new Error('Canceled')), true,
     'exact "Canceled" must match (VS Code style)');
   assert.equal(isCanceledError(new Error('Request was Canceled by the user')), true,

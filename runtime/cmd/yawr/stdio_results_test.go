@@ -185,22 +185,24 @@ func TestStdioResultsUnavailableAndTransportFailure(t *testing.T) {
 	}
 }
 
-func TestStdioResultsInvalidAndLegacy(t *testing.T) {
+func TestStdioResultsMissingAndInvalid(t *testing.T) {
 	var buffer bytes.Buffer
 	p := newStdioProtocol(strings.NewReader(""), &buffer)
-	frame := map[string]any{"type": "run.finished", "runID": "legacy", "status": "completed"}
-	if err := p.sendFinished(frame, engine.RunState{RunID: "legacy", Status: engine.RunStatusCompleted}); err != nil {
+	frame := map[string]any{"type": "run.finished", "runID": "current", "status": "completed"}
+	if err := p.sendFinished(frame, engine.RunState{RunID: "current", Status: engine.RunStatusCompleted}); err != nil {
 		t.Fatal(err)
 	}
 
-	if bytes.Contains(buffer.Bytes(), []byte("results")) {
-		t.Fatal("legacy payload changed")
+	if !bytes.Contains(buffer.Bytes(), []byte(`"results":null`)) ||
+		!bytes.Contains(buffer.Bytes(), []byte("no-publication")) {
+		t.Fatal("missing publication was not explicit")
 	}
 	buffer.Reset()
 	p = newStdioProtocol(strings.NewReader(""), &buffer)
+	frame = map[string]any{"type": "run.finished", "runID": "current", "status": "completed"}
 	record := stdioResultsRecord(t, false)
 	record.Digest = "tampered"
-	if err := p.sendFinished(frame, engine.RunState{RunID: "legacy", Status: engine.RunStatusCompleted, Results: record}); err != nil {
+	if err := p.sendFinished(frame, engine.RunState{RunID: "current", Status: engine.RunStatusCompleted, Results: record}); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Contains(buffer.Bytes(), []byte("invalid-publication")) {

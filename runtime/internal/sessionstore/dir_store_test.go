@@ -27,7 +27,7 @@ func TestDirStoreSingleSegmentSessionSurvivesRestart(t *testing.T) {
 	segmentID := uuid.NewString()
 	runID := uuid.NewString()
 	commandID := uuid.NewString()
-	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.execution-plan/v1"}`))
+	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"execution-plan/v3"}`))
 	graphBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.graph-json/v1","nodes":[],"edges":[]}`))
 
 	store := sessionstore.NewDirStore(base)
@@ -188,7 +188,7 @@ func TestDirStoreRejectsInvalidCreationBeforeDurableWrites(t *testing.T) {
 	}
 }
 
-func TestDirStoreRebuildsLegacyJournalWithoutClientCommandDigest(t *testing.T) {
+func TestDirStoreRebuildsCreationJournalWithoutClientCommandDigest(t *testing.T) {
 	base := t.TempDir()
 	sessionID := uuid.NewString()
 	store := sessionstore.NewDirStore(base)
@@ -206,7 +206,7 @@ func TestDirStoreRebuildsLegacyJournalWithoutClientCommandDigest(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	type legacyEvent struct {
+	type creationEvent struct {
 		SchemaVersion  string            `json:"schema_version"`
 		EventID        string            `json:"event_id"`
 		SessionID      string            `json:"session_id"`
@@ -225,22 +225,22 @@ func TestDirStoreRebuildsLegacyJournalWithoutClientCommandDigest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile events: %v", err)
 	}
-	var event legacyEvent
+	var event creationEvent
 	if err := json.Unmarshal(bytes.TrimSpace(encoded), &event); err != nil {
-		t.Fatalf("decode legacy event: %v", err)
+		t.Fatalf("decode creation event: %v", err)
 	}
 	event.Digest = ""
 	unsigned, err := json.Marshal(event)
 	if err != nil {
-		t.Fatalf("encode unsigned legacy event: %v", err)
+		t.Fatalf("encode unsigned creation event: %v", err)
 	}
 	event.Digest = session.DigestBytes(unsigned)
 	encoded, err = json.Marshal(event)
 	if err != nil {
-		t.Fatalf("encode legacy event: %v", err)
+		t.Fatalf("encode creation event: %v", err)
 	}
 	if err := os.WriteFile(eventsPath, append(encoded, '\n'), 0o600); err != nil {
-		t.Fatalf("write legacy journal: %v", err)
+		t.Fatalf("write creation journal: %v", err)
 	}
 	headPath := filepath.Join(base, sessionID, "heads", "head-00000000000000000001.json")
 	headData, err := os.ReadFile(headPath)
@@ -267,10 +267,10 @@ func TestDirStoreRebuildsLegacyJournalWithoutClientCommandDigest(t *testing.T) {
 	t.Cleanup(func() { _ = reopened.Close() })
 	manifest, err := reopened.LoadManifest(context.Background(), sessionID)
 	if err != nil {
-		t.Fatalf("LoadManifest legacy journal: %v", err)
+		t.Fatalf("LoadManifest creation journal: %v", err)
 	}
 	if manifest.Session.SessionID != sessionID || manifest.Session.Sequence != 1 {
-		t.Fatalf("rebuilt legacy manifest = %#v", manifest.Session)
+		t.Fatalf("rebuilt creation manifest = %#v", manifest.Session)
 	}
 }
 
@@ -914,7 +914,7 @@ func TestDirStorePreparesAndCommitsStaticHandoffAtomically(t *testing.T) {
 		t.Fatalf("commit handoff-pending source mutation: %v", err)
 	}
 	transitionID, targetSegmentID, targetRunID := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.execution-plan/v1","target":true}`))
+	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"execution-plan/v3","target":true}`))
 	graphBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.graph-json/v1","target":true,"nodes":[],"edges":[]}`))
 	contextBlob := session.NewJSONBlob(json.RawMessage(`{"inputs":{"server":"db01"},"facts":{"health":"degraded"}}`))
 	transition := session.TransitionRecord{
@@ -1144,7 +1144,7 @@ func TestDirStoreCommitsSegmentRevisionAtomically(t *testing.T) {
 	}
 	segmentID := created.Session.ActiveSegmentID
 	runID := created.Session.ActiveRunID
-	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.execution-plan/v1","revision":2}`))
+	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"execution-plan/v3","revision":2}`))
 	graphBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"1","revision":2}`))
 	planHash := strings.Repeat("b", 64)
 	closure, err := plansnapshot.EncodeFlowClosure([]schema.FlowNode{{Step: &schema.Step{
@@ -1470,7 +1470,7 @@ func TestDirStoreJournalSuffixSurvivesLatestHeadDeletion(t *testing.T) {
 	}
 }
 
-func TestDirStoreJournalSuffixSurvivesTornLatestHead(t *testing.T) {
+func TestDirStoreRejectsTornLatestHead(t *testing.T) {
 	base := t.TempDir()
 	sessionID := uuid.NewString()
 	store := sessionstore.NewDirStore(base)
@@ -1495,14 +1495,8 @@ func TestDirStoreJournalSuffixSurvivesTornLatestHead(t *testing.T) {
 		t.Fatalf("tear latest head: %v", err)
 	}
 	manifest, err := store.LoadManifest(context.Background(), sessionID)
-	if err != nil || manifest.Session.Sequence != 2 {
+	if err == nil || !strings.Contains(err.Error(), "invalid latest journal head") {
 		t.Fatalf("LoadManifest after torn head = %#v, %v", manifest, err)
-	}
-	if _, err := store.UpdateAttempt(context.Background(), session.AttemptUpdateRequest{
-		SessionID: sessionID, CommandID: uuid.NewString(), WriterEpoch: lease.Epoch(),
-		ExpectedSequence: 2, RunID: request.Attempt.RunID, Status: session.AttemptStatusRunning,
-	}); err != nil {
-		t.Fatalf("append after torn head: %v", err)
 	}
 }
 
@@ -1983,7 +1977,7 @@ func TestDirStoreTruncatesIncompleteJournalTailBeforeNextCommit(t *testing.T) {
 func createRequest(sessionID string) session.CreateRequest {
 	segmentID := uuid.NewString()
 	runID := uuid.NewString()
-	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.execution-plan/v1"}`))
+	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"execution-plan/v3"}`))
 	graphBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.graph-json/v1","nodes":[],"edges":[]}`))
 	return bindCreationIdentity(session.CreateRequest{
 		SessionID: sessionID, CommandID: uuid.NewString(),

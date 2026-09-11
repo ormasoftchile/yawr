@@ -13,13 +13,10 @@ import (
 //
 // Resolution contract (matches Slice 4 negotiated rules):
 //
-//   - nil profile → delegates directly to the base evaluator (nil-safe, no
-//     regression).
-//   - ToolApprovalTriState == &false → explicit opt-out: suppress gate
-//     regardless of profile. Classification stays unspecified; retry/late-result
-//     handling is NOT relaxed (the opt-out is approval-only).
+//   - nil profile → the base runbook governance evaluator remains authoritative.
+//   - ToolApprovalTriState == &false → denied as an unsupported opt-out.
 //   - ToolApprovalTriState == &true → explicit requirement: gate always fires.
-//   - ToolApprovalTriState == nil → apply classification matrix (see matrix below).
+//   - ToolApprovalTriState == nil → apply the required classification matrix.
 //
 // Classification matrix (applied only when ToolApprovalTriState is nil):
 //
@@ -27,14 +24,12 @@ import (
 //	read-only      | allow        | allow if scope.AllowRead; else deny
 //	mutating       | allow        | gate     | allow if scope.AllowMutating; else deny
 //	destructive    | allow        | gate     | allow if scope.AllowDestructive; else deny
-//	unspecified    | allow        | GATE     | deny
 type profileEvaluator struct {
 	base    governance.PolicyEvaluator
 	profile *schema.RuntimeProfile // may be nil
 }
 
 // NewProfileEvaluator wraps base with profile-aware routing.
-// When profile is nil the wrapper is transparent (zero overhead path).
 func NewProfileEvaluator(base governance.PolicyEvaluator, profile *schema.RuntimeProfile) governance.PolicyEvaluator {
 	return &profileEvaluator{base: base, profile: profile}
 }
@@ -45,7 +40,6 @@ func (pe *profileEvaluator) Evaluate(ctx context.Context, step governance.StepIn
 		return result, err
 	}
 
-	// nil profile: preserve today's behavior unchanged.
 	if pe.profile == nil {
 		return result, nil
 	}
@@ -57,17 +51,23 @@ func (pe *profileEvaluator) Evaluate(ctx context.Context, step governance.StepIn
 		return result, nil
 	}
 
-	// ── Explicit opt-out: ToolApprovalTriState == &false ─────────────────
-	// Suppress the approval gate for this specific tool action.
-	// Classification stays unspecified; retry/late-result NOT relaxed.
 	if step.ToolApprovalTriState != nil && !*step.ToolApprovalTriState {
+		result.Denied = true
+		result.Allowed = false
 		result.RequiresApproval = false
+		result.DenyReason = fmt.Sprintf("step %q: requires-approval false is unsupported", step.ID)
+		result.Evidence.Outcome = "denied"
+		result.Evidence.DenyReason = result.DenyReason
+		return result, nil
+	}
+	if step.ToolApprovalTriState != nil {
+		result.RequiresApproval = true
+		result.Evidence.Outcome = "approval_required"
 		return result, nil
 	}
 
 	// ── Apply the classification matrix ────────────────────────────────
-	// ToolApprovalTriState is nil (unspecified) here.
-	// ToolApprovalTriState == &true is handled by base evaluator already.
+	// ToolApprovalTriState is nil here.
 
 	isTest := pe.profile.Context == schema.ProfileContextTest
 	isAttended := pe.profile.Attendance == schema.ProfileAttendanceAttended
@@ -126,33 +126,12 @@ func (pe *profileEvaluator) Evaluate(ctx context.Context, step governance.StepIn
 		}
 
 	default:
-		// Unspecified classification AND any unrecognized classification value.
-		//
-		// Defense in depth: ParseToolFile (internal/tool/scan.go) already
-		// validates classification at parse time (validateActionClassifications),
-		// so tool files loaded through the normal path cannot carry an invalid
-		// value. This default branch is the gate's own layer of that guarantee:
-		// it does not assume every construction path ran ParseToolFile, and it
-		// ensures an unrecognized value is NEVER more permissive than unspecified.
-		// Governing principle: "absence — or garbage — must never grant
-		// additional execution rights."
-		//
-		// Routing: same as unspecified — gate fires when attended, deny when
-		// unattended, auto-approve only in test context.
-		if isTest {
-			// auto-approve for deterministic mock/native bindings in test context
-			result.RequiresApproval = false
-		} else if isAttended {
-			// GATE FIRES — warn-and-proceed is NOT acceptable.
-			// Human presence does not guarantee human attention.
-			result.RequiresApproval = true
-		} else {
-			// unattended
-			result.Denied = true
-			result.DenyReason = fmt.Sprintf("step %q: unclassified action denied in unattended context", step.ID)
-			result.Evidence.Outcome = "denied"
-			result.Evidence.DenyReason = result.DenyReason
-		}
+		result.Denied = true
+		result.Allowed = false
+		result.RequiresApproval = false
+		result.DenyReason = fmt.Sprintf("step %q: explicit action classification is required", step.ID)
+		result.Evidence.Outcome = "denied"
+		result.Evidence.DenyReason = result.DenyReason
 	}
 
 	if !result.Denied && result.RequiresApproval {

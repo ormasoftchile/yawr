@@ -569,26 +569,7 @@ func TestINDET_011_Resume_NonIndeterminate_NoAcknowledge_Required(t *testing.T) 
 
 // ── INDET-012: orthogonality — approval state never influences classification ─
 //
-// These vectors prove that flipping RequiresApproval between nil/false/true
-// does NOT change how timeout behavior is classified. A mutating action that
-// times out must always be INDETERMINATE regardless of approval state.
-
-func TestINDET_012_Orthogonality_ApprovalFalse_DoesNotRelaxMutating(t *testing.T) {
-	// requiresApproval: false — the legacy approval opt-out.
-	// Must NOT coerce classification to read-only or suppress INDETERMINATE.
-	plan := makeToolPlan("s1", "t", "update",
-		classificationPtr("mutating"), nil,
-		"https://example.com", boolPtr(false))
-
-	result, err := runSingleToolStep(t, plan, &timeoutExecErr{})
-
-	if result == nil || result.Status != engine.StepStatusIndeterminate {
-		t.Fatalf("mutating+RequiresApproval=false timeout: want INDETERMINATE, got %v (err=%v)", result, err)
-	}
-	if !errors.Is(err, engine.ErrIndeterminate) {
-		t.Fatal("mutating+RequiresApproval=false timeout: want ErrIndeterminate")
-	}
-}
+// Approval requirements do not change how timeout behavior is classified.
 
 func TestINDET_012_Orthogonality_ApprovalTrue_DoesNotRelaxMutating(t *testing.T) {
 	// requiresApproval: true — approval required.
@@ -648,54 +629,6 @@ func TestINDET_012_Orthogonality_ApprovalNil_ReadOnly_StillFailsNormally(t *test
 	}
 	if errors.Is(err, engine.ErrIndeterminate) {
 		t.Fatal("nil-approval + read-only timeout MUST NOT return ErrIndeterminate")
-	}
-}
-
-func TestINDET_012_Orthogonality_ApprovalFalse_ReadOnly_StillFailsNormally(t *testing.T) {
-	// requiresApproval: false + read-only → timeout must fail normally.
-	plan := makeToolPlan("s1", "t", "fetch",
-		classificationPtr("read-only"), nil,
-		"https://example.com", boolPtr(false))
-
-	result, err := runSingleToolStep(t, plan, &timeoutExecErr{})
-
-	if result != nil && result.Status == engine.StepStatusIndeterminate {
-		t.Fatal("false-approval + read-only timeout MUST NOT produce INDETERMINATE")
-	}
-	if errors.Is(err, engine.ErrIndeterminate) {
-		t.Fatal("false-approval + read-only timeout MUST NOT return ErrIndeterminate")
-	}
-}
-
-func TestINDET_012_Orthogonality_Classification_Independent_Of_ApprovalFlip(t *testing.T) {
-	// Flip RequiresApproval across nil/false/true for a mutating action.
-	// All three must produce INDETERMINATE. This proves the invariant is
-	// maintained across the entire approval state space.
-	approvals := []*bool{nil, boolPtr(false)}
-	// Note: boolPtr(true) is excluded because the engine's missing-approval-gate
-	// path fires before the executor is reached (not a classification interaction).
-
-	for _, ra := range approvals {
-		raLabel := "nil"
-		if ra != nil && *ra {
-			raLabel = "true"
-		} else if ra != nil {
-			raLabel = "false"
-		}
-
-		plan := makeToolPlan("s1", "t", "update",
-			classificationPtr("mutating"), nil,
-			"https://example.com", ra)
-
-		result, err := runSingleToolStep(t, plan, &timeoutExecErr{})
-
-		if result == nil || result.Status != engine.StepStatusIndeterminate {
-			t.Errorf("mutating+RequiresApproval=%s: want INDETERMINATE, got %v (err=%v)",
-				raLabel, result, err)
-		}
-		if !errors.Is(err, engine.ErrIndeterminate) {
-			t.Errorf("mutating+RequiresApproval=%s: want ErrIndeterminate, got %v", raLabel, err)
-		}
 	}
 }
 

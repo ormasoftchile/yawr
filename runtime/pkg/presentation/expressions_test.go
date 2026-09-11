@@ -73,9 +73,8 @@ func TestExpressionLexicalToleranceAndUTF16(t *testing.T) {
 		t.Fatal(value)
 	}
 	wrapped, _ := HighlightExpression(context.Background(), " {{ vars.x }} ", ExpressionGXL, true)
-	raw, _ := HighlightExpression(context.Background(), " {{ vars.x }} ", ExpressionGXL, false)
-	if len(wrapped.Tokens) != 5 || len(raw.Tokens) != 0 {
-		t.Fatal(wrapped, raw)
+	if len(wrapped.Tokens) != 0 {
+		t.Fatal(wrapped)
 	}
 }
 
@@ -109,7 +108,7 @@ flow:
         args: {nested: [{a/b~c: '${vars.value}'}], condition: '${vars.yes}'}
   - step:
       type: include
-      when: '{{ vars.ready }}'
+      when: vars.ready
       include:
         when: vars.ready
         runbook_ref: '${vars.book}'

@@ -1,6 +1,6 @@
 # Checkpoint value budget
 
-The current `run-state/v2` checkpoint has a **4096-entry inclusive limit**:
+The current `run-state/v3` checkpoint has a **4096-entry inclusive limit**:
 4096 is accepted; 4097 is rejected. Both save and load use this accounting:
 
 ```text
@@ -29,7 +29,7 @@ payloads retained in the checkpoint's pending outbox.
 
 Save and load apply identical accounting to pending payload entries and expanded
 bytes. Save rejects over-budget states **before writing blobs or publishing the
-checkpoint**, leaving the previous checkpoint available. `run-state/v2`
+checkpoint**, leaving the previous checkpoint available. `run-state/v3`
 checkpoints must satisfy the cap and blob-integrity checks when written and read.
 
 Step identity/status/timing, invocation maps, cursor metadata, and interaction

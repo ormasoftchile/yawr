@@ -17,9 +17,6 @@ func evalBoolNative(condition string, vars map[string]any) (bool, error) {
 	if cond == "" {
 		return true, nil
 	}
-	if strings.HasPrefix(cond, "{{") && strings.HasSuffix(cond, "}}") {
-		cond = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(cond, "{{"), "}}"))
-	}
 	scope, err := nativeScope(vars)
 	if err != nil {
 		return false, err

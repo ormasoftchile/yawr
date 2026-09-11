@@ -227,9 +227,9 @@ test('raw native numeric Unicode escaped content and exact 1MiB terminal retain 
   assert.ok(Object.is(available.publication.outputs.result.value.zero, -0));
 });
 
-test('legacy undecorated duplicate output and terminal policy is unchanged', () => {
+test('terminal without the current results contract is unavailable', () => {
   const got = rawSession([`{"version":"${version}","type":"run.finished","runID":"${runID}","status":"failed","status":"completed","output":{"key":0,"key":1}}`]);
   assert.deepEqual(got.errors, []);
   assert.equal(got.frames.at(-1).status, 'completed');
-  assert.deepEqual(got.frames.at(-1).output, { key: 1 });
+  assert.deepEqual(got.frames.at(-1).resultsAvailability, { state: 'unavailable', reason: 'no-results-publication' });
 });

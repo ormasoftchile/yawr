@@ -1529,7 +1529,7 @@ func validateExecutionFrameProjection(
 ) error {
 	if mutation.FrameProjectionHash == "" {
 		if blob.Digest != "" || len(blob.Data) != 0 {
-			return errors.New("sessionstore: legacy execution mutation has an unexpected frame projection")
+			return errors.New("sessionstore: projection-free execution mutation has an unexpected frame projection")
 		}
 		return nil
 	}
@@ -2546,23 +2546,21 @@ func (store *DirStore) loadJournalHead(sessionID string) (journalHead, error) {
 		candidates = append(candidates, entry.Name())
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(candidates)))
-	for _, candidate := range candidates {
-		data, readErr := readFileBounded(filepath.Join(store.headsDir(sessionID), candidate), 4096)
-		if errors.Is(readErr, os.ErrNotExist) {
-			continue
-		}
-		if readErr != nil {
-			return journalHead{}, readErr
-		}
-		var head journalHead
-		if decodeStrictJSON(data, &head) != nil || head.SchemaVersion != journalHeadSchemaV1 ||
-			head.SessionID != sessionID || head.Sequence < 1 || !validDigest(head.EventDigest) ||
-			head.WriterEpoch == 0 || candidate != fmt.Sprintf("head-%020d.json", head.Sequence) {
-			continue
-		}
-		return head, nil
+	if len(candidates) == 0 {
+		return journalHead{}, os.ErrNotExist
 	}
-	return journalHead{}, os.ErrNotExist
+	candidate := candidates[0]
+	data, err := readFileBounded(filepath.Join(store.headsDir(sessionID), candidate), 4096)
+	if err != nil {
+		return journalHead{}, err
+	}
+	var head journalHead
+	if decodeStrictJSON(data, &head) != nil || head.SchemaVersion != journalHeadSchemaV1 ||
+		head.SessionID != sessionID || head.Sequence < 1 || !validDigest(head.EventDigest) ||
+		head.WriterEpoch == 0 || candidate != fmt.Sprintf("head-%020d.json", head.Sequence) {
+		return journalHead{}, errors.New("sessionstore: invalid latest journal head")
+	}
+	return head, nil
 }
 
 func (store *DirStore) loadEvents(ctx context.Context, sessionID string) ([]session.Event, error) {
@@ -2686,12 +2684,12 @@ func (store *DirStore) scanJournalWithObserver(
 		return nil, 0, err
 	}
 	head, headErr := store.loadJournalHead(sessionID)
-	if headErr != nil && !errors.Is(headErr, os.ErrNotExist) {
+	if headErr != nil {
 		return nil, 0, headErr
 	}
 	file, err := os.Open(store.eventsPath(sessionID))
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) && headErr == nil {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, 0, errors.New("sessionstore: committed journal head has no journal")
 		}
 		return nil, 0, err
@@ -2731,14 +2729,12 @@ func (store *DirStore) scanJournalWithObserver(
 			return nil, committedOffset, errors.New("sessionstore: journal event limit exceeded")
 		}
 	}
-	if headErr == nil {
-		if head.Sequence > int64(len(events)) {
-			return nil, committedOffset, errors.New("sessionstore: journal is shorter than its committed head")
-		}
-		anchored := events[head.Sequence-1]
-		if anchored.Digest != head.EventDigest || anchored.WriterEpoch != head.WriterEpoch {
-			return nil, committedOffset, errors.New("sessionstore: journal does not match its committed head")
-		}
+	if head.Sequence > int64(len(events)) {
+		return nil, committedOffset, errors.New("sessionstore: journal is shorter than its committed head")
+	}
+	anchored := events[head.Sequence-1]
+	if anchored.Digest != head.EventDigest || anchored.WriterEpoch != head.WriterEpoch {
+		return nil, committedOffset, errors.New("sessionstore: journal does not match its committed head")
 	}
 	if len(events) > 0 {
 		rebuilt, err := rebuildManifestWithObserver(events, observer)
@@ -2823,7 +2819,7 @@ func (store *DirStore) validateReferencedEventBlobs(
 					}
 				}
 			} else if len(payload.Occurrences) > 0 {
-				return errors.New("sessionstore: legacy execution event has occurrence records")
+				return errors.New("sessionstore: projection-free execution event has occurrence records")
 			}
 		case session.EventTraceCommitted:
 			var payload traceCommittedPayload

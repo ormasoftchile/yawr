@@ -87,7 +87,7 @@ func TestDirRunStore_SaveLoadStateOmitsPlanAndPreservesLargeInteger(t *testing.T
 	if err := s.SaveState(context.Background(), state); err != nil {
 		t.Fatalf("SaveState: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(s.RunDir(state.RunID), "snapshots", "step-0000.json"))
+	data, err := os.ReadFile(filepath.Join(s.RunDir(state.RunID), "snapshots", "checkpoint-00000000000000000000.json"))
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
@@ -804,7 +804,7 @@ func TestDirRunStore_RejectsMalformedInteractionState(t *testing.T) {
 	}
 }
 
-// TestDirRunStore_LoadState_Latest verifies that LoadState selects the highest-index legacy snapshot.
+// TestDirRunStore_LoadState_Latest verifies that the current checkpoint is replaced atomically.
 func TestDirRunStore_LoadState_Latest(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
@@ -1692,7 +1692,7 @@ func TestWriteFileAtomic_PartialWrite(t *testing.T) {
 	}
 
 	// Verify the final file exists and is valid JSON.
-	finalPath := filepath.Join(snapshotDir, "step-0000.json")
+	finalPath := filepath.Join(snapshotDir, "checkpoint-00000000000000000000.json")
 	data, err := os.ReadFile(finalPath)
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)

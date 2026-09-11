@@ -128,25 +128,8 @@ func Preflight(data []byte) error {
 		return errors.New("plan snapshot: invalid envelope")
 	}
 	version, ok := object["schema_version"].(string)
-	if !ok || (version != SchemaVersionV1 && version != SchemaVersionV2 && version != SchemaVersionV3) {
+	if !ok || version != SchemaVersionV3 {
 		return errors.New("plan snapshot: unsupported schema version")
-	}
-	if version != SchemaVersionV3 && typedJSONMetadata(object) {
-		return errors.New("plan snapshot: typed features require execution-plan/v3")
-	}
-	if version == SchemaVersionV1 {
-		for _, tools := range schemaFields(object, "tools") {
-			if toolsHavePresentation(tools) {
-				return errors.New("plan snapshot: presentation requires execution-plan/v2")
-			}
-		}
-		for _, metadata := range schemaFields(object, "metadata") {
-			for _, pins := range schemaFields(metadata, "DynamicIncludes") {
-				if dynamicIncludesHavePresentation(pins) {
-					return errors.New("plan snapshot: presentation requires execution-plan/v2")
-				}
-			}
-		}
 	}
 	return nil
 }

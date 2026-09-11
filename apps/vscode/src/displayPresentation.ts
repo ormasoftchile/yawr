@@ -1,5 +1,5 @@
 // Release-only containment. Paused decoration cannot authorize content or rendering.
-// Legacy undecorated output and independent code-presentation protections remain unchanged.
+// Undecorated output and independent code-presentation protections remain unchanged.
 export const DISPLAY_MAX_UTF16 = 32768;
 export interface DisplayPresentationV1 {
   version: 1;

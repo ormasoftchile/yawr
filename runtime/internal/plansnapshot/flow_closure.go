@@ -11,8 +11,6 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 )
 
-const FlowClosureSchemaV1 = "yawr.execution-flow-closure/v1"
-const FlowClosureSchemaV2 = "execution-flow-closure/v2"
 const FlowClosureSchemaV3 = "execution-flow-closure/v3"
 
 type flowClosureV1 struct {
@@ -27,26 +25,9 @@ func EncodeFlowClosure(nodes []schema.FlowNode, tools ...map[string]*schema.Tool
 	if err != nil {
 		return nil, fmt.Errorf("plan snapshot: encode flow closure: %w", err)
 	}
-	closure := flowClosureV1{SchemaVersion: FlowClosureSchemaV1, Nodes: snapshot}
-	if len(tools) > 0 && (HasPresentation(tools[0]) || hasTypedMetadata(tools[0])) {
-		closure.SchemaVersion = FlowClosureSchemaV2
+	closure := flowClosureV1{SchemaVersion: FlowClosureSchemaV3, Nodes: snapshot}
+	if len(tools) > 0 {
 		closure.Tools = tools[0]
-		if hasTypedMetadata(tools[0]) {
-			closure.SchemaVersion = FlowClosureSchemaV3
-		}
-	}
-	for _, node := range snapshot {
-		encoded, err := json.Marshal(node)
-		if err != nil {
-			return nil, err
-		}
-		var value any
-		if err := json.Unmarshal(encoded, &value); err != nil {
-			return nil, err
-		}
-		if typedJSONMetadata(value) {
-			closure.SchemaVersion = FlowClosureSchemaV3
-		}
 	}
 	digest, err := flowClosureDigest(closure)
 	if err != nil {
@@ -68,16 +49,8 @@ func RestoreFlowClosure(encoded json.RawMessage) ([]schema.FlowNode, error) {
 	if err := decodeStrictJSON(encoded, &closure); err != nil {
 		return nil, fmt.Errorf("plan snapshot: decode flow closure: %w", err)
 	}
-	if (closure.SchemaVersion != FlowClosureSchemaV1 && closure.SchemaVersion != FlowClosureSchemaV2 && closure.SchemaVersion != FlowClosureSchemaV3) || closure.ClosureDigest == "" ||
-		(closure.SchemaVersion == FlowClosureSchemaV1 && len(closure.Tools) != 0) {
+	if closure.SchemaVersion != FlowClosureSchemaV3 || closure.ClosureDigest == "" {
 		return nil, errors.New("plan snapshot: invalid flow closure header")
-	}
-	var value any
-	if err := json.Unmarshal(encoded, &value); err != nil {
-		return nil, err
-	}
-	if closure.SchemaVersion != FlowClosureSchemaV3 && typedJSONMetadata(value) {
-		return nil, errors.New("plan snapshot: typed features require execution-flow-closure/v3")
 	}
 	digest, err := flowClosureDigest(closure)
 	if err != nil {

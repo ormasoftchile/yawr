@@ -28,7 +28,6 @@ import (
 )
 
 const (
-	runStateSchemaVersion      = "run-state/v2"
 	maxPlanSnapshotBytes       = 64 << 20
 	maxRunStateBytes           = 16 << 20
 	maxStateBlobBytes          = 256 << 20
@@ -55,15 +54,12 @@ type runStateSnapshotV1 struct {
 	WriterEpoch                 uint64                                           `json:"WriterEpoch,omitempty"`
 	CheckpointSequence          int64                                            `json:"CheckpointSequence,omitempty"`
 	CommittedTraceSequence      int64                                            `json:"CommittedTraceSequence,omitempty"`
-	PendingTraceEvents          []engine.Event                                   `json:"PendingTraceEvents,omitempty"`
 	DurablePendingTraceEvents   []pendingTraceEventSnapshotV1                    `json:"DurablePendingTraceEvents,omitempty"`
 	PlanSnapshotDigest          string                                           `json:"PlanSnapshotDigest,omitempty"`
 	CursorSet                   *engine.ExecutionCursorSet                       `json:"CursorSet,omitempty"`
 	Status                      engine.RunStatus                                 `json:"Status"`
 	CurrentStep                 string                                           `json:"CurrentStep"`
 	CurrentStepIndex            int                                              `json:"CurrentStepIndex"`
-	Vars                        map[string]any                                   `json:"Vars"`
-	StepResults                 map[string]*stepResultSnapshotV1                 `json:"StepResults,omitempty"`
 	DurableVars                 map[string]storedJSONValueV1                     `json:"DurableVars,omitempty"`
 	DurableStepResults          map[string]*stepResultSnapshotV2                 `json:"DurableStepResults,omitempty"`
 	Interactions                map[string]*engine.InteractionState              `json:"Interactions,omitempty"`
@@ -76,21 +72,6 @@ type runStateSnapshotV1 struct {
 	StartedAt                   time.Time                                        `json:"StartedAt"`
 	UpdatedAt                   time.Time                                        `json:"UpdatedAt"`
 	CompletedAt                 time.Time                                        `json:"CompletedAt"`
-	LegacyPlan                  json.RawMessage                                  `json:"Plan,omitempty"`
-}
-
-type stepResultSnapshotV1 struct {
-	StepID        string                      `json:"StepID"`
-	Status        engine.StepStatus           `json:"Status"`
-	Outcome       engine.StepOutcome          `json:"Outcome"`
-	Output        map[string]any              `json:"Output,omitempty"`
-	Vars          map[string]any              `json:"Vars,omitempty"`
-	StartedAt     time.Time                   `json:"StartedAt"`
-	CompletedAt   time.Time                   `json:"CompletedAt"`
-	DurationMs    int64                       `json:"DurationMs"`
-	Error         string                      `json:"Error,omitempty"`
-	Evidence      []evidence.EvidenceRecord   `json:"Evidence,omitempty"`
-	Indeterminate *engine.IndeterminateRecord `json:"Indeterminate,omitempty"`
 }
 
 type stepResultSnapshotV2 struct {
@@ -397,11 +378,7 @@ func (s *DirRunStore) SaveState(ctx context.Context, state engine.RunState) erro
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	index := state.CurrentStepIndex
-	if index < 0 {
-		index = 0
-	}
-	filename := fmt.Sprintf("step-%04d.json", index)
+	filename := fmt.Sprintf("checkpoint-%020d.json", state.CheckpointSequence)
 	finalPath := filepath.Join(dir, filename)
 
 	durableVars, err := s.storeValueMap(state.RunID, state.Vars)
@@ -422,7 +399,7 @@ func (s *DirRunStore) SaveState(ctx context.Context, state engine.RunState) erro
 	}
 	snapshot := runStateSnapshotV1{
 		ResultsID:     publicationID(state.Results),
-		SchemaVersion: runStateSchemaVersion, RunID: state.RunID, RunbookPath: state.RunbookPath,
+		SchemaVersion: runStateSchemaV3, RunID: state.RunID, RunbookPath: state.RunbookPath,
 		Mode:               state.Mode,
 		WriterEpoch:        state.WriterEpoch,
 		CheckpointSequence: state.CheckpointSequence, CommittedTraceSequence: state.CommittedTraceSequence,
@@ -439,20 +416,11 @@ func (s *DirRunStore) SaveState(ctx context.Context, state engine.RunState) erro
 		StartedAt:                   state.StartedAt, UpdatedAt: state.UpdatedAt, CompletedAt: state.CompletedAt,
 	}
 	if len(typedValues) != 0 {
-		snapshot.SchemaVersion = runStateSchemaV3
 		snapshot.TypedState, err = s.storeValueMap(state.RunID, typedValues)
 		if err != nil {
 			return err
 		}
 	}
-	if hasTypedReferences(snapshot) {
-		snapshot.SchemaVersion = runStateSchemaV3
-	}
-	s.mu.Lock()
-	if s.planVersions[state.RunID] == plansnapshot.SchemaVersionV3 {
-		snapshot.SchemaVersion = runStateSchemaV3
-	}
-	s.mu.Unlock()
 	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return err
@@ -461,8 +429,6 @@ func (s *DirRunStore) SaveState(ctx context.Context, state engine.RunState) erro
 		return fmt.Errorf("runstore: state snapshot exceeds %d bytes", maxRunStateBytes)
 	}
 	if state.CheckpointSequence > 0 {
-		filename = fmt.Sprintf("checkpoint-%020d.json", state.CheckpointSequence)
-		finalPath = filepath.Join(dir, filename)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return saveSequencedCheckpoint(dir, finalPath, state.RunID, state.CheckpointSequence, data)
@@ -590,8 +556,6 @@ func (s *DirRunStore) LoadState(ctx context.Context, runID string) (engine.RunSt
 	}
 	var latestCheckpoint string
 	var latestCheckpointSequence int64
-	var latestLegacy string
-	var latestLegacyIndex int
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -602,24 +566,14 @@ func (s *DirRunStore) LoadState(ctx context.Context, runID string) (engine.RunSt
 		}
 		if strings.HasPrefix(name, "checkpoint-") {
 			sequence, parseErr := parseCheckpointSequence(name)
-			if parseErr == nil && (latestCheckpoint == "" || sequence > latestCheckpointSequence) {
+			if parseErr == nil && sequence >= 0 && (latestCheckpoint == "" || sequence > latestCheckpointSequence) {
 				latestCheckpoint = name
 				latestCheckpointSequence = sequence
 			}
 			continue
 		}
-		if strings.HasPrefix(name, "step-") {
-			index, parseErr := parseSnapshotIndex(name)
-			if parseErr == nil && (latestLegacy == "" || index > latestLegacyIndex) {
-				latestLegacy = name
-				latestLegacyIndex = index
-			}
-		}
 	}
 	latest := latestCheckpoint
-	if latest == "" {
-		latest = latestLegacy
-	}
 	if latest == "" {
 		return engine.RunState{}, os.ErrNotExist
 	}
@@ -640,28 +594,8 @@ func (s *DirRunStore) LoadState(ctx context.Context, runID string) (engine.RunSt
 	if err := validateCursorStepIndexPresence(data, snapshot.CursorSet); err != nil {
 		return engine.RunState{}, err
 	}
-	if snapshot.SchemaVersion != "" && snapshot.SchemaVersion != "yawr.run-state/v1" && snapshot.SchemaVersion != runStateSchemaVersion && snapshot.SchemaVersion != runStateSchemaV3 {
-		return engine.RunState{}, fmt.Errorf("runstore: unsupported state schema version %q", snapshot.SchemaVersion)
-	}
 	if snapshot.SchemaVersion != runStateSchemaV3 {
-		if err := validateOldTypedEnvelope(data); err != nil {
-			return engine.RunState{}, err
-		}
-		if snapshot.PlanSnapshotDigest != "" {
-			if planData, err := readFileBounded(s.PlanPath(runID), maxPlanSnapshotBytes); err == nil {
-				var header struct {
-					SchemaVersion string `json:"schema_version"`
-				}
-				if err := json.Unmarshal(planData, &header); err != nil {
-					return engine.RunState{}, err
-				}
-				if header.SchemaVersion == plansnapshot.SchemaVersionV3 {
-					return engine.RunState{}, errors.New("runstore: feature-bearing plan requires run-state/v3")
-				}
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return engine.RunState{}, err
-			}
-		}
+		return engine.RunState{}, fmt.Errorf("runstore: unsupported state schema version %q", snapshot.SchemaVersion)
 	}
 	if snapshot.RunID != runID {
 		return engine.RunState{}, fmt.Errorf("runstore: persisted state run id %q does not match %q", snapshot.RunID, runID)
@@ -684,52 +618,44 @@ func (s *DirRunStore) LoadState(ctx context.Context, runID string) (engine.RunSt
 	if err := validatePendingHandoff(snapshot.Status, snapshot.PendingHandoff); err != nil {
 		return engine.RunState{}, err
 	}
-	if err := validatePendingTraceEvents(snapshot.RunID, snapshot.CommittedTraceSequence, snapshot.PendingTraceEvents); err != nil {
+	var vars map[string]any
+	var stepResults map[string]*engine.StepResult
+	var executionFrames map[string]*engine.ExecutionFrameState
+	var pendingTraceEvents []engine.Event
+	var typedValues map[string]any
+	loader := newStateValueLoader(s, runID)
+	if err := loader.preflight(
+		snapshot.DurableVars, snapshot.DurableStepResults, snapshot.DurableExecutionFrames,
+		snapshot.DurablePendingTraceEvents,
+		snapshot.TypedState,
+	); err != nil {
 		return engine.RunState{}, err
 	}
-	vars := snapshot.Vars
-	stepResults := restoreStepResults(snapshot.StepResults)
-	var executionFrames map[string]*engine.ExecutionFrameState
-	pendingTraceEvents := snapshot.PendingTraceEvents
-	var typedValues map[string]any
-	if snapshot.SchemaVersion != runStateSchemaV3 && hasTypedReferences(snapshot) {
-		return engine.RunState{}, fmt.Errorf("runstore: typed state requires run-state/v3")
+	vars, err = loader.restoreValueMap(snapshot.DurableVars)
+	if err != nil {
+		return engine.RunState{}, err
 	}
-	if snapshot.SchemaVersion == runStateSchemaVersion || snapshot.SchemaVersion == runStateSchemaV3 {
-		loader := newStateValueLoader(s, runID)
-		if err := loader.preflight(
-			snapshot.DurableVars, snapshot.DurableStepResults, snapshot.DurableExecutionFrames,
-			snapshot.DurablePendingTraceEvents,
-			snapshot.TypedState,
-		); err != nil {
-			return engine.RunState{}, err
-		}
-		vars, err = loader.restoreValueMap(snapshot.DurableVars)
-		if err != nil {
-			return engine.RunState{}, err
-		}
-		executionFrames, err = loader.restoreExecutionFrames(snapshot.DurableExecutionFrames)
-		if err != nil {
-			return engine.RunState{}, err
-		}
-		if err := validateExecutionFrameStates(snapshot.WriterEpoch, executionFrames); err != nil {
-			return engine.RunState{}, err
-		}
-		stepResults, err = loader.restoreStepResults(snapshot.DurableStepResults)
-		if err != nil {
-			return engine.RunState{}, err
-		}
-		pendingTraceEvents, err = loader.restorePendingTraceEvents(snapshot.DurablePendingTraceEvents)
-		if err != nil {
-			return engine.RunState{}, err
-		}
-		if err := validatePendingTraceEvents(snapshot.RunID, snapshot.CommittedTraceSequence, pendingTraceEvents); err != nil {
-			return engine.RunState{}, err
-		}
-		typedValues, err = loader.restoreValueMap(snapshot.TypedState)
-		if err != nil {
-			return engine.RunState{}, err
-		}
+	executionFrames, err = loader.restoreExecutionFrames(snapshot.DurableExecutionFrames)
+	if err != nil {
+		return engine.RunState{}, err
+	}
+	if err := validateExecutionFrameStates(snapshot.WriterEpoch, executionFrames); err != nil {
+		return engine.RunState{}, err
+	}
+	stepResults, err = loader.restoreStepResults(snapshot.DurableStepResults)
+	if err != nil {
+		return engine.RunState{}, err
+	}
+	pendingTraceEvents, err = loader.restorePendingTraceEvents(snapshot.DurablePendingTraceEvents)
+	if err != nil {
+		return engine.RunState{}, err
+	}
+	if err := validatePendingTraceEvents(snapshot.RunID, snapshot.CommittedTraceSequence, pendingTraceEvents); err != nil {
+		return engine.RunState{}, err
+	}
+	typedValues, err = loader.restoreValueMap(snapshot.TypedState)
+	if err != nil {
+		return engine.RunState{}, err
 	}
 	if err := validateExecutionStateRelationships(
 		snapshot.WriterEpoch, snapshot.CursorSet, stepResults, snapshot.Interactions, snapshot.Dispatches, executionFrames, snapshot.DynamicIncludes,
@@ -754,10 +680,10 @@ func (s *DirRunStore) LoadState(ctx context.Context, runID string) (engine.RunSt
 		StartedAt:                   snapshot.StartedAt, UpdatedAt: snapshot.UpdatedAt,
 		CompletedAt: snapshot.CompletedAt,
 	}
-	if snapshot.SchemaVersion == runStateSchemaV3 {
-		if err := restoreTypedState(&state, typedValues, snapshot.ResultsID, snapshot.DurableExecutionFrames, snapshot.DurableStepResults); err != nil {
-			return engine.RunState{}, err
-		}
+	if err := restoreTypedState(&state, typedValues, snapshot.ResultsID, snapshot.DurableExecutionFrames, snapshot.DurableStepResults); err != nil {
+		return engine.RunState{}, err
+	}
+	if len(typedValues) != 0 || snapshot.ResultsID != "" || hasTypedReferences(snapshot) {
 		plan, err := s.LoadPlan(ctx, runID)
 		if err != nil {
 			return engine.RunState{}, err
@@ -1461,54 +1387,6 @@ func validSHA256Digest(value string) bool {
 	}
 	decoded, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
 	return err == nil && len(decoded) == sha256.Size
-}
-
-func snapshotStepResults(results map[string]*engine.StepResult) map[string]*stepResultSnapshotV1 {
-	if results == nil {
-		return nil
-	}
-	snapshots := make(map[string]*stepResultSnapshotV1, len(results))
-	for stepID, result := range results {
-		if result == nil {
-			snapshots[stepID] = nil
-			continue
-		}
-		errorText := ""
-		if result.Error != nil {
-			errorText = result.Error.Error()
-		}
-		snapshots[stepID] = &stepResultSnapshotV1{
-			StepID: result.StepID, Status: result.Status, Outcome: result.Outcome,
-			Output: result.Output, Vars: result.Vars, StartedAt: result.StartedAt,
-			CompletedAt: result.CompletedAt, DurationMs: result.DurationMs, Error: errorText,
-			Evidence: result.Evidence, Indeterminate: result.Indeterminate,
-		}
-	}
-	return snapshots
-}
-
-func restoreStepResults(snapshots map[string]*stepResultSnapshotV1) map[string]*engine.StepResult {
-	if snapshots == nil {
-		return nil
-	}
-	results := make(map[string]*engine.StepResult, len(snapshots))
-	for stepID, snapshot := range snapshots {
-		if snapshot == nil {
-			results[stepID] = nil
-			continue
-		}
-		result := &engine.StepResult{
-			StepID: snapshot.StepID, Status: snapshot.Status, Outcome: snapshot.Outcome,
-			Output: snapshot.Output, Vars: snapshot.Vars, StartedAt: snapshot.StartedAt,
-			CompletedAt: snapshot.CompletedAt, DurationMs: snapshot.DurationMs,
-			Evidence: snapshot.Evidence, Indeterminate: snapshot.Indeterminate,
-		}
-		if snapshot.Error != "" {
-			result.Error = errors.New(snapshot.Error)
-		}
-		results[stepID] = result
-	}
-	return results
 }
 
 func (s *DirRunStore) snapshotStepResultsV2(runID string, results map[string]*engine.StepResult) (map[string]*stepResultSnapshotV2, error) {

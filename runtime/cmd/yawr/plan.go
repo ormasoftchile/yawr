@@ -417,7 +417,7 @@ func assemblePlanOutput(
 	for _, k := range keys {
 		def := plan.Tools[k.tool]
 		action := def.Actions[k.action]
-		classification := "unspecified"
+		classification := "missing"
 		if action != nil && action.Classification != nil && *action.Classification != "" {
 			classification = *action.Classification
 		}
@@ -458,8 +458,6 @@ func resolveTransportMode(def *schema.ToolDef) string {
 type planApprovalOutcome string
 
 const (
-	planOutcomeNoProfile        planApprovalOutcome = "no-profile"
-	planOutcomeExplicitOptOut   planApprovalOutcome = "explicit-opt-out (gate suppressed)"
 	planOutcomeExplicitRequired planApprovalOutcome = "approval-required (explicit)"
 	planOutcomeAllowed          planApprovalOutcome = "allowed"
 	planOutcomeApprovalGate     planApprovalOutcome = "approval-required"
@@ -475,7 +473,6 @@ const (
 //	read-only      | allow        | allow if scope.AllowRead; else deny
 //	mutating       | allow        | gate     | allow if scope.AllowMutating; else deny
 //	destructive    | allow        | gate     | allow if scope.AllowDestructive; else deny
-//	unspecified    | allow        | GATE     | deny
 //
 // Does NOT import internal/governance to avoid a circular coupling.
 func computeActionApprovalOutcome(
@@ -484,13 +481,11 @@ func computeActionApprovalOutcome(
 	action *schema.ToolAction,
 ) (planApprovalOutcome, string) {
 	if profile == nil {
-		return planOutcomeNoProfile, ""
+		return planOutcomeAllowed, ""
 	}
 
-	// Explicit requires-approval: false — explicit opt-out. Gate suppressed.
-	// Does NOT assign classification: read-only. Does NOT relax retry.
 	if governance != nil && governance.RequiresApproval != nil && !*governance.RequiresApproval {
-		return planOutcomeExplicitOptOut, ""
+		return planOutcomeDenied, "requires-approval false is unsupported"
 	}
 	// Explicit requires-approval: true — gate always fires.
 	if governance != nil && governance.RequiresApproval != nil && *governance.RequiresApproval {
@@ -538,15 +533,7 @@ func computeActionApprovalOutcome(
 		return planOutcomeDenied, "destructive action denied in unattended context (allow_destructive=false)"
 
 	default:
-		// Unspecified (or any value unrecognized post-ParseToolFile).
-		// Defense-in-depth: absence or garbage must never grant execution rights.
-		if isTest {
-			return planOutcomeAllowed, ""
-		}
-		if isAttended {
-			return planOutcomeApprovalGate, ""
-		}
-		return planOutcomeDenied, "unclassified action denied in unattended context"
+		return planOutcomeDenied, "explicit action classification is required"
 	}
 }
 

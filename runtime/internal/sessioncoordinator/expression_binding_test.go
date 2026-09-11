@@ -54,7 +54,7 @@ func TestExpressionFrozenGraphAndBinding(t *testing.T) {
 	if json.Unmarshal(encoded, &envelope) != nil {
 		t.Fatal("snapshot encoding")
 	}
-	if envelope["schema_version"] != "yawr.execution-plan/v1" {
+	if envelope["schema_version"] != "execution-plan/v3" {
 		t.Fatal("expression metadata changed snapshot version")
 	}
 	restored, err := plansnapshot.Restore(frozen)

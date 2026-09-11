@@ -7,7 +7,7 @@ import (
 )
 
 // Invocation declarations are persisted by the enclosing frozen tool or pin.
-// Their feature version also governs an otherwise legacy-only child body.
+// The current closure version also governs the invocation child body.
 func EncodeInvocationFlowClosure(nodes []schema.FlowNode, invocation *schema.RunbookInvocation, tools ...map[string]*schema.ToolDef) (json.RawMessage, error) {
 	data, err := EncodeFlowClosure(nodes, tools...)
 	if err != nil {

@@ -9,8 +9,8 @@ import (
 //
 // These tests verify the parse-gate that rejects explicit, unknown
 // classification values on tool actions (see validateActionClassifications in
-// scan.go, called from ParseToolFile). The four valid values are:
-// "read-only", "mutating", "destructive", "unspecified".
+// scan.go, called from ParseToolFile). The valid values are:
+// "read-only", "mutating", and "destructive".
 //
 // Absent (nil) is always valid — nil means unspecified and is ORTHOGONAL to
 // requires-approval (GOV-009/GOV-010 invariant: requires-approval:false does
@@ -36,7 +36,7 @@ func parseClassificationTool(t *testing.T, actionYAML string) error {
 }
 
 func TestClassification_ValidValues_AllAccepted(t *testing.T) {
-	valid := []string{"read-only", "mutating", "destructive", "unspecified"}
+	valid := []string{"read-only", "mutating", "destructive"}
 	for _, v := range valid {
 		t.Run(v, func(t *testing.T) {
 			yaml := "  - name: act\n    classification: " + `"` + v + `"` + "\n    argv: [\"echo\"]\n    args: {}\n"
@@ -77,10 +77,7 @@ func TestClassification_EmptyString_Rejected(t *testing.T) {
 	}
 }
 
-func TestClassification_Orthogonal_RequiresApprovalFalse_Destructive(t *testing.T) {
-	// ORTHOGONALITY INVARIANT (GOV-009): requires-approval: false must never
-	// imply or coerce classification to read-only. A tool with explicit
-	// requires-approval: false and classification: destructive must be valid.
+func TestClassification_RequiresApprovalFalseRejected(t *testing.T) {
 	yaml := `apiVersion: yawr.tool/v1
 meta:
   name: probe
@@ -96,29 +93,7 @@ actions:
     args: {}
 `
 	_, err := parseToolFileFromString(t, yaml)
-	if err != nil {
-		t.Errorf("requires-approval:false + destructive incorrectly rejected: %v", err)
-	}
-}
-
-func TestClassification_Orthogonal_RequiresApprovalFalse_Mutating(t *testing.T) {
-	// ORTHOGONALITY INVARIANT (GOV-010): same as above for mutating.
-	yaml := `apiVersion: yawr.tool/v1
-meta:
-  name: probe
-  version: "1.0.0"
-transport:
-  mode: stdio
-governance:
-  requires-approval: false
-actions:
-  - name: act
-    classification: "mutating"
-    argv: ["echo"]
-    args: {}
-`
-	_, err := parseToolFileFromString(t, yaml)
-	if err != nil {
-		t.Errorf("requires-approval:false + mutating incorrectly rejected: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "must be true") {
+		t.Fatalf("requires-approval:false accepted: %v", err)
 	}
 }

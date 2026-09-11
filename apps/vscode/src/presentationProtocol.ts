@@ -185,9 +185,7 @@ export function decodeCapabilities(value: unknown, version: 1 | 3 = 1): void {
   const resolverVersion = version === 1 ? 'yawr.core-binding/v1' : `core-binding/v${version}`;
   if (v.schema_version !== schemaVersion || v.resolver_version !== resolverVersion) throw new Error('incompatible-presentation-helper');
   for (const key of ['execution_plan_read', 'execution_plan_write']) {
-    const expected = version === 3
-      ? ['yawr.execution-plan/v1', 'execution-plan/v2', 'execution-plan/v3']
-      : ['yawr.execution-plan/v1', 'execution-plan/v2'];
+    const expected = ['execution-plan/v3'];
     const versions = list(v[key], text, expected.length);
     if (versions.length !== expected.length || new Set(versions).size !== expected.length ||
         !expected.every(item => versions.includes(item))) throw new Error('incompatible-execution-runtime');

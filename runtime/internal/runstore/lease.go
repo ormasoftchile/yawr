@@ -62,7 +62,7 @@ func (s *DirRunStore) AcquireRunLease(ctx context.Context, runID string) (engine
 		return nil, err
 	}
 
-	epoch, err := nextRunWriterEpoch(s.writerEpochPath(runID), filepath.Join(s.RunDir(runID), ".writer.epoch"))
+	epoch, err := nextRunWriterEpoch(s.writerEpochPath(runID))
 	if err != nil {
 		_ = unlockRunLeaseFile(file)
 		_ = file.Close()
@@ -144,17 +144,10 @@ func (lease *fileRunLease) releaseLocked() error {
 	return lease.err
 }
 
-func nextRunWriterEpoch(path string, legacyPath string) (uint64, error) {
-	current, found, err := readRunWriterEpoch(path)
+func nextRunWriterEpoch(path string) (uint64, error) {
+	current, _, err := readRunWriterEpoch(path)
 	if err != nil {
 		return 0, err
-	}
-	legacy, legacyFound, err := readRunWriterEpoch(legacyPath)
-	if err != nil {
-		return 0, err
-	}
-	if legacyFound && (!found || legacy > current) {
-		current = legacy
 	}
 	if current == ^uint64(0) {
 		return 0, errors.New("runstore: writer epoch exhausted")
@@ -184,12 +177,6 @@ func readRunWriterEpoch(path string) (uint64, bool, error) {
 
 func (s *DirRunStore) validateWriterEpoch(runID string, expected uint64) error {
 	current, found, err := readRunWriterEpoch(s.writerEpochPath(runID))
-	if err != nil {
-		return err
-	}
-	if !found {
-		current, found, err = readRunWriterEpoch(filepath.Join(s.RunDir(runID), ".writer.epoch"))
-	}
 	if err != nil {
 		return err
 	}

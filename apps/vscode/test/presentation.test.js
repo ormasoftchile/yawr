@@ -49,7 +49,7 @@ test('strict future descriptor fallback and capabilities validation', () => {
   assert.throws(() => decodeCapabilities({ schema_version: 'yawr.presentation-capabilities/v1', resolver_version: 'yawr.core-binding/v1',
     execution_plan_read: ['execution-plan/v1'], execution_plan_write: ['execution-plan/v1'] }));
 });
-test('supported old graph keeps future envelope and declared unsupported field as plaintext', () => {
+test('current graph keeps future envelope and declared unsupported field as plaintext', () => {
   const details = clone(vector.graph_details_example);
   details.code_presentation.version = 2;
   const parsed = parseStepDetails(details, 'tool', 'future');
@@ -102,7 +102,7 @@ test('metadata-free execution does not require capabilities', async () => {
 });
 test('metadata on unused bound tool fields still blocks an incompatible execution runtime', async () => {
   const reply = decodeReply({ ...clone(vector.expect), dependencies: [] }, vector.request);
-  await assert.rejects(requireCompatibleExecution(process.execPath, { nodes: [] }, reply), /requires an execution-plan\/v2 runtime/);
+  await assert.rejects(requireCompatibleExecution(process.execPath, { nodes: [] }, reply), /requires the current execution-plan\/v3 runtime/);
 });
 test('finite helper rejects missing binaries, oversized input/output and owned stale work', { timeout: 10000 }, async () => {
   await assert.rejects(verifyPresentationHelper(path.resolve(__dirname, 'not-a-helper.exe')), /helper-unavailable/);

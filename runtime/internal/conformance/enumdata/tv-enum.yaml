@@ -125,7 +125,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -526,7 +526,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -711,7 +711,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -892,7 +892,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -987,7 +987,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1190,7 +1190,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1289,7 +1289,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1386,7 +1386,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1488,7 +1488,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1685,7 +1685,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1875,7 +1875,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -1979,7 +1979,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2169,7 +2169,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2267,7 +2267,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2354,7 +2354,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2445,7 +2445,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2542,7 +2542,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2641,7 +2641,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2738,7 +2738,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2838,7 +2838,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -2935,7 +2935,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -3035,7 +3035,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -3143,7 +3143,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -3320,7 +3320,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -3426,7 +3426,7 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: get-nodes
           argv: ["get", "nodes"]
@@ -3501,7 +3501,7 @@ vectors:
 # tess-slice7-fixture-migration.md for Barbara arbitration request.
 - id: TV-CONFORM-GOV-001
   category: CONFORM-CROSSCUT
-  description: 'Governance block entirely absent: RequiresApproval is nil (unspecified) and tool definition is schema-valid.'
+  description: 'An action with explicit read-only classification is schema-valid without an additional approval gate.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -3547,6 +3547,7 @@ vectors:
         mode: stdio
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml
@@ -3569,10 +3570,10 @@ vectors:
               run: json
   expected:
     value: null
-  note: 'Slice 7 GOV-001: governance absent -> RequiresApproval == nil (unspecified). Struct-level assertion: pkg/schema.TestRequiresApprovalTristate/a_governance_absent.'
+  note: 'Current approval routing requires an explicit action classification.'
 - id: TV-CONFORM-GOV-002
   category: CONFORM-CROSSCUT
-  description: 'Governance block present with allowed-modes but NO requires-approval key: RequiresApproval is nil, not false.'
+  description: 'Allowed modes and explicit read-only classification compose without an approval opt-out.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -3618,8 +3619,10 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
+        requires-approval: true
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml
@@ -3642,10 +3645,10 @@ vectors:
               run: json
   expected:
     value: null
-  note: 'Slice 7 GOV-002: THE COUNTERPARTY CATCH. governance block present with other fields but requires-approval key absent -> nil, NOT false. The *bool distinction is the entire point; struct-level assertion: pkg/schema.TestRequiresApprovalTristate/b_governance_present_no_requires_approval.'
+  note: 'Current approval routing uses the explicit action classification.'
 - id: TV-CONFORM-GOV-003
   category: CONFORM-CROSSCUT
-  description: 'Explicit requires-approval: false is a non-nil false (legacy approval opt-out), not identical to the absent case.'
+  description: 'Explicit requires-approval: true combines with an explicit action classification.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -3690,9 +3693,10 @@ vectors:
       transport:
         mode: stdio
       governance:
-        requires-approval: false
+        requires-approval: true
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml
@@ -3715,7 +3719,7 @@ vectors:
               run: json
   expected:
     value: null
-  note: 'Slice 7 GOV-003: requires-approval: false -> &false (explicit legacy opt-out). Struct-level assertion: pkg/schema.TestRequiresApprovalTristate/c_explicit_false.'
+  note: 'The current contract supports only an explicit positive approval requirement.'
 - id: TV-CONFORM-GOV-004
   category: CONFORM-CROSSCUT
   description: 'Explicit requires-approval: true is non-nil true; tool definition is accepted at plan/load time even though no tool step executes.'
@@ -3761,12 +3765,12 @@ vectors:
           args: {}
   expected:
     value: null
-  note: 'Slice 7 GOV-004 (recasted 2026-08-17 per Barbara ruling): requires-approval: true -> &true. Fixture uses toolRefs without a tool step so pkgcatalog.Build parses the governance block (schema-acceptance contract) but the TerminalApprovalGate is never invoked (no execution). cmd/yawr/run.go hardcodes TTYOutput:true -> TerminalApprovalGate; a subprocess with stdin=devnull would hang/fail, making this vector untestable via full execution. Struct-level assertion: pkg/schema.TestRequiresApprovalTristate/d_explicit_true.'
+  note: 'Explicit requires-approval: true is the supported positive approval requirement. This fixture parses it without executing the tool.'
   tags:
-  - requires-approval-enforcement-pending
+  - requires-approval
 - id: TV-CONFORM-GOV-005
   category: CONFORM-CROSSCUT
-  description: 'Classification absent on an action: Classification field is nil (unspecified); tool definition is schema-valid.'
+  description: 'Explicit read-only classification is accepted for an executable action.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -3812,6 +3816,7 @@ vectors:
         mode: stdio
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml
@@ -3834,7 +3839,7 @@ vectors:
               run: json
   expected:
     value: null
-  note: 'Slice 7 GOV-005: classification absent -> ToolAction.Classification == nil (unspecified). Classification is per-action (ToolAction field), not per-tool-governance.'
+  note: 'Classification is an explicit per-action field.'
 - id: TV-CONFORM-GOV-006
   category: CONFORM-CROSSCUT
   description: 'Classification "read-only" is a valid per-action value; tool definition and run are accepted.'
@@ -4057,7 +4062,7 @@ vectors:
   note: 'Slice 7 GOV-008: classification is per-action, not per-tool. Schema accepts a tool with mixed classifications (read-only + destructive on different actions). Only ping is invoked; purge is present in the definition to prove co-existence is valid.'
 - id: TV-CONFORM-GOV-009
   category: CONFORM-CROSSCUT
-  description: 'ORTHOGONALITY: requires-approval: false does not imply read-only; action with explicit false approval opt-out and destructive classification is schema-valid.'
+  description: 'A destructive action classification remains distinct from an additional positive approval requirement.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -4101,8 +4106,6 @@ vectors:
         version: "1.0.0"
       transport:
         mode: stdio
-      governance:
-        requires-approval: false
       actions:
         - name: ping
           classification: "destructive"
@@ -4128,12 +4131,12 @@ vectors:
               run: json
   expected:
     value: null
-  note: 'Slice 7 GOV-009 ORTHOGONALITY INVARIANT: requires-approval: false (legacy opt-out) NEVER implies, assigns, or coerces classification to read-only. A tool may suppress approval while remaining destructive. This vector would FAIL if anyone adds code that derives classification from requires-approval.'
+  note: 'Classification is explicit and is not inferred from another field.'
   tags:
   - orthogonality
 - id: TV-CONFORM-GOV-010
   category: CONFORM-CROSSCUT
-  description: 'ORTHOGONALITY: requires-approval: false does not imply read-only; action with false approval opt-out and mutating classification is schema-valid.'
+  description: 'A mutating action classification remains distinct from an additional positive approval requirement.'
   input: runbook.yaml
   variables:
     runbook.yaml: |
@@ -4177,8 +4180,6 @@ vectors:
         version: "1.0.0"
       transport:
         mode: stdio
-      governance:
-        requires-approval: false
       actions:
         - name: ping
           classification: "mutating"
@@ -4204,7 +4205,7 @@ vectors:
               run: json
   expected:
     value: null
-  note: 'Slice 7 GOV-010 ORTHOGONALITY INVARIANT: requires-approval: false (legacy opt-out) NEVER implies classification: read-only. A legacy action opting out of approval while being mutating is valid. Six rounds of negotiation turned on exactly this distinction.'
+  note: 'Classification is explicit and is not inferred from another field.'
   tags:
   - orthogonality
 - id: TV-CONFORM-GOV-011
@@ -4255,6 +4256,7 @@ vectors:
         mode: stdio
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml
@@ -4326,8 +4328,10 @@ vectors:
         mode: stdio
       governance:
         allowed-modes: ["real"]
+        requires-approval: true
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml
@@ -4401,6 +4405,7 @@ vectors:
         allowed-modes: ["real", "dry-run"]
       actions:
         - name: ping
+          classification: "read-only"
           execute:
             kind: runbook
             path: ../runbooks/ping.yaml

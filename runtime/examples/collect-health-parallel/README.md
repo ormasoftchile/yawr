@@ -23,7 +23,6 @@ yawr run collect-health-parallel.runbook.yaml
 
 - **Concurrent iteration**: Using `concurrency: 3` on iterate to run iterations in parallel
 - **Collect field**: Using `collect:` to gather per-iteration results into an array
-- **Template functions**: Using `{{ join .results "\n" }}` to render collected results
+- **Template expressions**: Using `${str.join(results, "\n")}` to render collected results
 - **Parallel composition**: Each iteration invokes a child runbook concurrently
 - **Efficiency**: Demonstrates performance optimization for independent work
-

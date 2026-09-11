@@ -163,16 +163,7 @@ func highlightExpression(ctx context.Context, text string, mode ExpressionMode, 
 			sort.Slice(out.Tokens, func(i, j int) bool { return out.Tokens[i].Start < out.Tokens[j].Start })
 		}
 	} else {
-		trimmed := strings.TrimSpace(text)
-		if booleanSite && strings.HasPrefix(trimmed, "{{") && strings.HasSuffix(trimmed, "}}") {
-			start := strings.Index(text, trimmed)
-			end := start + len(trimmed)
-			add(start, start+2, "interpolation")
-			lex(start+2, end-2)
-			add(end-2, end, "interpolation")
-		} else {
-			lex(0, len(text))
-		}
+		lex(0, len(text))
 	}
 	return out, ctx.Err() == nil && len(out.Tokens) <= MaxExpressionTokens
 }

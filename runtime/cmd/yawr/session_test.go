@@ -929,7 +929,7 @@ func createCLITestSession(t *testing.T, store *sessionstore.DirStore) session.Cr
 	sessionID := uuid.NewString()
 	segmentID := uuid.NewString()
 	runID := uuid.NewString()
-	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.execution-plan/v1"}`))
+	planBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"execution-plan/v3"}`))
 	graphBlob := session.NewJSONBlob(json.RawMessage(`{"schema_version":"yawr.graph-json/v1","nodes":[],"edges":[]}`))
 	request := session.CreateRequest{
 		SessionID: sessionID, CommandID: uuid.NewString(),

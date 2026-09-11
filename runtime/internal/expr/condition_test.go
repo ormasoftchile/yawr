@@ -126,10 +126,10 @@ func TestSimpleConditionEvaluator(t *testing.T) {
 			want:      false,
 		},
 		{
-			name:      "template wrapper stripped",
+			name:      "wrapper syntax rejected",
 			condition: `{{ all_passed == "dns_fail" }}`,
 			vars:      map[string]any{"all_passed": "dns_fail"},
-			want:      true,
+			wantErr:   true,
 		},
 		{
 			name:      "vars prefix with dns_fail (defensive fix)",

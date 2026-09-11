@@ -472,7 +472,7 @@ func TestComputeActionApprovalOutcome_Matrix(t *testing.T) {
 
 	readOnlyAction := &schema.ToolAction{Classification: strPtr("read-only")}
 	mutatingAction := &schema.ToolAction{Classification: strPtr("mutating")}
-	unspecifiedAction := &schema.ToolAction{}
+	missingAction := &schema.ToolAction{}
 
 	cases := []struct {
 		name       string
@@ -481,11 +481,8 @@ func TestComputeActionApprovalOutcome_Matrix(t *testing.T) {
 		action     *schema.ToolAction
 		want       planApprovalOutcome
 	}{
-		// No profile → no analysis.
-		{"no-profile", nil, nil, readOnlyAction, planOutcomeNoProfile},
-		// Legacy opt-out (requires-approval: false) suppresses the gate regardless of classification.
-		// This must NOT imply read-only classification (GOV-009/GOV-010 orthogonality).
-		{"legacy-opt-out suppresses gate", ciUnattendedProfile, &schema.ToolGovernance{RequiresApproval: boolPtr(false)}, mutatingAction, planOutcomeExplicitOptOut},
+		{"classified action without profile allowed", nil, nil, readOnlyAction, planOutcomeAllowed},
+		{"approval opt-out denied", ciUnattendedProfile, &schema.ToolGovernance{RequiresApproval: boolPtr(false)}, mutatingAction, planOutcomeDenied},
 		// Explicit requires-approval: true always fires the gate.
 		{"explicit-required always gates", ciUnattendedProfile, &schema.ToolGovernance{RequiresApproval: boolPtr(true)}, readOnlyAction, planOutcomeExplicitRequired},
 		// Read-only + allow_read=true → allowed.
@@ -496,15 +493,11 @@ func TestComputeActionApprovalOutcome_Matrix(t *testing.T) {
 		{"mutating denied when unattended+allow_mutating=false", ciUnattendedProfile, nil, mutatingAction, planOutcomeDenied},
 		// Mutating + attended → approval gate (not a hard deny).
 		{"mutating attended → approval gate", attendedProfile, nil, mutatingAction, planOutcomeApprovalGate},
-		// Unspecified + unattended + prompt policy → denied.
-		{"unspecified unattended prompt → denied", ciUnattendedProfile, nil, unspecifiedAction, planOutcomeDenied},
-		// Test context → any action is allowed (never hard denied in test).
+		{"missing classification unattended prompt denied", ciUnattendedProfile, nil, missingAction, planOutcomeDenied},
+		// Test context allows explicitly classified actions.
 		{"test context mutating → allowed", testContextProfile, nil, mutatingAction, planOutcomeAllowed},
-		{"test context unspecified → allowed", testContextProfile, nil, unspecifiedAction, planOutcomeAllowed},
-		// GOV-009/GOV-010 invariant: legacy-opt-out must NOT carry any
-		// implication about classification. An unspecified action with opt-out
-		// still gets planOutcomeExplicitOptOut, not allowed/denied based on class.
-		{"GOV-010: opt-out + unspecified = opt-out", ciUnattendedProfile, &schema.ToolGovernance{RequiresApproval: boolPtr(false)}, unspecifiedAction, planOutcomeExplicitOptOut},
+		{"test context missing classification denied", testContextProfile, nil, missingAction, planOutcomeDenied},
+		{"opt-out plus missing classification denied", ciUnattendedProfile, &schema.ToolGovernance{RequiresApproval: boolPtr(false)}, missingAction, planOutcomeDenied},
 	}
 
 	for _, c := range cases {

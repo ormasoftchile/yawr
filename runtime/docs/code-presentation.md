@@ -58,14 +58,12 @@ completed runs after server restart when its run store is configured.
 identities, not a bare step-ID/latest-output join. Missing retained terminal
 events do not invent historical values. Mixed checkpoint generations fail closed.
 
-## Reader-first rollout
+## Runtime contract
 
-`yawr presentation capabilities` advertises v1/v2 plan readers and writers.
-Upgrade every execution engine sharing a run store before adding presentation
-declarations. Metadata-bearing tools write `execution-plan/v2`; metadata-free
-tools retain v1 bytes and digests. An old binary is not retroactively safe to
-open v2 stores. Authoring with a bundled upgraded helper is independent of the
-configured execution binary; execution must verify that binary's capability.
+`yawr presentation capabilities` advertises `execution-plan/v3` as the sole
+readable and writable plan format. Authoring with the bundled helper remains
+independent of the configured execution binary; execution verifies that the
+binary supports the current format.
 
 `examples/code-presentation` demonstrates all three languages using noop-backed
 substitutions. Its strings are returned as data; no SQL, KQL, PowerShell,
@@ -85,12 +83,10 @@ equal `execution_plan_hash`, the committed session snapshot blob digest.
 Runtime events and read-only run documents use the run store's internal
 `SnapshotDigest` instead; these two existing digest namespaces are not interchangeable.
 Neither snapshot hashing nor serialized graph revision integrity is weakened.
-Old metadata-free graphs are unchanged and never rebound to current source.
-
 Dynamic resolutions capture exact action definitions using the existing
 executable materializer before the resolution commit. Metadata-bearing closures
-use `execution-flow-closure/v2` and retain their own frozen tool table; v1 closures
-remain byte-compatible. Display and restart inspection read only that committed
+use `execution-flow-closure/v3` and retain their own frozen tool table. Display
+and restart inspection read only that committed
 closure and its frame/occurrence/revision relation, never today's catalog.
 Missing/uncommitted linkage remains `unresolved-dynamic`.
 
@@ -106,7 +102,7 @@ Generic ten-item preview truncation and its omission sentinels never apply to
 these typed arrays or to output classifications. If this budget is exceeded,
 the preview omits metadata, classifications and output together and emits
 `presentation_diagnostic: "limit-exceeded"` outside the typed envelope.
-Malformed/legacy sentinel-bearing metadata is omitted with
+Malformed sentinel-bearing metadata is omitted with
 `presentation_diagnostic: "invalid-metadata"` rather than repaired into a partial
 identity. The original event kind, error, status and occurrence identity remain
 available. Consumers must treat these as optional-decoration diagnostics, not
@@ -156,8 +152,8 @@ the canonical authored YAML is `pkg/presentation/testdata/regex-source.yaml`.
 The existing GXL lexer and GIS escape/brace scanner produce tokens without
 evaluation or diagnostics. Lexically valid prefixes remain usable while an
 expression is incomplete. `\${` is literal, `$${` is invalid rather than an
-escape, and sequential backslashes follow the runtime scanner. Only established
-boolean sites support the runtime's outer `{{ ... }}` compatibility wrapper.
+escape, and sequential backslashes follow the runtime scanner. Boolean sites
+accept bare GXL only; wrapper syntax is rejected.
 
 The same grammar version also colors literal arguments explicitly defined by
 core as GXL source: currently only the second argument of `list.order` (its
@@ -186,24 +182,8 @@ anchors and repetition, using the existing closed token classes. Unsupported
 lookaround/backreferences and incomplete forms fall back to string/plain text;
 coloring is not regex validation or matching.
 
-New readers accept v1 with exactly `gxl,gis` and v2 with exactly
-`gxl,gis,regex` capabilities. Values are checked against their envelope grammar:
-v1 plus `regex` is invalid. Old v1 producers remain readable by new readers;
-old readers cannot decode v2 and fall back to plain/host-language text. Ship the
-new producer with the matching extension and standalone UI readers.
-
-Committed graphs with either generation of `yawr.expression/v1` tokens
-remain readable without changing their bytes or hashes. Verification regenerates
-the current graph, then complete approved-7EF and original-601A projections from
-the frozen plan (including pinned
-dynamic closures), at the same safe-field and descriptor-redaction boundaries.
-It accepts only one of those complete graphs, retaining structural,
-full-document, snapshot-binding and descriptor checks. Original namespace
-lookahead and opaque comparator strings are preserved for 601A; 7EF retains its
-corrected namespace boundaries and nested comparators, without regex semantics.
-Historical recursion and emitted grammar stay within their explicit profile.
-Supplied tokens never select or adapt regeneration. Rendering
-can retain exact historical tokens, but still discards stale or modified spans.
+Readers accept the current `gxl,gis,regex` capability set only. Values are
+checked against that envelope grammar, and stale or modified spans are rejected.
 
 Safe authored graph details may carry the optional sibling
 `expression_presentation` (version 1, grammar `yawr-expression/v2`). Each entry
@@ -216,10 +196,8 @@ handoff bindings and node titles) are not reconstructed for panel highlighting.
 
 Frozen and dynamic inspection uses only its committed plan/spec/closure.
 Expression metadata introduces no snapshot version or self-binding field.
-Both structural and full-bound hashes include it normally. Legacy committed
-graphs without the optional sibling remain valid against the legacy projection
-of their own frozen plan; they are never resolved against current source.
-Existing tool-only occurrence authority remains unchanged.
+Both structural and full-bound hashes include it normally. Existing tool-only
+occurrence authority remains unchanged.
 
 Limits: 32,768 UTF-16 units per string, 4,096 regions/values, 65,536 total tokens,
 8 MiB request/reply, 128 overlays, and structural depth 128. Oversized strings
