@@ -1,0 +1,294 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: soc2-evidence-collection
+name: SOC2 Evidence Collection for Audit
+kind: reference
+description: |
+  Collects evidence for SOC2 audit across 15 controls. Each control invokes
+  a specialized evidence-collection sub-runbook. Aggregates artifacts into
+  audit package with compliance officer attestation.
+
+inputs:
+  audit_id:
+    type: string
+    required: true
+    description: Unique audit identifier (timestamp-based UUID)
+    from: prompt
+  audit_period_start:
+    type: string
+    required: true
+    description: Start of audit period (YYYY-MM-DD)
+    from: prompt
+  audit_period_end:
+    type: string
+    required: true
+    description: End of audit period (YYYY-MM-DD)
+    from: prompt
+
+toolRefs:
+  - name: aws
+  - name: psql
+
+governance:
+  rules:
+    - effects: ["audit.evidence.read"]
+      action: allow
+    - effects: ["compliance.upload"]
+      action: require-approval
+      min_approvers: 1
+
+flow:
+  # Step 1: Initialize Audit Package
+  - step:
+      id: init_audit_package
+      type: cli
+      title: Initialize audit package directory
+      run:
+        bash: "mkdir -p /audit/{{ .audit_id }} && echo '{}' > /audit/{{ .audit_id }}/manifest.json"
+        pwsh: |
+          New-Item -ItemType Directory -Force -Path C:\audit\{{ .audit_id }} | Out-Null
+          Set-Content -Path C:\audit\{{ .audit_id }}\manifest.json -Value '{}'
+      capture:
+        audit_dir: stdout
+
+  # Steps 2-8: Control sub-runbooks (CC1.1 through CC6.8)
+  # GAP: 15 sequential include steps is verbose; schema lacks bulk inclusion syntax (include_many)
+  # NOTE: type:include shares caller variable space — if isolation needed, use future type:call (not in v2.0)
+
+  - step:
+      id: collect_cc1_1
+      type: include
+      title: "CC1.1: Access Reviews"
+      include:
+        runbook: soc2/cc1.1-access-reviews.yaml
+        with:
+          audit_id: "{{ .audit_id }}"
+          period_start: "{{ .audit_period_start }}"
+          period_end: "{{ .audit_period_end }}"
+      capture:
+        cc1_1_evidence: outputs.evidence_path
+
+  - step:
+      id: collect_cc1_2
+      type: include
+      title: "CC1.2: Password Policy"
+      include:
+        runbook: soc2/cc1.2-password-policy.yaml
+        with:
+          audit_id: "{{ .audit_id }}"
+          period_start: "{{ .audit_period_start }}"
+      capture:
+        cc1_2_evidence: outputs.evidence_path
+
+  - step:
+      id: collect_cc2_1
+      type: collector
+      title: "CC2.1: Risk Assessment (manual upload)"
+      prompt: |
+        Provide the most recent risk assessment for the audit period.
+      fields:
+        - name: risk_assessment_date
+          type: date
+          label: Date of most recent risk assessment
+          required: true
+        - name: risk_register
+          type: file
+          label: Risk register file (upload)
+          required: true
+        - name: mitigation_status
+          type: select
+          label: Mitigation status
+          required: true
+          options:
+            - value: complete
+              label: Complete
+            - value: in_progress
+              label: In Progress
+            - value: planned
+              label: Planned
+      approvals:
+        min: 1
+        roles: [compliance-officer]
+
+  - step:
+      id: collect_cc3_1
+      type: include
+      title: "CC3.1: Security Monitoring"
+      include:
+        runbook: soc2/cc3.1-security-monitoring.yaml
+        with:
+          audit_id: "{{ .audit_id }}"
+          period_start: "{{ .audit_period_start }}"
+      capture:
+        cc3_1_evidence: outputs.evidence_path
+
+  - step:
+      id: collect_cc4_1
+      type: include
+      title: "CC4.1: Change Management"
+      include:
+        runbook: soc2/cc4.1-change-management.yaml
+        with:
+          audit_id: "{{ .audit_id }}"
+          period_start: "{{ .audit_period_start }}"
+      capture:
+        cc4_1_evidence: outputs.evidence_path
+
+  - step:
+      id: collect_cc5_1
+      type: include
+      title: "CC5.1: Incident Response"
+      include:
+        runbook: soc2/cc5.1-incident-response.yaml
+        with:
+          audit_id: "{{ .audit_id }}"
+          period_start: "{{ .audit_period_start }}"
+      capture:
+        cc5_1_evidence: outputs.evidence_path
+
+  # CC6.1-CC6.8: logical/physical access, encryption, network security, etc.
+  # GAP: 8 more include steps omitted for brevity but would follow same pattern
+  - step:
+      id: collect_cc6_controls
+      type: include
+      title: "CC6.1-CC6.8: Logical and Physical Access Controls"
+      include:
+        runbook: soc2/cc6-access-controls-bundle.yaml
+        with:
+          audit_id: "{{ .audit_id }}"
+          period_start: "{{ .audit_period_start }}"
+      capture:
+        cc6_evidence: outputs.evidence_path
+
+  # Step 9: Aggregate Evidence
+  - step:
+      id: aggregate_evidence
+      type: cli
+      title: Aggregate all evidence into single archive
+      command: bash
+      args:
+        - "-c"
+        - |
+          tar czf /audit/audit-evidence-{{ .audit_id }}.tar.gz -C /audit/{{ .audit_id }} . &&
+          sha256sum /audit/audit-evidence-{{ .audit_id }}.tar.gz
+      capture:
+        evidence_archive: stdout
+        evidence_hash: stdout
+
+  # Step 10: Generate Audit Report
+  - step:
+      id: generate_audit_report
+      type: extension
+      title: Generate HTML audit report
+      extension:
+        name: report-generator
+        action: generate-html
+        args:
+          template: soc2-audit-report
+          manifest: "/audit/{{ .audit_id }}/manifest.json"
+          audit_id: "{{ .audit_id }}"
+      capture:
+        audit_report_path: json.report_path
+
+  # Step 11: Compliance Officer Review
+  - step:
+      id: compliance_officer_review
+      type: collector
+      title: Compliance officer attestation
+      prompt: |
+        Review the audit report and attest that evidence is complete and accurate.
+        
+        Audit ID: {{ .audit_id }}
+        Evidence archive SHA256: {{ .evidence_hash }}
+      fields:
+        - name: all_controls_evidenced
+          type: boolean
+          label: All 15 controls have evidence?
+          required: true
+        - name: no_missing_files
+          type: boolean
+          label: No evidence files missing or corrupted?
+          required: true
+        - name: date_ranges_covered
+          type: boolean
+          label: Evidence covers required date ranges?
+          required: true
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [compliance-officer]
+        timeout: 120h # GAP: prose says "5 business days"
+        on_timeout: escalate
+        escalate_to: [ciso]
+
+  # Step 12: Security Officer Attestation
+  - step:
+      id: security_officer_attestation
+      type: collector
+      title: Security officer attestation
+      prompt: |
+        Attest that evidence collection process followed security controls.
+      fields:
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [security-officer]
+        timeout: 72h # GAP: prose says "3 business days"
+        on_timeout: escalate
+        escalate_to: [ciso]
+
+  # Step 13: Upload to Secure Vault
+  - step:
+      id: upload_to_vault
+      type: cli
+      title: Upload audit package to S3 with object lock
+      command: aws
+      args:
+        - s3
+        - cp
+        - "/audit/audit-evidence-{{ .audit_id }}.tar.gz"
+        - "s3://compliance-evidence/{{ .audit_id }}/audit-evidence.tar.gz"
+        - "--sse"
+        - "aws:kms"
+      # GAP: object lock (WORM, 7-year retention) requires separate S3 API call not expressible here
+
+  # Step 14: Notify Auditor
+  - step:
+      id: notify_auditor
+      type: extension
+      title: Notify external auditor
+      extension:
+        name: email-sender
+        action: send
+        args:
+          to: "auditor-id"
+          subject: "SOC2 Audit Evidence - {{ .audit_id }}"
+          body: "Audit evidence package ready. SHA256: {{ .evidence_hash }}"
+          # GAP: presigned URL generation not natively supported; would require additional step
+
+  # Step 15: Record Audit Completion
+  - step:
+      id: record_completion
+      type: extension
+      title: Record audit completion in compliance tracking
+      extension:
+        name: compliance-tracker
+        action: record-completion
+        args:
+          audit_id: "{{ .audit_id }}"
+          completion_date: "{{ now }}"
+          evidence_location: "s3://compliance-evidence/{{ .audit_id }}/"
+
+  - step:
+      id: complete
+      type: end
+      title: SOC2 evidence collection complete
+      outcome:
+        category: resolved
+        code: soc2_audit_complete

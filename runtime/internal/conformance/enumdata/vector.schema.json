@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yawr.internal/conformance/yawr.vector-schema/v1",
+  "title": "YAWR Conformance Test Vector Schema",
+  "description": "Validates every file in design/yawr/conformance/tv-*.yaml. This schema IS the contract between the corpus author (Tess) and Phase 2 implementers (Go parser, C# parser). Any vector that does not validate against this schema MUST NOT be executed by a conformance harness. See spec/grammar/gxl.ebnf §6 for error code definitions.",
+  "type": "object",
+  "required": ["vectors"],
+  "additionalProperties": false,
+  "properties": {
+    "vectors": {
+      "type": "array",
+      "description": "Ordered list of test vectors. IDs must be globally unique and sequential within their file.",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/TestVector" }
+    }
+  },
+
+  "$defs": {
+    "TestVector": {
+      "type": "object",
+      "description": "A single, deterministic, self-contained test case. Every field is normative. 'note' is non-normative.",
+      "required": ["id", "category", "description", "input", "variables", "expected"],
+      "additionalProperties": false,
+      "properties": {
+
+        "id": {
+          "type": "string",
+          "description": "Globally unique test vector identifier. Pattern: TV-<LANG>-<GROUP>(-<SUBGROUP>)*-<NNN>. Examples: TV-GXL-PARSE-001, TV-GIS-INTERP-042, TV-GCP-RESOLVE-007, TV-PKG-VERSION-001, TV-ENUM-DECL-001. Numeric suffix is zero-padded to ≥3 digits and sequential within its file.",
+          "pattern": "^TV-(GXL|GIS|GCP|CONFORM|PKG|ENUM)-[A-Z]+(-[A-Z0-9]+)*-\\d{3,4}$"
+        },
+
+        "category": {
+          "type": "string",
+          "description": "Coverage category from Barbara's Phase 1 plan §3 (barbara-gxl-phase1-plan.md), one of the PKG-* categories added per Barbara's tool-packages ruling (.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md, AR-TP-9b §10) for design/yawr/conformance/tv-pkg-resolve.yaml, or one of the ENUM-* categories added per Barbara's enum-constraint ruling (.squad/decisions/inbox/barbara-enum-constraint-mvp-architecture-ruling.md, AR-ENUM-14/§Handoff) for design/yawr/conformance/tv-enum.yaml. Each category maps to a distinct runtime concern. GXL-FUNC is a Tess proposal (see .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md) — Barbara must ratify before Phase 2.",
+          "enum": [
+            "GXL-PARSE",
+            "GXL-EVAL",
+            "GXL-PATH",
+            "GXL-ERROR",
+            "GXL-FUNC",
+            "GIS-INTERP",
+            "GIS-PATH",
+            "GIS-TYPE",
+            "GCP-PARSE",
+            "GCP-RESOLVE",
+            "GCP-DEFAULT",
+            "NAMESPACE",
+            "CONFORM-CROSSCUT",
+            "PKG-RESOLVE",
+            "PKG-COLLIDE",
+            "PKG-VERSION",
+            "PKG-PATH",
+            "PKG-SUBST",
+            "PKG-DIGEST",
+            "PKG-ERROR",
+            "ENUM-DECL",
+            "ENUM-UNICODE",
+            "ENUM-DEFAULT",
+            "ENUM-PLAN",
+            "ENUM-RUNTIME",
+            "ENUM-SUBST",
+            "ENUM-MOCK",
+            "ENUM-TRACE"
+          ]
+        },
+
+        "description": {
+          "type": "string",
+          "description": "One sentence (≤200 chars) stating exactly what invariant this vector pins down. No vague phrases like 'tests parsing'. Be specific: 'Parser accepts a float literal with negative exponent (scientific notation).'",
+          "maxLength": 200
+        },
+
+        "input": {
+          "type": "string",
+          "description": "For GXL/GIS/GCP vectors: the raw expression, template, or path string under test — exactly as it would appear in the relevant YAML runbook field (after YAML decoding but before GXL/GIS/GCP parsing). For PKG-* vectors (design/yawr/conformance/tv-pkg-resolve.yaml): the workspace-relative POSIX path, within the synthetic filesystem tree supplied in 'variables', of the runbook or config file that is the resolution entry point. Must be deterministic: no timestamps, env vars, randomness."
+        },
+
+        "variables": {
+          "type": "object",
+          "description": "For GXL/GIS/GCP vectors: the variable context map supplied to the evaluator. JSON value model only: null, boolean, number, string, array, object. No special types (no date, no binary). For parse-only vectors where evaluation is not performed, use {} (empty object). Keys must be valid GXL identifiers (ASCII, not a keyword). For PKG-* vectors: a synthetic filesystem tree encoded as a flat map from workspace-relative POSIX path to file content (string), e.g. {\"yawr-package.yaml\": \"...\", \"tools/kubectl.tool.yaml\": \"...\"}, plus any 'requires:'/'toolRefs:' declarations needed beyond what 'input' already encodes.",
+          "additionalProperties": {
+            "description": "Any JSON-model value: null, boolean, number (IEEE 754 double, finite), string (UTF-8), array, or object. NaN and Infinity are forbidden.",
+            "$ref": "#/$defs/JsonValue"
+          }
+        },
+
+        "expected": {
+          "description": "The normative outcome of this vector. For GXL/GIS/GCP vectors: EITHER a success result (value) OR a failure result (error_class + error_code); these two shapes are mutually exclusive. For PKG-* vectors: EITHER the resolved catalog projection (a JSON object under 'catalog') OR a package/plan-time failure ({ error: { code } } using the PKG-*/PLAN-010 codes from design/yawr/sections/03d-parse-time-enforcement.tex). For ENUM-* vectors (design/yawr/conformance/tv-enum.yaml): a passing bound/produced value uses 'SuccessExpected' ('value', optionally with 'warnings': ['ENUM-W001'] for a case-only-distinct enum); a plan-time/runtime enum-constraint failure uses 'ErrorExpected' with error_class 'ENUM' and error_code one of ENUM-001..009; an ENUM-SUBST vector expecting a substitution set-inequality uses 'PackageExpected' with error.code 'PKG-013'.",
+          "oneOf": [
+            { "$ref": "#/$defs/SuccessExpected" },
+            { "$ref": "#/$defs/ErrorExpected" },
+            { "$ref": "#/$defs/PackageExpected" }
+          ]
+        },
+
+        "note": {
+          "type": "string",
+          "description": "Non-normative. Explanation for human readers (contributors, reviewers). Does NOT affect vector semantics. Use for: citing grammar section, explaining edge case rationale, referencing a related open issue."
+        },
+
+        "tags": {
+          "type": "array",
+          "description": "Machine-readable labels for coverage filtering. Examples: 'short-circuit', 'unicode', 'negative-zero', 'OQ1', 'OQ2'. Used by harness --filter flag.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+
+    "SuccessExpected": {
+      "type": "object",
+      "description": "The input must parse/evaluate successfully and produce the given value or satisfy a deterministic assertion. For TV-GXL-PARSE vectors, value MUST be the string 'parse_ok' (AST shape is implementation-defined). For non-deterministic results, type/assert/pattern pins the contract without requiring exact equality. For an ENUM-* vector (design/yawr/conformance/tv-enum.yaml), 'value' is the bound argument/input value or produced output value that passes its declared enum constraint (post NFC-normalisation of the candidate per AR-ENUM-4); 'warnings' MAY list 'ENUM-W001' when the passing enum is case-only-distinct.",
+      "oneOf": [
+        { "required": ["value"] },
+        { "required": ["type", "assert", "pattern"] }
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "The expected result. 'parse_ok' for parse-only vectors. Any JSON value for evaluation vectors.",
+          "$ref": "#/$defs/JsonValue"
+        },
+        "type": {
+          "type": "string",
+          "description": "Expected PJVM type when the vector uses an assertion instead of exact equality.",
+          "enum": ["null", "boolean", "number", "string", "array", "object"]
+        },
+        "assert": {
+          "type": "string",
+          "description": "Assertion kind applied by the conformance harness to the produced value.",
+          "enum": ["regex"]
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern used when assert is 'regex'."
+        },
+        "warnings": {
+          "type": "array",
+          "description": "OPTIONAL. Non-fatal warning codes that MUST accompany this otherwise-passing result, e.g. 'ENUM-W001' (design/yawr/sections/03d-parse-time-enforcement.tex §Enum Constraint Error Codes) for a case-only-distinct enum vector. Absent or empty means no warnings are expected.",
+          "items": {
+            "type": "string",
+            "pattern": "^ENUM-W\\d{3}$"
+          }
+        }
+      }
+    },
+
+    "ErrorExpected": {
+      "type": "object",
+      "description": "The input must fail with exactly this error class and error code. error_class is the family prefix (e.g., 'GXL-PARSE', or 'ENUM' for an enum-constraint failure). error_code is the specific code (e.g., 'GXL-PARSE-007', or 'ENUM-008'). GXL/GIS/GCP codes MUST match an error declared in the corresponding grammar file (gxl.ebnf §6, gis.ebnf §5, gcp.ebnf §5); ENUM codes MUST match design/yawr/sections/03d-parse-time-enforcement.tex §Enum Constraint Error Codes. If the grammar is silent, use error_code 'TBD' and set note: 'expected_status: undecided'. An ENUM-RUNTIME vector demonstrating single-cause type-before-enum precedence (AR-ENUM-7) uses this shape with the existing type-error code (e.g. error_class 'GXL-TYPE', error_code 'GXL-TYPE-001'), never an ENUM-* code, since the type error is the one true root cause.",
+      "required": ["error_class", "error_code"],
+      "additionalProperties": false,
+      "properties": {
+        "error_class": {
+          "type": "string",
+          "description": "Error family prefix. Must be one of: GXL-PARSE, GXL-TYPE, GXL-PATH, GXL-EVAL, GIS-PARSE, GIS-PATH, GIS-TYPE, GIS-EVAL, GCP-PARSE, GCP-RESOLVE, GCP-DEFAULT, GCP-TYPE, GCP-EVAL, ENUM.",
+          "enum": [
+            "GXL-PARSE",
+            "GXL-TYPE",
+            "GXL-PATH",
+            "GXL-EVAL",
+            "GIS-PARSE",
+            "GIS-PATH",
+            "GIS-TYPE",
+            "GIS-EVAL",
+            "GCP-PARSE",
+            "GCP-RESOLVE",
+            "GCP-DEFAULT",
+            "GCP-TYPE",
+            "GCP-EVAL",
+            "ENUM"
+          ]
+        },
+        "error_code": {
+          "type": "string",
+          "description": "The precise error code from the grammar's error catalog (§6), or from design/yawr/sections/03d-parse-time-enforcement.tex §Enum Constraint Error Codes when error_class is 'ENUM'. Pattern: <CLASS>-<NNN>, special catalog symbols such as GIS-PATH-MISSING or GCP-DEFAULT-SUBTREE, 'ENUM-0NN' (001..009), or 'TBD' for undecided vectors requiring Barbara arbitration. Examples: 'GXL-PARSE-007', 'GXL-TYPE-001', 'GIS-PATH-MISSING', 'GCP-RESOLVE-004', 'ENUM-008'.",
+          "pattern": "^(GXL|GIS)-(PARSE|TYPE|PATH|EVAL)-\\d{3}$|^GCP-(PARSE|RESOLVE|TYPE)-\\d{3}$|^GIS-PATH-MISSING$|^GCP-DEFAULT-SUBTREE$|^ENUM-\\d{3}$|^TBD$"
+        },
+        "timing": {
+          "type": "string",
+          "description": "Normative phase at which the error is raised when a vector needs parse/eval timing parity.",
+          "enum": ["parse-time", "eval-time"]
+        }
+      }
+    },
+
+    "PackageExpected": {
+      "type": "object",
+      "description": "The normative outcome for a PKG-* category vector (design/yawr/conformance/tv-pkg-resolve.yaml, added per .squad/decisions/archive/barbara-tool-packages-architecture-ruling.md AR-TP-9b §10). EITHER a resolved-catalog projection ('catalog') OR a plan-time failure ('error'). Mutually exclusive.",
+      "oneOf": [
+        { "required": ["catalog"] },
+        { "required": ["error"] }
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "description": "The expected projection of the resolved catalog (or the relevant slice of it) as a JSON object, e.g. { \"kubectl\": { \"qualifiedName\": \"acme.incident-tools/kubectl\", \"tier\": 1 } }. Shape is scenario-defined; harnesses compare by deep equality.",
+          "$ref": "#/$defs/JsonValue"
+        },
+        "error": {
+          "type": "object",
+          "description": "The expected plan-time failure.",
+          "required": ["code"],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string",
+              "description": "The exact error code from design/yawr/sections/03d-parse-time-enforcement.tex §Error Code Catalog (PKG-* series) or 'PLAN-010'.",
+              "pattern": "^PKG-\\d{3}$|^PLAN-010$"
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "description": "The exact, unordered set of non-fatal PKG-W* warning codes (design/yawr/sections/03d-parse-time-enforcement.tex §Error Code Catalog, Warnings table) that MUST appear in the plan report and trace for this vector. Valid alongside either 'catalog' (a warning may accompany a successful resolution, e.g. PKG-W001/PKG-W002 deprecations or PKG-W003 external-root) or 'error' (a warning may be emitted before a fatal error is raised). Absent or empty means no warnings are expected. This closes the gap where PKG-W* codes were otherwise unverifiable by the conformance corpus.",
+          "items": {
+            "type": "string",
+            "pattern": "^PKG-W\\d{3}$"
+          }
+        }
+      }
+    },
+
+    "JsonValue": {
+      "description": "Any value in the YAWR Portable JSON Value Model (OQ3 — see gis.ebnf §PJVM): null, boolean, number (finite IEEE 754 double), string (UTF-8), array of JSON values, or object with string keys and JSON values. NaN and Infinity are explicitly excluded.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/JsonValue" }
+        }
+      ]
+    }
+  }
+}

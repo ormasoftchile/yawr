@@ -1,0 +1,56 @@
+{
+  "base_request": {
+    "schema_version": "yawr.authoring-request/v1",
+    "request_id": "autocomplete-canonical-1",
+    "context": {"project_root": "C:\\autocomplete-contract", "generation": 7},
+    "overlays": [{
+      "uri": "file:///C:/autocomplete-contract/db.tool.yaml",
+      "path": "C:\\autocomplete-contract\\db.tool.yaml",
+      "version": 9,
+      "text": "apiVersion: yawr.tool/v1\nmeta: {name: db, version: 1.0.0, description: Offline fixture}\nactions:\n  - name: inspect\n    description: Inspect a declared query\n    args:\n      text: {type: string, required: true, description: Query text, presentation: {version: 1, kind: code, language: sql}}\n      limit: {type: integer, default: 10}\n"
+    }]
+  },
+  "document_identity": {"uri": "file:///C:/autocomplete-contract/new.runbook.yaml", "path": "C:\\autocomplete-contract\\new.runbook.yaml", "version": 3},
+  "prefix": "apiVersion: yawr.runbook/v1\nid: example\nname: Example\ntoolRefs:\n  - name: db\n    path: db.tool.yaml\nflow:\n  - step:\n      id: q\n      type: tool\n      tool:\n",
+  "cases": [
+    {
+      "name": "tool",
+      "operation": "complete",
+      "source_template": "        name: d|CURSOR|\n        action: inspect\n",
+      "expect": {"status": "resolved", "item": {"kind": "tool", "name": "db", "edit": {"new_text": "db"}}},
+      "edit_target": "d"
+    },
+    {
+      "name": "action",
+      "operation": "complete",
+      "source_template": "        name: db\n        action: in|CURSOR|\n",
+      "expect": {"status": "resolved", "item": {"kind": "action", "name": "inspect", "description": "Inspect a declared query", "edit": {"new_text": "inspect"}}},
+      "edit_target": "in"
+    },
+    {
+      "name": "argument",
+      "operation": "complete",
+      "source_template": "        name: db\n        action: inspect\n        args:\n          te|CURSOR|\n",
+      "expect": {"status": "resolved", "item": {"kind": "argument", "name": "text", "value_type": "string", "required": true, "default_info": "absent", "edit": {"new_text": "text: "}}},
+      "edit_target": "te"
+    },
+    {
+      "name": "signature",
+      "operation": "signature",
+      "source_template": "        name: db\n        action: inspect\n      when: str.contains(str.trim('x,y'), |CURSOR|)\n",
+      "expect": {"status": "resolved", "signature": {"name": "str.contains", "label": "str.contains(text: string, substring: string) -> boolean", "active_parameter": 1}}
+    },
+    {
+      "name": "plain-sql",
+      "operation": "complete",
+      "source_template": "        name: db\n        action: inspect\n        args:\n          text: 'SELECT str.|CURSOR| FROM T'\n",
+      "expect": {"status": "resolved", "items": [], "signature": null, "required_edit": null}
+    },
+    {
+      "name": "explicit-required",
+      "operation": "required-arguments",
+      "source_template": "        name: db\n        action: inspect\n        args:|CURSOR|\n          limit: 5\n",
+      "expect": {"status": "resolved", "required_missing_names": ["text"], "preserved_source": "          limit: 5\n"}
+    }
+  ]
+}

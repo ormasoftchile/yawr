@@ -1,0 +1,216 @@
+{
+  "name": "yawr-preview",
+  "displayName": "Yawr Runbook Preview",
+  "description": "Preview Yawr runbooks (.runbook.yaml) as a structural graph in VS Code.",
+  "version": "0.2.8",
+  "yawrCandidate": {
+    "label": "p0-blocked-child-forwarding-review",
+    "promotion": "not-approved",
+    "runtimeBuild": "p0-typed-results-rc.2",
+    "runtimeSourceID": "sha256:139e545180c569644c4d744604426ebd6646576aa361b8bd3c71437e22421921",
+    "runtimeSHA256": "a640f1b4189f8cdb7d711fae475163ee1925fddcfc4f20406bb58aa3f6be84e2",
+    "markdown": "paused"
+  },
+  "publisher": "ormasoftchile",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ormasoftchile/yawr.git"
+  },
+  "engines": {
+    "vscode": "^1.137.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:yaml",
+    "onCommand:yawr.preview",
+    "onCommand:yawr.previewGraph",
+    "onCommand:yawr.validateInputs",
+    "onCommand:yawr.showServerLog",
+    "onCommand:yawr.showHighlightingDiagnostics",
+    "onCommand:yawr.insertRequiredArguments",
+    "onChatParticipant:yawr.chat"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "yawr.insertRequiredArguments",
+        "title": "Yawr: Insert Missing Required Arguments"
+      },
+      {
+        "command": "yawr.showHighlightingDiagnostics",
+        "title": "Yawr: Show Highlighting Diagnostics"
+      },
+      {
+        "command": "yawr.preview",
+        "title": "Yawr: Open Runbook Preview",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "yawr.previewGraph",
+        "title": "Yawr: Open Runbook Graph (React Flow)",
+        "icon": "$(type-hierarchy-sub)"
+      },
+      {
+        "command": "yawr.showServerLog",
+        "title": "Yawr: Show Run Log"
+      },
+      {
+        "command": "yawr.validateInputs",
+        "title": "Yawr: Validate Runbook Inputs (Dry Run)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "yawr.preview",
+          "when": "resourceFilename =~ /\\.runbook\\.yaml$/",
+          "group": "navigation@2"
+        },
+        {
+          "command": "yawr.previewGraph",
+          "when": "resourceFilename =~ /\\.runbook\\.yaml$/",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "yawr.chat",
+        "name": "yawr",
+        "description": "Yawr runbook assistant. Use /arm-mcp to arm the MCP bridge with a tool invocation token.",
+        "commands": [
+          {
+            "name": "run",
+            "description": "Run a runbook in-handler and drive MCP tool calls live. Usage: @yawr /run <runbook.yaml> [key=val ...]"
+          },
+          {
+            "name": "arm-mcp",
+            "description": "Diagnostic only: capture a tool invocation token (causes VS Code to start MCP servers ~60s). Does NOT authorize deferred runs; use /run instead."
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Yawr Preview",
+      "properties": {
+        "yawr.autocomplete.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Complete offline tool references, actions, argument keys and core-selected expression functions. Independent of highlighting; YAML services remain active. Required arguments are inserted only by the explicit command."
+        },
+        "yawr.highlighting.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight tool-declared SQL, KQL and PowerShell and core-selected authored GXL/GIS expressions offline. YAML language services remain active."
+        },
+        "yawr.highlighting.developmentHelperPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Development only: absolute path to the shared offline authoring/presentation helper. Each feature verifies its independent capabilities. Empty uses the matching packaged helper, independently of yawr.binaryPath."
+        },
+        "yawr.packageMap": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Path used to resolve the package map passed to direct `yawr run` execution. Absolute or relative to the active runbook's project root. When this points to `*.serve-package-map.yaml`, a sibling `*.package-map.yaml` is preferred when present. Leave empty to use the project-root convention (`package-map.yaml`)."
+        },
+        "yawr.mcpBridge.toolNameOverrides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "markdownDescription": "Override the registered MCP tool name for a logical `tool/action` key. Use this to correct a name mismatch in a live session without a code change or release. Example: `{ \"tsg-recommendation/recommend\": \"my-org-tsg-recommend\" }`"
+        },
+        "yawr.binaryPath": {
+          "type": "string",
+          "default": "yawr",
+          "scope": "resource",
+          "description": "Path to the Yawr CLI binary used for offline previews."
+        },
+        "yawr.preview.nodeStyle": {
+          "type": "string",
+          "scope": "resource",
+          "enum": [
+            "smooth-curves",
+            "minimalist",
+            "header-badges"
+          ],
+          "enumDescriptions": [
+            "Option 3: Modern Bauhaus smooth curves with continuous bezier geometry (default)",
+            "Option 1: Linear / Raycast dark minimalist with soft chamfers and side rails",
+            "Option 2: Vercel / Temporal workflow canvas with shape-coded header badges"
+          ],
+          "default": "smooth-curves",
+          "description": "Visual stereotype style for the React Flow runbook graph preview: smooth-curves (default), minimalist, or header-badges."
+        },
+        "yawr.preview.openLocation": {
+          "type": "string",
+          "scope": "resource",
+          "enum": [
+            "beside",
+            "sameGroup"
+          ],
+          "enumDescriptions": [
+            "Open the React Flow preview in an editor group beside the runbook.",
+            "Open the React Flow preview as a tab in the runbook's editor group."
+          ],
+          "default": "sameGroup",
+          "description": "Controls where the React Flow runbook preview opens."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "shiki": "3.12.2",
+    "yaml": "2.8.1"
+  },
+  "scripts": {
+    "compile": "npm run compile:extension && npm run compile:webview && npm run compile:highlighting",
+    "compile:highlighting": "node scripts/build-highlighting.mjs",
+    "package:helper": "node scripts/package-helper.mjs",
+    "compile:extension": "tsc -p ./",
+    "compile:webview": "tsc -p tsconfig.webview.json --noEmit && esbuild webview/graph.tsx --bundle --format=iife --platform=browser --target=es2022 --outfile=media/graph.js",
+    "compile:test": "tsc -p tsconfig.test.json",
+    "pretest": "npm run compile",
+    "test": "node --test --test-timeout=5000 test/*.test.js",
+    "test:cross-repo": "npm run compile:extension && node --test test/crossRepoHostActionWire.js",
+    "test:authoring:core": "npm run compile:extension && node --test --test-concurrency=1 test/authoring-production.cjs test/authoring-pairs-production.cjs test/authoring-include-production.cjs",
+    "test:authoring:native": "npm run compile:extension && node scripts/test-authoring-native.cjs",
+    "test:e2e": "npm run compile && npm run compile:test && node scripts/run-vscode-test.mjs source",
+    "test:e2e:only": "vscode-test",
+    "test:e2e:vsix": "node scripts/run-vscode-test.mjs production-surface",
+    "watch": "tsc -w -p ./",
+    "vscode:prepublish": "npm run compile && node scripts/verify-packaged-helper.mjs",
+    "package": "vsce package --no-dependencies -o yawr-preview.vsix && node scripts/normalize-vsix.mjs yawr-preview.vsix",
+    "package:clean": "rm -rf out && npm run compile && npm run package"
+  },
+  "devDependencies": {
+    "@dagrejs/dagre": "1.1.4",
+    "@types/js-yaml": "^4.0.9",
+    "@types/mocha": "10.0.10",
+    "@types/node": "^20.11.0",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@types/vscode": "^1.95.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^2.32.0",
+    "dompurify": "3.4.14",
+    "esbuild": "0.28.2",
+    "jszip": "^3.10.1",
+    "lucide-react": "0.468.0",
+    "marked": "12.0.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "reactflow": "11.11.4",
+    "typescript": "^5.5.4"
+  }
+}

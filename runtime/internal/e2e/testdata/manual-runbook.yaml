@@ -1,0 +1,14 @@
+apiVersion: yawr.runbook/v1
+id: e2e-manual
+name: e2e-manual
+flow:
+  - step:
+      id: manual-step
+      type: approve
+      approvals:
+        roles: [operator]
+  - step:
+      id: after-manual
+      type: cli
+      command: echo
+      args: ["manual approved"]

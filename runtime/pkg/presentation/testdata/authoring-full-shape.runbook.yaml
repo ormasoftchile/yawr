@@ -1,0 +1,365 @@
+apiVersion: yawr.runbook/v1
+id: sample-full-shape
+name: Full source admission regression
+kind: composable
+toolRefs: [{name: sample-query, package: example.query-tools}]
+metadata:
+  source: sanitized fixture metadata
+  source_revision: sanitized fixture metadata
+  ir: sanitized fixture metadata
+  ordering: sanitized fixture metadata
+  timestamp_encoding: sanitized fixture metadata
+  contract: sanitized fixture metadata
+inputs:
+  environment: {type: string, required: true}
+  sample_server: {type: string, required: true}
+  sample_database: {type: string, required: true}
+  start_time: {type: string, required: true}
+  end_time: {type: string, required: true}
+outputs:
+  status: {type: string, enum: [observed, no-data, boundary, query-failed], value: '${sample_status}'}
+  boundary_code: {type: string, enum: [none, configuration-order-ambiguous, configuration-order-inconsistent, configuration-evidence-missing, pool-details-no-data], value: '${sample_boundary}'}
+  ordering_status: {type: string, enum: [not-applicable, single-configuration, ordered, ambiguous, inconsistent], value: '${sample_ordering}'}
+  pool_status: {type: string, enum: [not-applicable, observed, no-data, not-collected, query-failed, missing, mixed], value: '${sample_pool_status}'}
+  pool_id: {type: string, value: '${sample_pool_id}'}
+  service_tier: {type: string, enum: [general-purpose, business-critical, hyperscale, unknown], value: '${sample_tier}'}
+  zone_placement: {type: string, enum: [single-zone, availability-zones, unknown], value: '${sample_zone}'}
+  sample_server: {type: string, value: '${sample_server}'}
+  sample_database: {type: string, value: '${sample_database}'}
+  start_time: {type: string, value: '${start_time}'}
+  end_time: {type: string, value: '${end_time}'}
+  configuration_count: {type: integer, optional: true, value_expr: 'sample_raw_results[0].row_count'}
+  configuration_columns: {type: array, optional: true, value_expr: 'sample_raw_results[0].columns'}
+  configurations: {type: array, optional: true, value_expr: 'sample_raw_results[0].rows'}
+  observations: {type: array, value_expr: sample_observations}
+  configuration_order: {type: object, value_expr: 'sample_order_results[0]'}
+  pool_columns: {type: array, optional: true, value_expr: 'sample_legacy_pool[0].columns'}
+  pool_rows: {type: array, optional: true, value_expr: 'sample_legacy_pool[0].rows'}
+flow:
+  - iterate:
+      id: sample_initialize
+      over: initialize
+      as: sample_initialization
+      steps:
+        - step:
+            id: sample_initialize_scalars
+            type: noop
+            capture:
+              sample_status: query-failed
+              sample_boundary: none
+              sample_ordering: not-applicable
+              sample_pool_status: not-collected
+              sample_pool_id: ""
+              sample_tier: unknown
+              sample_zone: unknown
+              sample_count: "-1"
+              sample_any_pool_failed: "false"
+              sample_any_pool_missing: "false"
+              sample_any_pool_no_data: "false"
+      collect_values:
+        sample_order_results: {status: not-applicable, items: []}
+        sample_raw_results: {row_count: -1, columns: [], rows: []}
+        sample_legacy_pool: {columns: [], rows: []}
+  # Full-shape source fixture.
+  - iterate:
+      id: sample_initialize_rows
+      over: ""
+      as: sample_unused_initial_row
+      steps:
+        - step: {id: sample_unused_initial_step, type: noop}
+      collect_values:
+        sample_rows: '${sample_unused_initial_row}'
+        sample_columns: '${sample_unused_initial_row}'
+        sample_observations: '${sample_unused_initial_row}'
+        sample_item_pool_columns: '${sample_unused_initial_row}'
+        sample_item_pool_rows: '${sample_unused_initial_row}'
+  - step:
+      id: sample_validate_target
+      type: assert
+      title: Sample operation
+      assert:
+        - {type: matches, subject: '${sample_server}', expected: '^[A-Za-z0-9][A-Za-z0-9-]{0,62}$'}
+        - {type: matches, subject: '${sample_database}', expected: '^[A-Za-z0-9_][A-Za-z0-9_. -]{0,127}$'}
+        - {type: matches, subject: '${environment}', expected: '^[A-Za-z0-9][A-Za-z0-9_./ -]{0,199}$'}
+        - {type: matches, subject: '${start_time}', expected: &sample_utc '^(?:[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:[0-9]{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29) (?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'}
+        - {type: matches, subject: '${end_time}', expected: *sample_utc}
+        - {type: eq, subject: '${not str.startsWith(start_time, "0000") and not str.startsWith(end_time, "0000") and date.compare(start_time, end_time) < 0}', expected: "true"}
+  - step:
+      id: sample100
+      type: tool
+      title: Sample operation
+      tool:
+        name: sample-query
+        action: query
+        args:
+          environment: '${environment}'
+          timeout: "120"
+          query: |
+            SampleTable
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+            | where sample == "${sample_value}"
+      capture:
+        sample_query_success: outputs.success
+        sample_count: outputs.row_count
+        sample_columns: outputs.columns
+        sample_rows: outputs.rows
+  - iterate:
+      id: sample_retain_query_result
+      over: retain
+      as: sample_result_operation
+      steps:
+        - step: {id: sample_result_observed, type: noop}
+      collect_values:
+        sample_raw_results:
+          row_count: '${sample_count}'
+          columns: '${sample_columns}'
+          rows: '${sample_rows}'
+  - step:
+      id: sample_envelope
+      type: branch
+      branches:
+        - condition: sample_query_success != true
+          steps:
+            - step: {id: sample_query_unsuccessful, type: end, outcome: {category: failed, code: sample100-unsuccessful}}
+  - step:
+      id: sample_validate_row_count
+      type: assert
+      assert:
+        - {type: eq, subject: '${sample_count >= 0 and sample_count == len(sample_rows) and sample_count <= 256}', expected: "true"}
+  - step:
+      id: sample_cardinality
+      type: branch
+      branches:
+        - condition: sample_count == 0
+          steps:
+            - step: {id: sample_no_data_status, type: noop, capture: {sample_status: no-data, sample_pool_status: not-applicable}}
+            - step: {id: sample_no_data, type: end, outcome: {category: no-data, code: sample100-no-data}}
+  - step:
+      id: sample_required_columns
+      type: assert
+      assert:
+        - {type: eq, subject: '${list.contains(sample_columns, "sample_instance") and list.contains(sample_columns, "sample_database_id") and list.contains(sample_columns, "sample_group_id") and list.contains(sample_columns, "sample_application") and list.contains(sample_columns, "sample_partition") and list.contains(sample_columns, "sample_physical_id") and list.contains(sample_columns, "sample_id") and list.contains(sample_columns, "sample_level") and list.contains(sample_columns, "sample_zone") and list.contains(sample_columns, "sample_ring") and list.contains(sample_columns, "sample_usage") and list.contains(sample_columns, "set_sample_state") and list.contains(sample_columns, "min_PreciseTimeStamp") and list.contains(sample_columns, "max_PreciseTimeStamp")}', expected: "true"}
+  - iterate:
+      id: sample_configurations
+      over: sample_rows
+      as: sample_configuration
+      steps:
+        - step:
+            id: sample_item_initialize
+            type: noop
+            capture:
+              sample_item_status: query-failed
+              sample_item_pool_status: not-applicable
+              sample_item_pool_attempted: "false"
+              sample_item_pool_id_echo: ""
+              sample_item_tier: unknown
+              sample_item_zone: unknown
+        - iterate:
+            id: sample_item_initialize_rows
+            over: ""
+            as: sample_unused_pool_row
+            steps:
+              - step: {id: sample_unused_pool_step, type: noop}
+            collect_values:
+              sample_item_pool_columns: '${sample_unused_pool_row}'
+              sample_item_pool_rows: '${sample_unused_pool_row}'
+        - step:
+            id: sample_item_time_evidence
+            type: assert
+            assert:
+              - {type: eq, subject: '${date.compare(sample_configuration.min_PreciseTimeStamp, sample_configuration.max_PreciseTimeStamp) <= 0}', expected: "true"}
+        - step:
+            id: sample_item_zone_type
+            type: assert
+            title: Sample operation
+            assert:
+              - {type: eq, subject: '${sample_configuration.sample_zone == null or sample_configuration.sample_zone == true or sample_configuration.sample_zone == false}', expected: "true"}
+        - step:
+            id: sample_item_service_tier
+            type: branch
+            branches:
+              - condition: sample_configuration.sample_level != null and str.startsWith(sample_configuration.sample_level, "GP_")
+                steps:
+                  - step: {id: sample_item_general_purpose, type: noop, capture: {sample_item_tier: general-purpose}}
+              - condition: sample_configuration.sample_level != null and (str.startsWith(sample_configuration.sample_level, "BC_") or str.contains(sample_configuration.sample_level, "BC"))
+                steps:
+                  - step: {id: sample_item_business_critical, type: noop, capture: {sample_item_tier: business-critical}}
+              - condition: sample_configuration.sample_level != null and str.startsWith(sample_configuration.sample_level, "HS_")
+                steps:
+                  - step: {id: sample_item_hyperscale, type: noop, capture: {sample_item_tier: hyperscale}}
+        - step:
+            id: sample_item_zone_placement
+            type: branch
+            branches:
+              - condition: sample_configuration.sample_zone == null
+                steps:
+                  - step: {id: sample_item_zone_unknown, type: noop, capture: {sample_item_zone: unknown}}
+              - condition: sample_configuration.sample_zone == true
+                steps:
+                  - step: {id: sample_item_zones, type: noop, capture: {sample_item_zone: availability-zones}}
+              - condition: sample_configuration.sample_zone == false
+                steps:
+                  - step: {id: sample_item_single_zone, type: noop, capture: {sample_item_zone: single-zone}}
+        - step: {id: sample_item_configuration_observed, type: noop, capture: {sample_item_status: observed}}
+        - step:
+            id: sample_item_legacy_scope
+            type: branch
+            branches:
+              - condition: sample_count == 1
+                steps:
+                  - step:
+                      id: sample_single_configuration_values
+                      type: noop
+                      capture: {sample_tier: '${sample_item_tier}', sample_zone: '${sample_item_zone}'}
+                  - step:
+                      id: sample_single_pool_identity
+                      type: branch
+                      branches:
+                        - condition: sample_configuration.sample_group_id != null
+                          steps:
+                            - step: {id: sample_single_pool_id, type: noop, capture: {sample_pool_id: '${sample_configuration.sample_group_id}'}}
+        - step:
+            id: sample_item_pool_gate
+            type: branch
+            continue_on_fail: true
+            branches:
+              - condition: sample_configuration.sample_group_id == null
+                steps:
+                  - step: {id: sample_item_identity_missing, type: noop, capture: {sample_item_status: boundary, sample_item_pool_status: missing}}
+              - condition: sample_configuration.sample_group_id != ""
+                steps:
+                  - step: {id: sample_item_pool_attempt, type: noop, capture: {sample_item_pool_status: query-failed, sample_item_pool_attempted: "true"}}
+                  - step:
+                      id: sample_item_pool_query
+                      type: tool
+                      title: Sample operation
+                      tool:
+                        name: unbound-sample
+                        action: unbound-action
+                        args:
+                          environment: '${environment}'
+                          sample_server: '${sample_server}'
+                          sample_group_id: '${sample_configuration.sample_group_id}'
+                          start_time: '${start_time}'
+                          end_time: '${end_time}'
+                      capture:
+                        sample_item_pool_status: outputs.status
+                        sample_item_pool_id_echo: outputs.sample_group_id
+                        sample_item_pool_columns: outputs.columns
+                        sample_item_pool_rows: outputs.rows
+                  - step:
+                      id: sample_item_pool_completion
+                      type: assert
+                      assert:
+                        - {type: eq, subject: '${sample_item_pool_id_echo == sample_configuration.sample_group_id}', expected: "true"}
+                        - {type: eq, subject: '${sample_item_pool_status == "observed" or sample_item_pool_status == "no-data" or sample_item_pool_status == "query-failed"}', expected: "true"}
+        - step:
+            id: sample_item_pool_outcome
+            type: branch
+            branches:
+              - condition: sample_item_pool_status == "query-failed"
+                steps:
+                  - step: {id: sample_item_failed, type: noop, capture: {sample_item_status: query-failed, sample_any_pool_failed: "true"}}
+              - condition: sample_item_pool_status == "missing"
+                steps:
+                  - step: {id: sample_item_missing, type: noop, capture: {sample_item_status: boundary, sample_any_pool_missing: "true"}}
+              - condition: sample_item_pool_status == "no-data"
+                steps:
+                  - step: {id: sample_item_empty, type: noop, capture: {sample_item_status: boundary, sample_any_pool_no_data: "true"}}
+        - step:
+            id: sample_pool_aggregate
+            type: branch
+            branches:
+              - condition: sample_pool_status == "not-collected"
+                steps:
+                  - step: {id: sample_first_pool_status, type: noop, capture: {sample_pool_status: '${sample_item_pool_status}'}}
+              - condition: sample_pool_status != sample_item_pool_status
+                steps:
+                  - step: {id: sample_mixed_pool_status, type: noop, capture: {sample_pool_status: mixed}}
+        - step:
+            id: sample_legacy_pool_values
+            type: branch
+            branches:
+              - condition: sample_count == 1
+                steps:
+                  - iterate:
+                      id: sample_capture_legacy_pool
+                      over: retain
+                      as: sample_legacy_operation
+                      steps:
+                        - step: {id: sample_legacy_single_pool, type: noop}
+                      collect_values:
+                        sample_legacy_pool:
+                          columns: '${sample_item_pool_columns}'
+                          rows: '${sample_item_pool_rows}'
+      collect_values:
+        sample_observations:
+          configuration: '${sample_configuration}'
+          status: '${sample_item_status}'
+          service_tier: '${sample_item_tier}'
+          zone_placement: '${sample_item_zone}'
+          pool:
+            sample_group_id: '${sample_configuration.sample_group_id}'
+            status: '${sample_item_pool_status}'
+            query_attempted: '${sample_item_pool_attempted == "true"}'
+            row_count: '${len(sample_item_pool_rows)}'
+            columns: '${sample_item_pool_columns}'
+            rows: '${sample_item_pool_rows}'
+  - step:
+      id: sample_association_completion
+      type: assert
+      assert:
+        - {type: eq, subject: '${len(sample_observations) == sample_count}', expected: "true"}
+  - iterate:
+      id: sample_order_configurations
+      over: order
+      as: sample_order_operation
+      steps:
+        - step: {id: sample_order_source_rule, type: noop}
+      collect_values:
+        sample_order_results: >-
+          ${list.order(sample_observations,
+          'date.diffSeconds(left.configuration.min_PreciseTimeStamp, right.configuration.min_PreciseTimeStamp) < -1800 or
+          (date.diffSeconds(left.configuration.min_PreciseTimeStamp, right.configuration.min_PreciseTimeStamp) >= -1800 and
+          date.diffSeconds(left.configuration.min_PreciseTimeStamp, right.configuration.min_PreciseTimeStamp) <= 1800 and
+          date.compare(left.configuration.max_PreciseTimeStamp, right.configuration.max_PreciseTimeStamp) < 0)')}
+  - step:
+      id: sample_order_status
+      type: noop
+      capture: {sample_ordering: '${sample_order_results[0].status}'}
+  - step:
+      id: sample_single_order_status
+      type: branch
+      branches:
+        - condition: sample_count == 1
+          steps:
+            - step: {id: sample_single_configuration_order, type: noop, capture: {sample_ordering: single-configuration}}
+  - step:
+      id: sample_final_status
+      type: branch
+      branches:
+        - condition: sample_any_pool_failed == "true"
+          steps:
+            - step: {id: sample_pool_query_failed_status, type: noop, capture: {sample_status: query-failed}}
+        - condition: sample_ordering == "inconsistent"
+          steps:
+            - step: {id: sample_inconsistent_status, type: noop, capture: {sample_status: boundary, sample_boundary: configuration-order-inconsistent}}
+        - condition: sample_ordering == "ambiguous"
+          steps:
+            - step: {id: sample_ambiguous_status, type: noop, capture: {sample_status: boundary, sample_boundary: configuration-order-ambiguous}}
+        - condition: sample_any_pool_missing == "true"
+          steps:
+            - step: {id: sample_missing_identity_status, type: noop, capture: {sample_status: boundary, sample_boundary: configuration-evidence-missing}}
+        - condition: sample_any_pool_no_data == "true"
+          steps:
+            - step: {id: sample_missing_pool_details_status, type: noop, capture: {sample_status: boundary, sample_boundary: pool-details-no-data}}
+        - else:
+          steps:
+            - step: {id: sample_observed_status, type: noop, capture: {sample_status: observed}}

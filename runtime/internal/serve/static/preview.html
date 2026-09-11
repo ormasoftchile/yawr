@@ -1,0 +1,3568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>yawr preview</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  /* Theme-aware variables. When embedded in a VS Code webview the
+     parent applies --vscode-* tokens to <html>; when standalone we
+     fall back to GitHub-dark-ish defaults. */
+  :root {
+    --bg:           var(--vscode-editor-background, #0d1117);
+    --bg-alt:       var(--vscode-editorWidget-background, #161b22);
+    --fg:           var(--vscode-editor-foreground, #c9d1d9);
+    --fg-muted:     var(--vscode-descriptionForeground, #8b949e);
+    --border:       var(--vscode-editorWidget-border, #30363d);
+    --accent:       var(--vscode-button-background, #238636);
+    --accent-hover: var(--vscode-button-hoverBackground, #2ea043);
+    --accent-fg:    var(--vscode-button-foreground, #ffffff);
+    --danger:       var(--vscode-errorForeground, #da3633);
+    --danger-bg:    var(--vscode-inputValidation-errorBackground, #481a1a);
+    --danger-border: var(--vscode-inputValidation-errorBorder, #7d2d2d);
+    --warn:         var(--vscode-editorWarning-foreground, #d29922);
+    --ok:           var(--vscode-charts-green, #2ea043);
+    --inspect:      var(--vscode-charts-blue, #58a6ff);
+  }
+  html, body, #root { margin: 0; height: 100%; width: 100%; font-family: var(--vscode-font-family, -apple-system, system-ui, sans-serif); background: var(--bg); color: var(--fg); }
+  #root { display: flex; flex-direction: column; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 14px; background: var(--bg-alt); border-bottom: 1px solid var(--border); font-size: var(--vscode-font-size, 13px); }
+  header input { flex: 1; background: var(--bg); color: var(--fg); border: 1px solid var(--border); padding: 6px 8px; border-radius: 4px; font-family: inherit; font-size: inherit; }
+  header button { background: var(--accent); border: none; color: var(--accent-fg); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: inherit; }
+  header button:hover { background: var(--accent-hover); }
+  header button:disabled { background: var(--border); color: var(--fg-muted); cursor: not-allowed; }
+  header button.danger { background: var(--danger); }
+  header button.toggle { background: transparent; border: 1px solid var(--border); color: var(--fg-muted); padding: 4px 10px; }
+  header button.toggle.on { background: var(--bg); color: var(--fg); border-color: var(--accent); }
+  header .runID { color: var(--fg-muted); }
+  header .conn { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--fg-muted); }
+  header .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-muted); }
+  header .conn.connected .dot { background: #2ea043; }
+  header .conn.connecting .dot { background: #d29922; animation: pulse 1.2s ease-in-out infinite; }
+  header .conn.reconnecting .dot { background: #d29922; animation: pulse 1.2s ease-in-out infinite; }
+  header .conn.closed .dot { background: var(--fg-muted); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .body { flex: 1; min-height: 0; display: flex; flex-direction: row; }
+  .graph { flex: 1; min-width: 0; min-height: 0; position: relative; }
+  .empty { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--fg-muted); font-size: 14px; }
+
+  .prose { width: 360px; min-width: 280px; max-width: 50%; border-left: 1px solid var(--border); background: var(--bg-alt); overflow: auto; padding: 14px 18px; font-size: 13px; line-height: 1.5; }
+  .prose h1 { font-size: 15px; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .prose h2, .prose h3 { font-size: 13px; margin: 14px 0 6px; color: var(--fg-muted); }
+  .prose ol, .prose ul { padding-left: 22px; margin: 4px 0; }
+  .prose ol ol, .prose ul ul, .prose ol ul, .prose ul ol { padding-left: 18px; }
+  .prose li { padding: 2px 4px; border-radius: 4px; margin: 2px -4px; transition: background 120ms; }
+  .prose li[data-step-id]:hover { background: rgba(127,127,127,0.08); }
+  .prose li.selected { background: rgba(56,139,253,0.16); outline: 1px solid var(--inspect); }
+  .prose li.running   > code:first-of-type, .prose li.running   > strong:first-of-type { color: var(--warn); }
+  .prose li.completed > code:first-of-type, .prose li.completed > strong:first-of-type { color: var(--ok); }
+  .prose li.failed    > code:first-of-type, .prose li.failed    > strong:first-of-type { color: var(--danger); }
+  .prose li.skipped   { opacity: 0.6; }
+  .prose code { background: rgba(127,127,127,0.12); padding: 1px 4px; border-radius: 3px; font-family: var(--vscode-editor-font-family, ui-monospace, monospace); font-size: 12px; }
+  .prose strong { color: var(--fg); }
+  .prose em { color: var(--fg-muted); }
+
+  .panel { width: 360px; min-width: 280px; max-width: 50%; border-left: 1px solid var(--border); background: var(--bg-alt); display: flex; flex-direction: column; }
+  .panel .panelHeader { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .panel .panelHeader h3 { margin: 0; font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .panel .panelHeader .nav { background: transparent; border: 1px solid var(--border); color: var(--fg); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .panel .panelHeader .nav:disabled { opacity: 0.35; cursor: not-allowed; }
+  .panel .panelBody { flex: 1; overflow: auto; padding: 12px 14px; font-size: 12px; }
+  .panel .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--fg-muted); margin-left: 4px; }
+  .panel .pill.running   { color: var(--warn);   border-color: var(--warn); }
+  .panel .pill.completed { color: var(--ok);     border-color: var(--ok); }
+  .panel .pill.failed    { color: var(--danger); border-color: var(--danger); }
+  .panel dt { color: var(--fg-muted); margin-top: 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .panel dd { margin: 2px 0 0; font-family: var(--vscode-editor-font-family, ui-monospace, monospace); word-break: break-word; }
+  .panel .interactionInline { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .panel .interactionInline h4 { margin: 0 0 8px; font-size: 13px; color: var(--accent); }
+  .queryResult { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .queryResult h4 { margin: 0 0 8px; font-size: 13px; color: var(--ok); }
+  .queryResult.error h4 { color: var(--danger); }
+  .queryMeta { color: var(--fg-muted); margin-bottom: 8px; }
+  .queryTableWrap { max-width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+  .queryTable { border-collapse: collapse; width: 100%; font-family: var(--vscode-editor-font-family, ui-monospace, monospace); font-size: 11px; }
+  .queryTable th, .queryTable td { border-bottom: 1px solid var(--border); padding: 4px 6px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+  .queryTable th { color: var(--fg-muted); background: rgba(127,127,127,0.08); }
+  .queryRaw { margin-top: 8px; }
+  .queryRaw pre { max-height: 180px; overflow: auto; background: var(--bg); border: 1px solid var(--border); padding: 8px; border-radius: 4px; }
+  .yawr-code { margin: 10px 0; }
+  .yawr-code figcaption { color: var(--fg-muted); font-size: 11px; }
+  .yawr-code pre { white-space: pre; overflow: auto; max-height: 360px; }
+  .yawr-code button { float: right; }
+
+  .errorBar { position: absolute; left: 12px; right: 12px; bottom: 12px; background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--fg); padding: 10px 14px; border-radius: 6px; font-family: var(--vscode-editor-font-family, ui-monospace, monospace); font-size: 12px; white-space: pre-wrap; z-index: 9; }
+
+  .interaction h3 { margin: 0 0 4px; font-size: 14px; }
+  .interaction .step { color: var(--fg-muted); font-size: 12px; margin-bottom: 12px; }
+  .interaction label { display: block; font-size: 12px; margin-bottom: 4px; color: var(--fg); }
+  .interaction input[type=text], .interaction input[type=number], .interaction input[type=password], .interaction input[type=date], .interaction input[type=datetime-local], .interaction input[type=email], .interaction input[type=url], .interaction textarea, .interaction select { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--border); padding: 6px 8px; border-radius: 4px; font-family: inherit; font-size: 13px; margin-bottom: 4px; }
+  .interaction button { background: var(--accent); border: none; color: var(--accent-fg); padding: 6px 14px; border-radius: 4px; cursor: pointer; }
+  .interaction button:hover { background: var(--accent-hover); }
+  .interaction button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .interaction .opt { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .interaction .field { margin-bottom: 12px; }
+  .interaction .hint { font-size: 11px; color: var(--fg-muted); margin-top: 2px; }
+  .interaction .err { font-size: 11px; color: var(--danger-border, #f48771); margin-top: 2px; }
+  .interaction .req { color: var(--danger-border, #f48771); margin-left: 2px; }
+  .interaction .check { display: flex; gap: 6px; align-items: center; }
+  .interaction .check input { width: auto; margin: 0; }
+  .debug-breakpoint-marker { color: #f85149; font-size: 11px; line-height: 1; margin-left: auto; }
+  .debug-override-marker { color: #d29922; font-size: 9px; font-weight: 700; margin-left: auto; }
+  .debug-controls { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .debug-controls h4, .debug-break h4 { margin: 0 0 8px; font-size: 12px; color: var(--fg); }
+  .debug-controls label { display: flex; align-items: center; gap: 6px; margin: 6px 0; color: var(--fg); }
+  .debug-controls input { margin: 0; }
+  .debug-break { margin-top: 2px; }
+  .debug-break .breadcrumb { margin-bottom: 10px; color: var(--fg-muted); font-family: var(--vscode-editor-font-family, ui-monospace, monospace); word-break: break-word; }
+  .debug-break pre { max-height: 180px; overflow: auto; background: var(--bg); border: 1px solid var(--border); padding: 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-word; }
+  .debug-break textarea { min-height: 110px; font-family: var(--vscode-editor-font-family, ui-monospace, monospace); }
+  .debug-break .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .debug-break button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+  .debug-break button.danger { background: var(--danger); }
+  .debug-audit { margin-top: 12px; padding-top: 10px; border-top: 1px solid #d29922; }
+  .debug-audit h4 { margin: 0 0 8px; color: #d29922; font-size: 12px; }
+  .debug-audit pre { max-height: 180px; overflow: auto; background: var(--bg); border: 1px solid var(--border); padding: 8px; border-radius: 4px; white-space: pre-wrap; }
+
+  /* =========================================================================
+     Multi-Style Visual Stereotypes:
+     - Option 3: "smooth-curves" (Modern Bauhaus, Default)
+     - Option 1: "minimalist" (Linear / Raycast Dark Minimalist)
+     - Option 2: "header-badges" (Vercel / Temporal Workflow Canvas)
+     ========================================================================= */
+
+  header select.style-picker {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    outline: none;
+  }
+  header select.style-picker:hover {
+    border-color: var(--accent);
+  }
+
+  /* Base Node (Styles: smooth-curves & minimalist) */
+  .node {
+    box-sizing: border-box;
+    position: relative;
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    padding: 0;
+    transition: transform 120ms ease;
+  }
+  .node:hover {
+    transform: translateY(-1px);
+  }
+  .node.selected { filter: drop-shadow(0 0 3px var(--inspect)); }
+  .node.pending {
+    opacity: 0.9;
+  }
+
+  .node-shape-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .node-shape-svg * {
+    vector-effect: non-scaling-stroke;
+    fill: #0c1219;
+    stroke: #2b3648;
+    stroke-width: 1.5;
+    transition: stroke 120ms, fill 120ms, stroke-width 120ms;
+  }
+  .node:hover .node-shape-svg * {
+    stroke: var(--accent);
+  }
+  .node.selected .node-shape-svg * {
+    stroke: var(--inspect) !important;
+    stroke-width: 2.5 !important;
+  }
+  .node.running .node-shape-svg * {
+    stroke: var(--warn) !important;
+    stroke-width: 2 !important;
+  }
+  .node.delaying .node-shape-svg * {
+    stroke: var(--warn) !important;
+    stroke-dasharray: 4,3 !important;
+    animation: yawr-delay-pulse 1.4s ease-in-out infinite;
+  }
+  .node.completed .node-shape-svg * {
+    stroke: var(--ok) !important;
+  }
+  .node.failed .node-shape-svg * {
+    stroke: var(--danger) !important;
+  }
+  .react-flow__edge.edge-running .react-flow__edge-path {
+    stroke: var(--warn);
+    stroke-width: 2.25;
+    stroke-dasharray: 5 4;
+  }
+  .react-flow__edge.edge-completed .react-flow__edge-path {
+    stroke: var(--ok);
+    stroke-width: 2.25;
+  }
+  .react-flow__edge.edge-failed .react-flow__edge-path {
+    stroke: var(--danger);
+    stroke-width: 2.25;
+  }
+  .branch-merge-node {
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border: 2px solid var(--fg-muted);
+    border-radius: 50%;
+    background: var(--bg);
+  }
+
+  /* Node content alignment and layout */
+  .node-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 6px 14px;
+    color: var(--fg);
+    font-size: 12px;
+    pointer-events: all;
+  }
+  .node .node-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin-bottom: 2px;
+  }
+  .node .icon-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .node .kind-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .node .id {
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.25;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.1px;
+  }
+  .node .title {
+    font-size: 10.5px;
+    color: var(--fg-muted);
+    max-width: 85%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+  .node .dynamic-subtitle {
+    color: var(--fg-muted);
+    font-size: 9px;
+    margin-top: 2px;
+    font-style: italic;
+    opacity: 0.85;
+  }
+  .node .status {
+    font-size: 10px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: center;
+  }
+  .node .status::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* --- Option 3: Smooth Curves (Default) --- */
+  .node.style-smooth-curves .node-shape-svg * {
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .node.style-smooth-curves.node-cli .node-shape-svg * { fill: #0a0e14; stroke: #33445c; }
+  .node.style-smooth-curves.node-cli .node-content { font-family: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Menlo, monospace); }
+  .node.style-smooth-curves.node-tool .node-shape-svg * { fill: #110e1a; stroke: #413259; }
+  .node.style-smooth-curves.node-include .node-shape-svg * { fill: #0a111c; stroke: #2e4566; }
+  .node.style-smooth-curves.node-include.dynamic-include .node-shape-svg rect { stroke-dasharray: 4,3; }
+  .node.style-smooth-curves.node-decision .node-shape-svg *,
+  .node.style-smooth-curves.node-branch .node-shape-svg *,
+  .node.style-smooth-curves.node-choice .node-shape-svg * { fill: #160e18; stroke: #4f2e4f; }
+  .node.style-smooth-curves.node-decision .node-content,
+  .node.style-smooth-curves.node-branch .node-content,
+  .node.style-smooth-curves.node-choice .node-content { padding: 10px 24px; }
+  .node.style-smooth-curves.node-collector .node-shape-svg * { fill: #09140e; stroke: #2a4c37; }
+  .node.style-smooth-curves.node-display .node-shape-svg * { fill: #09121c; stroke: #28445e; }
+  .node.style-smooth-curves.node-collector .node-content,
+  .node.style-smooth-curves.node-display .node-content { padding: 6px 20px; }
+  .node.style-smooth-curves.node-approve .node-shape-svg * { fill: #161009; stroke: #4f3922; }
+  .node.style-smooth-curves.node-assert .node-shape-svg * { fill: #09140e; stroke: #2a4c37; }
+  .node.style-smooth-curves.node-approve .node-content,
+  .node.style-smooth-curves.node-assert .node-content { padding: 6px 22px; }
+  .node.style-smooth-curves.node-end .node-shape-svg * { fill: #111417; stroke: #373f47; }
+  .node.style-smooth-curves.node-wait_for_event .node-shape-svg * { fill: #141108; stroke: #473e1c; }
+  .node.style-smooth-curves.node-compensate .node-shape-svg * { fill: #160c0c; stroke: #542222; stroke-dasharray: 4,2; }
+  .node.style-smooth-curves.node-iterate .node-shape-svg * { fill: #141108; stroke: #473e1c; }
+  .node.style-smooth-curves.node-parallel .node-shape-svg * { fill: #0a111c; stroke: #2e4566; }
+  .node.style-smooth-curves.node-noop .node-shape-svg * { stroke: var(--border); fill: transparent; stroke-dasharray: 3,3; }
+  .node.style-smooth-curves.node-noop { opacity: 0.65; }
+  .node.style-smooth-curves.node-extension .node-shape-svg * { fill: #110e1a; stroke: #413259; stroke-dasharray: 4,3; }
+
+  /* --- Option 1: Linear / Raycast Minimalist --- */
+  .node.style-minimalist .kind-label { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; padding: 1px 5px; }
+  .node.style-minimalist.node-cli .node-shape-svg * { fill: #0b0e14; stroke: #2e3846; }
+  .node.style-minimalist.node-cli .node-shape-svg line { stroke: #388bfd; stroke-width: 3; }
+  .node.style-minimalist.node-cli .node-content { font-family: var(--vscode-editor-font-family, ui-monospace, monospace); }
+  .node.style-minimalist.node-tool .node-shape-svg * { fill: #111019; stroke: #2f2a40; }
+  .node.style-minimalist.node-tool .node-shape-svg line { stroke: #8957e5; stroke-width: 1.5; }
+  .node.style-minimalist.node-include .node-shape-svg * { fill: #0c121e; stroke: #253347; }
+  .node.style-minimalist.node-include .node-shape-svg line { stroke: #388bfd; stroke-width: 1.5; }
+  .node.style-minimalist.node-include.dynamic-include .node-shape-svg rect { stroke: #388bfd; stroke-dasharray: 4,3; }
+  .node.style-minimalist.node-decision .node-shape-svg *,
+  .node.style-minimalist.node-branch .node-shape-svg *,
+  .node.style-minimalist.node-choice .node-shape-svg * { fill: #141018; stroke: #3d2a3d; }
+  .node.style-minimalist.node-decision .node-content,
+  .node.style-minimalist.node-branch .node-content,
+  .node.style-minimalist.node-choice .node-content { padding: 7px 22px; }
+  .node.style-minimalist.node-collector .node-shape-svg * { fill: #0a130e; stroke: #213829; }
+  .node.style-minimalist.node-display .node-shape-svg * { fill: #0b121b; stroke: #203348; }
+  .node.style-minimalist.node-collector .node-content,
+  .node.style-minimalist.node-display .node-content { padding: 6px 18px; }
+  .node.style-minimalist.node-approve .node-shape-svg * { fill: #16110a; stroke: #3d2e1b; }
+  .node.style-minimalist.node-assert .node-shape-svg * { fill: #0a130e; stroke: #213829; }
+  .node.style-minimalist.node-approve .node-content,
+  .node.style-minimalist.node-assert .node-content { padding: 6px 18px; }
+  .node.style-minimalist.node-end .node-shape-svg * { fill: #121518; stroke: #2c3239; }
+  .node.style-minimalist.node-wait_for_event .node-shape-svg * { fill: #14120a; stroke: #36301a; }
+  .node.style-minimalist.node-compensate .node-shape-svg * { fill: #160c0c; stroke: #421c1c; stroke-dasharray: 4,2; }
+  .node.style-minimalist.node-iterate .node-shape-svg * { fill: #14120a; stroke: #36301a; }
+  .node.style-minimalist.node-parallel .node-shape-svg * { fill: #0c121e; stroke: #253347; }
+  .node.style-minimalist.node-noop .node-shape-svg * { stroke: var(--border); fill: transparent; stroke-dasharray: 3,3; }
+  .node.style-minimalist.node-noop { opacity: 0.65; }
+  .node.style-minimalist.node-extension .node-shape-svg * { fill: #111019; stroke: #2f2a40; stroke-dasharray: 4,3; }
+
+  /* --- Option 2: Vercel / Temporal Workflow Cards --- */
+  .node-v2 {
+    width: 196px;
+    box-sizing: border-box;
+    position: relative;
+    cursor: pointer;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .node-v2:hover {
+    transform: translateY(-1px);
+    border-color: var(--accent);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  }
+  .node-v2.pending { opacity: 0.9; }
+  .node-v2.selected { border-color: var(--inspect) !important; box-shadow: 0 0 0 2px var(--inspect) !important; }
+  .node-v2.running { border-color: var(--warn) !important; box-shadow: 0 0 0 1px var(--warn) !important; }
+  .node-v2.delaying { border-color: var(--warn) !important; border-style: dashed !important; animation: yawr-delay-pulse 1.4s ease-in-out infinite; }
+  .node-v2.completed { border-color: var(--ok) !important; }
+  .node-v2.failed { border-color: var(--danger) !important; }
+  .node-v2.selected { box-shadow: 0 0 0 2px var(--inspect) !important; }
+  .node-v2-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .header-shape-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--fg-muted);
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .header-icon { font-size: 10px; line-height: 1; }
+  .header-adornment { font-size: 8.5px; opacity: 0.7; margin-left: 2px; }
+  .node-v2-body {
+    padding: 6px 10px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .node-v2 .id {
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--fg);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.1px;
+  }
+  .node-v2 .title {
+    font-size: 10.5px;
+    color: var(--fg-muted);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+  .node-v2 .dynamic-subtitle {
+    color: var(--fg-muted);
+    font-size: 9px;
+    margin-top: 2px;
+    font-style: italic;
+    opacity: 0.8;
+  }
+  .node-v2 .status {
+    font-size: 10px;
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--fg-muted);
+  }
+  .node-v2 .status::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .node-v2.node-cli { background: #090d13; border-left: 3px solid #388bfd; }
+  .node-v2.node-cli .header-shape-pill { background: rgba(56,139,253,0.12); border-color: rgba(56,139,253,0.3); color: #58a6ff; }
+  .node-v2.node-cli .id { font-family: var(--vscode-editor-font-family, ui-monospace, monospace); }
+  .node-v2.node-decision, .node-v2.node-branch, .node-v2.node-choice { border-top: 2px solid #db61a2; }
+  .node-v2.node-decision .header-shape-pill,
+  .node-v2.node-branch .header-shape-pill,
+  .node-v2.node-choice .header-shape-pill {
+    background: rgba(219,97,162,0.12);
+    border-color: rgba(219,97,162,0.3);
+    color: #db61a2;
+    clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0 50%);
+    padding: 1px 8px;
+  }
+  .node-v2.node-include, .node-v2.node-tool { border-left: 2px solid #8957e5; border-right: 2px solid #8957e5; }
+  .node-v2.node-include .header-shape-pill { background: rgba(56,139,253,0.12); border-color: rgba(56,139,253,0.3); color: #58a6ff; }
+  .node-v2.node-tool .header-shape-pill { background: rgba(137,87,229,0.12); border-color: rgba(137,87,229,0.3); color: #bc8cff; }
+  .node-v2.node-approve, .node-v2.node-assert { border-top: 2px solid #f0883e; }
+  .node-v2.node-approve .header-shape-pill { background: rgba(240,136,62,0.12); border-color: rgba(240,136,62,0.3); color: #f0883e; border-radius: 2px 2px 8px 8px; }
+  .node-v2.node-assert .header-shape-pill { background: rgba(63,185,80,0.12); border-color: rgba(63,185,80,0.3); color: #3fb950; border-radius: 2px 2px 8px 8px; }
+  .node-v2.node-collector, .node-v2.node-display { border-left: 2px solid #3fb950; }
+  .node-v2.node-collector .header-shape-pill { background: rgba(63,185,80,0.12); border-color: rgba(63,185,80,0.3); color: #3fb950; transform: skewX(-8deg); }
+  .node-v2.node-display .header-shape-pill { background: rgba(121,192,255,0.12); border-color: rgba(121,192,255,0.3); color: #79c0ff; transform: skewX(-8deg); }
+  .node-v2.node-end { border-radius: 20px; text-align: center; }
+  .node-v2.node-end .node-v2-header { justify-content: center; }
+  .node-v2.node-end .node-v2-body { align-items: center; }
+  .node-v2.node-compensate { border: 1px dashed #f85149; }
+  .node-v2.node-compensate .header-shape-pill { background: rgba(248,81,73,0.12); border-color: rgba(248,81,73,0.3); color: #f85149; }
+  .node-v2.node-iterate { border-top: 2px dashed #e3b341; }
+  .node-v2.node-iterate .header-shape-pill { background: rgba(227,179,65,0.12); border-color: rgba(227,179,65,0.3); color: #e3b341; }
+  .node-v2.node-parallel { border-top: 2px solid #1f6feb; border-bottom: 2px solid #1f6feb; }
+  .node-v2.node-noop { opacity: 0.65; border-style: dotted; }
+
+  @keyframes yawr-delay-pulse { 0%,100% { box-shadow: 0 0 0 1px var(--warn) inset; } 50% { box-shadow: 0 0 0 1px transparent inset; } }
+
+  /* Frame boxes — translucent containers around grouped steps.
+     We style the React Flow wrapper directly so explicit width/height
+     set via node.style are honoured by the box-model without depending
+     on an inner div sizing trick. */
+  .react-flow__node-frameBox { padding: 0 !important; background: rgba(127,127,127,0.04); border: 1px dashed rgba(127,127,127,0.35); border-radius: 8px; pointer-events: none !important; box-shadow: none !important; cursor: default; }
+  .react-flow__node-frameBox.include-frame   { background: rgba(118,184,255,0.06); border-color: rgba(118,184,255,0.40); }
+  .react-flow__node-frameBox.compensate-body { background: rgba(248,81,73,0.05);  border-color: rgba(248,81,73,0.40); }
+  .react-flow__node-frameBox.iterate-body    { background: rgba(210,153,34,0.04); border-color: rgba(210,153,34,0.35); }
+  .react-flow__node-frameBox.parallel-branch { background: rgba(118,184,255,0.04); border-color: rgba(118,184,255,0.30); border-style: dotted; }
+  .react-flow__node-frameBox.branch-arm      { background: rgba(127,127,127,0.03); border-color: rgba(127,127,127,0.30); }
+  .frame-label { position: absolute; top: 4px; left: 10px; font-size: 11px; color: var(--fg-muted); background: var(--bg); padding: 0 6px; border-radius: 3px; line-height: 1.6; pointer-events: none; }
+
+  /* Region boxes — kit-declared overlays that group several yawr nodes
+     into a single domain-shaped unit (see specs/regions-v1.md). They
+     render under frames so they fully enclose nested structural groups. */
+  .react-flow__node-regionBox { padding: 0 !important; background: rgba(118,184,255,0.06); border: 1px solid rgba(118,184,255,0.45); border-radius: 8px; pointer-events: none !important; box-shadow: none !important; cursor: default; }
+  .react-flow__node-regionBox.op-ops-cli            { background: rgba(127,127,127,0.05); border-color: rgba(127,127,127,0.40); }
+  .react-flow__node-regionBox.op-ops-manual         { background: rgba(210,153,34,0.06); border-color: rgba(210,153,34,0.45); }
+  .react-flow__node-regionBox.op-ops-approval       { background: rgba(56,139,253,0.07); border-color: rgba(56,139,253,0.50); }
+  .react-flow__node-regionBox.op-ops-change-request { background: rgba(126,87,194,0.08); border-color: rgba(126,87,194,0.55); }
+  .react-flow__node-regionBox.op-ops-incident       { background: rgba(248,81,73,0.07);  border-color: rgba(248,81,73,0.55); }
+  .region-label { position: absolute; top: -10px; left: 12px; font-size: 11px; color: var(--fg); background: var(--bg-alt); padding: 1px 8px; border-radius: 3px; line-height: 1.6; pointer-events: none; border: 1px solid var(--border); font-weight: 600; }
+  .region-label .op { color: var(--fg-muted); font-weight: 400; margin-right: 6px; display: inline-block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+import { React, useEffect, useMemo, useState, useCallback, useRef, createRoot, ReactFlow,
+  Background, Controls, MiniMap, Handle, Position, ReactFlowProvider, useReactFlow, dagre, marked, DOMPurify } from '/preview/assets/vendor/preview.js';
+import { mountCode, mountAuthoredExpressions, highlightFences, decodeEnvelope, safeOutputs, validateDocumentPresentation } from '/preview/assets/highlighting/highlighter.js';
+
+const e = React.createElement;
+
+// Preview refresh policy: live runs may revalidate documents at most once
+// every 3000ms, never concurrently, and never automatically after a
+// terminal state, except for one final retained-presentation snapshot.
+// Operators can still click Load for a deliberate refresh.
+const PREVIEW_DOC_POLL_INTERVAL_MS = 3000;
+// Query result samples are intentionally bounded in both rows and rendered
+// text to keep served previews responsive for large query outputs.
+const QUERY_RESULT_SAMPLE_ROWS = 10;
+const QUERY_RESULT_CELL_CHAR_LIMIT = 120;
+const QUERY_RESULT_TOTAL_CHAR_BUDGET = 12000;
+const QUERY_RESULT_UI_TEXT_RESERVE = 5120;
+const QUERY_RESULT_DIAGNOSTIC_CHAR_BUDGET = 4096;
+const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
+const isTerminalRunStatus = (status) => TERMINAL_RUN_STATUSES.has(status);
+
+function edgeRuntimeClass(nodeState) {
+  if (!nodeState) return '';
+  if (nodeState.status === 'running' || nodeState.status === 'delaying') return 'edge-running';
+  if (nodeState.status === 'completed') return 'edge-completed';
+  if (nodeState.status === 'failed' || nodeState.status === 'cancelled') return 'edge-failed';
+  return '';
+}
+
+function branchArmRouteMatches(edge, state) {
+  if (edge.runtimeArmIndex === undefined || edge.runtimeArmIndex === null) return true;
+  const output = (state && state.output) || {};
+  if (output.matched_arm_index !== undefined && output.matched_arm_index !== null) {
+    return Number(output.matched_arm_index) === Number(edge.runtimeArmIndex);
+  }
+  if (edge.runtimeArmLabel && output.matched_arm !== undefined) {
+    return output.matched_arm === edge.runtimeArmLabel;
+  }
+  return null;
+}
+
+function edgeRuntimeState(edge, overlayNodes) {
+  const state = overlayNodes[edge.runtimeNodeID || edge.target];
+  if (!state) return null;
+  if (edge.runtimeExpectedStatus && state.status !== edge.runtimeExpectedStatus) {
+    if (edge.routeKind !== 'arm-entry' || !['running', 'failed'].includes(state.status)) return null;
+  }
+  const armMatch = branchArmRouteMatches(edge, state);
+  if (armMatch === false) return null;
+  if (armMatch === null) {
+    const fallbackState = overlayNodes[edge.runtimeFallbackNodeID];
+    if (!fallbackState || fallbackState.status === 'pending' || fallbackState.status === 'skipped') return null;
+    return fallbackState;
+  }
+  if (edge.routeKind === 'no-match' && state.status === 'skipped') return { ...state, status: 'completed' };
+  return state;
+}
+
+function visibleSelectedNodeID(selectedNode, selectionIsExplicit, runID, overlay, pending) {
+  if (!selectedNode) return null;
+  if (selectionIsExplicit || !runID || (pending && (pending.nodeID || pending.stepID) === selectedNode)) return selectedNode;
+  const nodeState = overlay && overlay.nodes ? overlay.nodes[selectedNode] : null;
+  if (!nodeState || nodeState.status === 'pending' || nodeState.status === 'skipped') return null;
+  return selectedNode;
+}
+
+function debugCallPathForNode(doc, nodeID) {
+  if (!doc || !nodeID) return [];
+  const direct = (doc.nodes || []).find(node => node.id === nodeID);
+  if (direct && direct.data && Array.isArray(direct.data.call_path)) {
+    return direct.data.call_path.map(stepID => ({ step_id: stepID }));
+  }
+  const nodes = doc.nodes || [];
+  const nodeByID = new Map(nodes.map(node => [node.id, node]));
+  const groupByID = new Map((doc.groups || []).map(group => [group.id, group]));
+  const frameByID = new Map((doc.frames || []).map(frame => [frame.id, frame]));
+  const ancestors = [];
+  const seen = new Set([nodeID]);
+  let current = nodeByID.get(nodeID);
+  while (current) {
+    const data = current.data || current;
+    const group = data.group_id ? groupByID.get(data.group_id) : null;
+    const frame = data.frame_id ? frameByID.get(data.frame_id) : null;
+    const parentID = (group && group.parent_node_id) || (frame && frame.parent_include_node_id) || '';
+    if (!parentID || seen.has(parentID)) break;
+    seen.add(parentID);
+    ancestors.push({ step_id: parentID });
+    current = nodeByID.get(parentID);
+  }
+  return ancestors.reverse();
+}
+
+function debugTargetSupported(doc, nodeID) {
+  if (!doc || !nodeID) return false;
+  const nodes = doc.nodes || [];
+  const nodeByID = new Map(nodes.map(node => [node.id, node]));
+  const groupByID = new Map((doc.groups || []).map(group => [group.id, group]));
+  const kindOf = node => node && node.data && node.data.kind || node && node.kind || '';
+  const target = nodeByID.get(nodeID);
+  if (!target || ['parallel', 'compensate', 'wait_for_event'].includes(kindOf(target))) return false;
+  let groupID = target.data && target.data.group_id || target.group_id || '';
+  while (groupID) {
+    const group = groupByID.get(groupID);
+    if (!group) break;
+    const parent = nodeByID.get(group.parent_node_id);
+    if (!parent) break;
+    if (['parallel', 'compensate'].includes(kindOf(parent))) return false;
+    if (kindOf(parent) === 'iterate' && parent.data && parent.data.concurrent) return false;
+    groupID = parent.data && parent.data.group_id || parent.group_id || '';
+  }
+  return true;
+}
+
+function toggleDebugBreakpoint(breakpoints, doc, nodeID, phase) {
+  if (!debugTargetSupported(doc, nodeID)) return breakpoints || [];
+  const callPath = debugCallPathForNode(doc, nodeID);
+  const node = (doc && doc.nodes || []).find(candidate => candidate.id === nodeID);
+  const stepID = node && node.data && node.data.step_id || nodeID;
+  const samePath = candidate => JSON.stringify(candidate || []) === JSON.stringify(callPath);
+  const exists = (breakpoints || []).some(item => item.step === stepID && item.phase === phase && samePath(item.callPath));
+  if (exists) {
+    return breakpoints.filter(item => !(item.step === stepID && item.phase === phase && samePath(item.callPath)));
+  }
+  return (breakpoints || []).concat([{ step: stepID, phase, callPath, nodeID }]);
+}
+
+function buildDebugRunConfig(breakpoints, profile, allowStaleProfile, watches) {
+  const config = {
+    enabled: true,
+    breakpoints: (breakpoints || []).map(item => ({
+      step: item.step,
+      phase: item.phase,
+      callPath: (item.callPath || []).map(frame => ({ ...frame })),
+    })),
+  };
+  if (profile) config.profile = profile;
+  if (allowStaleProfile) config.allowStaleProfile = true;
+  if (watches && watches.length > 0) config.watches = watches.slice();
+  return config;
+}
+
+function shouldStartDebugRun(breakpoints, selectedProfileID) {
+  return (breakpoints || []).length > 0 || !!selectedProfileID;
+}
+
+function parseDebugWatches(text) {
+  return String(text || '').split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+}
+
+function debugProfileID(name) {
+  return String(name || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function withBranchMerges(doc) {
+  if (!doc || doc.branchMergesApplied) return doc;
+  const originalNodes = [...(doc.nodes || [])];
+  const originalEdges = (doc.edges || []).map(edge => ({ ...edge }));
+  const groups = (doc && doc.groups) || [];
+  const nodeByID = new Map(originalNodes.map(node => [node.id, node]));
+  const armGroupsByBranch = new Map();
+  const childGroupsByParent = new Map();
+  for (const group of groups) {
+    if (!group.parent_node_id) continue;
+    if (!childGroupsByParent.has(group.parent_node_id)) childGroupsByParent.set(group.parent_node_id, []);
+    childGroupsByParent.get(group.parent_node_id).push(group);
+    if (group.kind === 'branch-arm') {
+      if (!armGroupsByBranch.has(group.parent_node_id)) armGroupsByBranch.set(group.parent_node_id, []);
+      armGroupsByBranch.get(group.parent_node_id).push(group);
+    }
+  }
+  if (armGroupsByBranch.size === 0) return doc;
+  const nodeKind = node => (node && node.data && node.data.kind) || (node && node.kind) || '';
+  const nodeOrder = node => Number((node && node.data && node.data.order) ?? (node && node.order) ?? 0);
+  const nodeGroupID = node => (node && node.data && node.data.group_id) || (node && node.group_id) || '';
+  const nodeFrameID = node => (node && node.data && node.data.frame_id) || (node && node.frame_id) || '';
+  const nodesByGroup = new Map();
+  const scopeNodes = new Map();
+  for (const node of originalNodes) {
+    const groupID = nodeGroupID(node);
+    if (groupID) {
+      if (!nodesByGroup.has(groupID)) nodesByGroup.set(groupID, []);
+      nodesByGroup.get(groupID).push(node);
+    }
+    const key = nodeFrameID(node) + '\u0000' + nodeGroupID(node);
+    if (!scopeNodes.has(key)) scopeNodes.set(key, []);
+    scopeNodes.get(key).push(node);
+  }
+  for (const members of nodesByGroup.values()) members.sort((left, right) => nodeOrder(left) - nodeOrder(right));
+  for (const members of scopeNodes.values()) members.sort((left, right) => nodeOrder(left) - nodeOrder(right));
+  const directNodes = group => nodesByGroup.get(group.id) || [];
+
+  const pruned = new Set();
+  const markSubtree = nodeID => {
+    if (!nodeID || pruned.has(nodeID)) return;
+    pruned.add(nodeID);
+    for (const group of childGroupsByParent.get(nodeID) || []) {
+      for (const child of directNodes(group)) markSubtree(child.id);
+    }
+  };
+  const markFollowingSiblings = branchID => {
+    const branch = nodeByID.get(branchID);
+    if (!branch) return;
+    const key = nodeFrameID(branch) + '\u0000' + nodeGroupID(branch);
+    const members = scopeNodes.get(key) || [];
+    const index = members.findIndex(node => node.id === branchID);
+    for (const sibling of members.slice(index + 1)) markSubtree(sibling.id);
+  };
+
+  const branchMemo = new Map();
+  const analyzeNode = (node, visiting) => {
+    if (!node || nodeKind(node) === 'end') return [];
+    if (nodeKind(node) === 'branch') return analyzeBranch(node.id, visiting);
+    return [{ sourceID: node.id, runtimeNodeID: node.id }];
+  };
+  const analyzeSequence = (members, visiting) => {
+    if (members.length === 0) return [];
+    for (let index = 0; index < members.length; index++) {
+      const exits = analyzeNode(members[index], visiting);
+      if (index === members.length - 1) return exits;
+      if (exits.length === 0) {
+        for (const unreachable of members.slice(index + 1)) markSubtree(unreachable.id);
+        return [];
+      }
+    }
+    return [];
+  };
+  const armRouteLabel = arm => {
+    if (arm.fallback) return arm.label ? 'Otherwise — ' + arm.label : 'Otherwise';
+    return arm.label || 'Empty matched arm';
+  };
+  const armIndex = arm => Number(arm.index ?? 0);
+  const armRuntimeLabel = (branchID, arm) => {
+    const label = arm.label || '';
+    if (!label) return '';
+    const duplicates = (armGroupsByBranch.get(branchID) || []).filter(candidate => candidate.label === label);
+    return duplicates.length === 1 ? label : '';
+  };
+  for (const [branchID, arms] of armGroupsByBranch) {
+    for (const arm of arms) {
+      const members = directNodes(arm);
+      if (members.length === 0) continue;
+      const entry = originalEdges.find(edge => edge.source === branchID && edge.target === members[0].id && edge.type === 'branch-arm');
+      if (!entry) continue;
+      entry.routeKind = 'arm-entry';
+      entry.runtimeNodeID = branchID;
+      entry.runtimeExpectedStatus = 'completed';
+      entry.runtimeArmIndex = armIndex(arm);
+      entry.runtimeArmLabel = armRuntimeLabel(branchID, arm);
+      entry.runtimeFallbackNodeID = members[0].id;
+    }
+  }
+  function analyzeBranch(branchID, visiting = new Set()) {
+    if (branchMemo.has(branchID)) return branchMemo.get(branchID);
+    if (visiting.has(branchID)) return [{ sourceID: branchID, runtimeNodeID: branchID }];
+    const nextVisiting = new Set(visiting);
+    nextVisiting.add(branchID);
+    const arms = armGroupsByBranch.get(branchID) || [];
+    const exits = [];
+    for (const arm of arms) {
+      const members = directNodes(arm);
+      if (members.length === 0) {
+        exits.push({
+          sourceID: branchID,
+          label: armRouteLabel(arm),
+          routeKind: 'empty-arm',
+          runtimeNodeID: branchID,
+          runtimeExpectedStatus: 'completed',
+          runtimeArmIndex: armIndex(arm),
+          runtimeArmLabel: armRuntimeLabel(branchID, arm),
+        });
+        continue;
+      }
+      exits.push(...analyzeSequence(members, nextVisiting).map(exit => ({
+        ...exit,
+        routeKind: 'arm-exit',
+        runtimeNodeID: branchID,
+        runtimeExpectedStatus: 'completed',
+        runtimeArmIndex: armIndex(arm),
+        runtimeArmLabel: armRuntimeLabel(branchID, arm),
+        runtimeFallbackNodeID: exit.sourceID,
+      })));
+    }
+    if (!arms.some(arm => arm.fallback)) {
+      exits.push({
+        sourceID: branchID,
+        label: 'No matching arm',
+        routeKind: 'no-match',
+        runtimeNodeID: branchID,
+        runtimeExpectedStatus: 'skipped',
+      });
+    }
+    branchMemo.set(branchID, exits);
+    return exits;
+  }
+
+  for (const branchID of armGroupsByBranch.keys()) analyzeBranch(branchID);
+  for (const branchID of armGroupsByBranch.keys()) {
+    const hasContinuation = originalEdges.some(edge => edge.source === branchID && edge.type === 'sequence');
+    if (hasContinuation && (branchMemo.get(branchID) || []).length === 0) markFollowingSiblings(branchID);
+  }
+
+  const nodes = originalNodes.filter(node => !pruned.has(node.id));
+  let edges = originalEdges.filter(edge => !pruned.has(edge.source) && !pruned.has(edge.target));
+  const usedIDs = new Set(nodes.map(node => node.id));
+  const allocateMergeID = branchID => {
+    let candidate = '__yawr_preview_merge__:' + branchID;
+    let suffix = 1;
+    while (usedIDs.has(candidate)) candidate = '__yawr_preview_merge__:' + branchID + ':' + suffix++;
+    usedIDs.add(candidate);
+    return candidate;
+  };
+
+  for (const [branchID, arms] of armGroupsByBranch) {
+    const continuationIndex = edges.findIndex(edge => edge.source === branchID && edge.type === 'sequence');
+    if (continuationIndex < 0) continue;
+    const continuation = edges[continuationIndex];
+    edges.splice(continuationIndex, 1);
+    const uniqueExits = [];
+    const seenExits = new Set();
+    for (const exit of branchMemo.get(branchID) || []) {
+      if (pruned.has(exit.sourceID)) continue;
+      const key = [exit.sourceID, exit.label || '', exit.routeKind || '', exit.runtimeArmIndex ?? ''].join('\u0000');
+      if (seenExits.has(key)) continue;
+      seenExits.add(key);
+      uniqueExits.push(exit);
+    }
+    if (uniqueExits.length === 0) continue;
+
+    const branchNode = nodeByID.get(branchID);
+    const continuationNode = nodeByID.get(continuation.target);
+    const mergeID = allocateMergeID(branchID);
+    const mergeNode = {
+      id: mergeID,
+      kind: 'merge',
+      data: {
+        id: mergeID,
+        kind: 'merge',
+        title: 'Branch merge',
+        group_id: (branchNode && branchNode.data && branchNode.data.group_id) || '',
+        frame_id: (branchNode && branchNode.data && branchNode.data.frame_id) || '',
+        order: nodeOrder(continuationNode) - 0.5,
+        synthetic: true,
+        merge_for: branchID,
+      },
+    };
+    nodes.push(mergeNode);
+    nodeByID.set(mergeID, mergeNode);
+    for (const exit of uniqueExits) {
+      edges.push({
+        source: exit.sourceID,
+        target: mergeID,
+        type: 'branch-merge',
+        label: exit.label || '',
+        routeKind: exit.routeKind || '',
+        runtimeNodeID: exit.runtimeNodeID || exit.sourceID,
+        runtimeExpectedStatus: exit.runtimeExpectedStatus || '',
+        runtimeArmIndex: exit.runtimeArmIndex,
+        runtimeArmLabel: exit.runtimeArmLabel || '',
+        runtimeFallbackNodeID: exit.runtimeFallbackNodeID || '',
+      });
+    }
+    edges.push({ ...continuation, source: mergeID, runtimeNodeID: continuation.target });
+  }
+  return { ...doc, nodes, edges, branchMergesApplied: true };
+}
+
+function graphEdgeID(edge) {
+  const routeSuffix = edge.routeKind
+    ? ':' + edge.routeKind + ':' + (edge.runtimeArmIndex ?? '')
+    : '';
+  return edge.source + '->' + edge.target + (edge.label ? ':' + edge.label : '') + routeSuffix;
+}
+
+function trimVisibleGraph(allNodes, allEdges, overlayNodes) {
+  const nodeByID = new Map(allNodes.map(node => [node.id, node]));
+  const out = new Map();
+  const inDegree = new Map();
+  for (const node of allNodes) { out.set(node.id, []); inDegree.set(node.id, 0); }
+  for (const edge of allEdges) {
+    if (!out.has(edge.source) || !out.has(edge.target)) continue;
+    out.get(edge.source).push(edge);
+    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+  }
+  const stateIsExecuted = state => !!state && state.status !== 'pending' && state.status !== 'skipped';
+  const routeIsActive = edge => {
+    const state = overlayNodes[edge.runtimeNodeID || edge.source];
+    if (!state) return false;
+    if (edge.runtimeExpectedStatus && state.status !== edge.runtimeExpectedStatus) {
+      if (edge.routeKind !== 'arm-entry' || !['running', 'failed'].includes(state.status)) return false;
+    }
+    const armMatch = branchArmRouteMatches(edge, state);
+    if (armMatch !== null) return armMatch;
+    return stateIsExecuted(overlayNodes[edge.runtimeFallbackNodeID]);
+  };
+  const liveMemo = new Map();
+  const visiting = new Set();
+  const isLive = id => {
+    if (liveMemo.has(id)) return liveMemo.get(id);
+    if (visiting.has(id)) return false;
+    visiting.add(id);
+    let live = stateIsExecuted(overlayNodes[id]) || (out.get(id) || []).some(edge => edge.routeKind && routeIsActive(edge));
+    if (!live) {
+      for (const edge of out.get(id) || []) {
+        if (edge.kind === 'branch-merge' || edge.type === 'branch-merge') continue;
+        if (isLive(edge.target)) { live = true; break; }
+      }
+    }
+    visiting.delete(id);
+    liveMemo.set(id, live);
+    return live;
+  };
+  const kindOf = id => {
+    const node = nodeByID.get(id);
+    return node ? ((node.data && node.data.kind) || node.kind || '') : '';
+  };
+  const edgeIsActive = edge => {
+    if (edge.kind === 'branch-merge' || edge.type === 'branch-merge') {
+      if (edge.routeKind) return routeIsActive(edge);
+      return stateIsExecuted(overlayNodes[edge.runtimeNodeID || edge.source]);
+    }
+    if (kindOf(edge.source) === 'branch' && overlayNodes[edge.source]) return isLive(edge.target);
+    return true;
+  };
+  const nodeIDs = new Set();
+  const edgeIDs = new Set();
+  const queue = [];
+  let cursor = 0;
+  for (const node of allNodes) {
+    if ((inDegree.get(node.id) || 0) === 0) { nodeIDs.add(node.id); queue.push(node.id); }
+  }
+  while (cursor < queue.length) {
+    const current = queue[cursor++];
+    for (const edge of out.get(current) || []) {
+      if (!edgeIsActive(edge)) continue;
+      edgeIDs.add(graphEdgeID(edge));
+      if (nodeIDs.has(edge.target)) continue;
+      nodeIDs.add(edge.target);
+      queue.push(edge.target);
+    }
+  }
+  return { nodeIDs, edgeIDs };
+}
+
+// ---------- layout ----------
+const NODE_W = 190;
+const NODE_H = 66;
+
+function getNodeDimensions(kind, nodeStyle = 'smooth-curves') {
+  if (kind === 'merge') return { width: 14, height: 14 };
+  if (nodeStyle === 'header-badges') {
+    switch (kind) {
+      case 'end': return { width: 180, height: 56 };
+      case 'noop': return { width: 160, height: 50 };
+      default: return { width: 196, height: 72 };
+    }
+  }
+  if (nodeStyle === 'minimalist') {
+    switch (kind) {
+      case 'decision':
+      case 'branch':
+      case 'choice':
+        return { width: 195, height: 68 };
+      case 'collector':
+      case 'display':
+        return { width: 190, height: 66 };
+      case 'approve':
+      case 'assert':
+        return { width: 195, height: 68 };
+      case 'end':
+        return { width: 170, height: 48 };
+      case 'noop':
+        return { width: 150, height: 44 };
+      default:
+        return { width: 190, height: 66 };
+    }
+  }
+  // Default: 'smooth-curves' (Option 3)
+  switch (kind) {
+    case 'decision':
+    case 'branch':
+    case 'choice':
+      return { width: 210, height: 82 }; // Smooth Diamond
+    case 'collector':
+    case 'display':
+      return { width: 195, height: 68 }; // Smooth Parallelogram
+    case 'approve':
+    case 'assert':
+      return { width: 195, height: 68 }; // Smooth Hexagon
+    case 'end':
+      return { width: 175, height: 50 }; // Stadium Pill
+    case 'noop':
+      return { width: 155, height: 46 }; // Minimal Pill
+    default:
+      return { width: 190, height: 66 }; // Process / Subroutine
+  }
+}
+
+function layoutDocument(doc, nodeStyle = 'smooth-curves') {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'TB', nodesep: 34, ranksep: 64 });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const n of doc.nodes) {
+    const dim = getNodeDimensions(n.kind, nodeStyle);
+    g.setNode(n.id, { width: dim.width, height: dim.height });
+  }
+  for (const ed of doc.edges) g.setEdge(ed.source, ed.target);
+  dagre.layout(g);
+
+  const stepNodes = doc.nodes.map(n => {
+    const pos = g.node(n.id);
+    const kind = (n.data && n.data.kind) || n.kind || '';
+    const dim = getNodeDimensions(kind === 'merge' ? kind : n.kind, nodeStyle);
+    const node = {
+      id: n.id,
+      type: kind === 'merge' ? 'branchMerge' : 'yawrStep',
+      position: { x: (pos?.x ?? 0) - dim.width / 2, y: (pos?.y ?? 0) - dim.height / 2 },
+      // Steps must stack above frames regardless of frame depth.
+      style: { width: dim.width, height: dim.height, zIndex: 1000 },
+      data: { ...(n.data || { id: n.id, kind: n.kind }), nodeStyle },
+    };
+    if (kind === 'merge') {
+      node.selectable = false;
+      node.draggable = false;
+      node.focusable = false;
+    }
+    return node;
+  });
+
+  // Compute group bounding boxes from member nodes (transitively, via
+  // group_id chains in doc.groups). Render each group as a back-layer
+  // synthetic node so React Flow draws it behind the steps. zIndex
+  // decreases with nesting depth so deeper groups overlay shallower ones.
+  const frameNodes = computeFrameNodes(doc, g);
+
+  // Compute kit-declared region overlays (see specs/regions-v1.md).
+  // Regions are sibling to frames but sit one z-layer below them so
+  // structural frames remain visible inside a region.
+  const regionNodes = computeRegionNodes(doc, g);
+
+  const edges = doc.edges.map(ed => ({
+    id: graphEdgeID(ed),
+    source: ed.source, target: ed.target, label: ed.label,
+    kind: ed.type,
+    routeKind: ed.routeKind,
+    runtimeNodeID: ed.runtimeNodeID,
+    runtimeExpectedStatus: ed.runtimeExpectedStatus,
+    runtimeArmIndex: ed.runtimeArmIndex,
+    runtimeArmLabel: ed.runtimeArmLabel,
+    runtimeFallbackNodeID: ed.runtimeFallbackNodeID,
+  }));
+  // Regions first, then frames, then steps — React Flow stacks in
+  // array order so the last item paints on top.
+  return { nodes: [...regionNodes, ...frameNodes, ...stepNodes], edges };
+}
+
+// computeFrameNodes builds back-layer "frame" nodes for every group that
+// has at least one member node positioned by dagre. Group depth is the
+// length of its parent-group chain; deeper groups render on top so a
+// nested include-frame appears inside its enclosing frame.
+function computeFrameNodes(doc, dagreGraph) {
+  if (!doc.groups || doc.groups.length === 0) return [];
+
+  const nodeByID = new Map();
+  for (const n of doc.nodes) nodeByID.set(n.id, n);
+
+  // group.id -> parent group.id ('' when this group sits at the top
+  // of its frame). A group is anchored to a parent node; that node may
+  // itself live inside another group, which is the parent of this one.
+  const parentOfGroup = new Map();
+  for (const g of doc.groups) {
+    const parentNode = g.parent_node_id ? nodeByID.get(g.parent_node_id) : null;
+    const parentGID = (parentNode && parentNode.data && parentNode.data.group_id) || '';
+    parentOfGroup.set(g.id, parentGID);
+  }
+
+  // Each node is a member of every ancestor group, walking up from its
+  // innermost group via parentOfGroup. This is what makes outer frames
+  // enclose the union of all descendant nodes (and therefore visually
+  // contain every nested frame).
+  const memberByGroup = new Map();
+  for (const n of doc.nodes) {
+    let cur = (n.data && n.data.group_id) || '';
+    while (cur) {
+      if (!memberByGroup.has(cur)) memberByGroup.set(cur, []);
+      memberByGroup.get(cur).push(n.id);
+      cur = parentOfGroup.get(cur) || '';
+    }
+  }
+
+  function depthOf(gid) {
+    let d = 0;
+    let cur = parentOfGroup.get(gid) || '';
+    while (cur) { d++; cur = parentOfGroup.get(cur) || ''; }
+    return d;
+  }
+
+  // Maximum nesting depth among all groups; outer frames need more
+  // padding than inner ones so they fully enclose the inner frame
+  // (including the inner frame's own padding).
+  let maxDepth = 0;
+  for (const grp of doc.groups) {
+    const d = depthOf(grp.id);
+    if (d > maxDepth) maxDepth = d;
+  }
+
+  const frames = [];
+  for (const grp of doc.groups) {
+    const memberIDs = memberByGroup.get(grp.id);
+    if (!memberIDs || memberIDs.length === 0) continue;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const id of memberIDs) {
+      const p = dagreGraph.node(id);
+      if (!p) continue;
+      const pw = p.width || NODE_W;
+      const ph = p.height || NODE_H;
+      const x = p.x - pw / 2, y = p.y - ph / 2;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + pw > maxX) maxX = x + pw;
+      if (y + ph > maxY) maxY = y + ph;
+    }
+    if (!isFinite(minX)) continue;
+    const depth = depthOf(grp.id);
+    // Padding scales with the inverse-depth so outer frames pad further
+    // out than the inner frames they enclose. Without this, every frame
+    // that transitively contains the same leaf node ends at the same
+    // bottom Y and the nested groups all share one bottom edge.
+    const inv = (maxDepth - depth);
+    const PAD_X = 16 + inv * 10;
+    const PAD_TOP = 22 + inv * 10;
+    const PAD_BOTTOM = 22 + inv * 10;
+    const w = (maxX - minX) + PAD_X * 2;
+    const h = (maxY - minY) + PAD_TOP + PAD_BOTTOM;
+    frames.push({
+      id: 'frame:' + grp.id,
+      type: 'frameBox',
+      position: { x: minX - PAD_X, y: minY - PAD_TOP },
+      // className lands on the React Flow wrapper as an extra class so
+      // our .react-flow__node-frameBox.<kind> CSS rules can colour it.
+      className: grp.kind || '',
+      // Explicit width/height drive the wrapper's box-model directly.
+      // Deeper groups (higher depth) sit on top so inner frames are
+      // visible against their enclosing outer frames.
+      style: { width: w, height: h, zIndex: depth },
+      data: { kind: grp.kind, label: frameLabel(grp), depth },
+      selectable: false,
+      draggable: false,
+      focusable: false,
+    });
+  }
+  return frames;
+}
+
+function frameLabel(grp) {
+  if (grp.kind === 'branch-arm' && grp.fallback) {
+    return grp.label ? 'Otherwise — ' + grp.label : 'Otherwise';
+  }
+  if (grp.label) return grp.label;
+  switch (grp.kind) {
+    case 'include-frame':   return 'include';
+    case 'iterate-body':    return 'iterate';
+    case 'parallel-branch': return 'parallel';
+    case 'branch-arm':      return 'branch';
+    case 'compensate-body': return 'compensate';
+    default:                return grp.kind || '';
+  }
+}
+
+function FrameBox({ data }) {
+  // Visuals come from .react-flow__node-frameBox CSS; this just adds
+  // the kind class onto the wrapper via React Flow's className prop
+  // (we also set className on the node object below so it lands on
+  // the wrapper element directly), and renders the label.
+  return data.label
+    ? e('div', { className: 'frame-label' }, data.label)
+    : null;
+}
+
+function BranchMergeNode() {
+  return e('div', { className: 'branch-merge-node', title: 'Branch merge' },
+    e(Handle, { type: 'target', position: Position.Top }),
+    e(Handle, { type: 'source', position: Position.Bottom }),
+  );
+}
+
+// computeRegionNodes builds back-layer "region" nodes for every entry
+// in doc.regions.regions. Each region's box encloses the bounding box
+// of its member step nodes (after dagre layout). Regions are drawn
+// below structural frames so iterate/branch frames remain visible
+// inside a region.
+function computeRegionNodes(doc, dagreGraph) {
+  if (!doc.regions || !doc.regions.regions || doc.regions.regions.length === 0) return [];
+  const result = [];
+  for (const r of doc.regions.regions) {
+    const members = r.members || [];
+    if (members.length === 0) continue;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let placed = 0;
+    for (const id of members) {
+      const p = dagreGraph.node(id);
+      if (!p) continue;
+      placed++;
+      const pw = p.width || NODE_W;
+      const ph = p.height || NODE_H;
+      const x = p.x - pw / 2, y = p.y - ph / 2;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + pw > maxX) maxX = x + pw;
+      if (y + ph > maxY) maxY = y + ph;
+    }
+    if (placed === 0 || !isFinite(minX)) continue;
+    const PAD_X = 32;
+    const PAD_TOP = 32;
+    const PAD_BOTTOM = 26;
+    const w = (maxX - minX) + PAD_X * 2;
+    const h = (maxY - minY) + PAD_TOP + PAD_BOTTOM;
+    // Slug op_type to a CSS-safe class fragment (op-ops-change-request).
+    const opClass = 'op-' + (r.op_type || '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    result.push({
+      id: 'region:' + r.id,
+      type: 'regionBox',
+      position: { x: minX - PAD_X, y: minY - PAD_TOP },
+      className: opClass,
+      // zIndex below frames (frames use zIndex = depth, max ~maxDepth).
+      // Use a fixed negative-ish value to stay under all frames.
+      style: { width: w, height: h, zIndex: -1 },
+      data: { label: r.label || r.id, opType: r.op_type, kit: r.kit },
+      selectable: false,
+      draggable: false,
+      focusable: false,
+    });
+  }
+  return result;
+}
+
+function RegionBox({ data }) {
+  // Visuals come from .react-flow__node-regionBox CSS; this just renders
+  // the floating label that identifies the kit-declared op.
+  return e('div', { className: 'region-label' },
+    data.opType ? e('span', { className: 'op' }, data.opType) : null,
+    data.label || '',
+  );
+}
+
+function getStepStereotype(kind) {
+  switch (kind) {
+    case 'cli':            return { icon: '>_', label: 'CLI' };
+    case 'tool':           return { icon: '⚙', label: 'Tool' };
+    case 'include':        return { icon: '📦', label: 'Include' };
+    case 'choice':         return { icon: '🔘', label: 'Choice' };
+    case 'decision':       return { icon: '🔀', label: 'Decision' };
+    case 'collector':      return { icon: '📋', label: 'Collector' };
+    case 'branch':         return { icon: '⚡', label: 'Branch' };
+    case 'iterate':        return { icon: '🔁', label: 'Iterate' };
+    case 'parallel':       return { icon: '⑃', label: 'Parallel' };
+    case 'approve':        return { icon: '🛡️', label: 'Approve' };
+    case 'assert':         return { icon: '✓', label: 'Assert' };
+    case 'compensate':     return { icon: '↩️', label: 'Compensate' };
+    case 'wait_for_event': return { icon: '📡', label: 'Wait Event' };
+    case 'end':            return { icon: '🏁', label: 'End' };
+    case 'display':        return { icon: '💬', label: 'Display' };
+    case 'noop':           return { icon: '⏱️', label: 'No-Op' };
+    case 'extension':      return { icon: '🧩', label: 'Extension' };
+    default:               return { icon: '•', label: kind || 'Step' };
+  }
+}
+
+function NodeShapeBg({ kind, isDynamic, nodeStyle = 'smooth-curves' }) {
+  if (nodeStyle === 'minimalist') {
+    switch (kind) {
+      case 'decision':
+      case 'branch':
+      case 'choice':
+        // Chamfered Diamond Lozenge (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('polygon', { points: '10,2 90,2 98,10 98,90 90,98 10,98 2,90 2,10' })
+        );
+      case 'collector':
+      case 'display':
+        // Notched Chamfer Card (Option 1 Data I/O)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('polygon', { points: '2,2 88,2 98,12 98,98 2,98' })
+        );
+      case 'approve':
+      case 'assert':
+        // Security Shield Hex-Capsule (Option 1 Governance & Invariants)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('polygon', { points: '8,2 92,2 98,50 92,98 8,98 2,50' })
+        );
+      case 'include':
+      case 'tool':
+        // Subroutine (Option 1 Dual Side Rails)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '4', ry: '4', strokeDasharray: isDynamic ? '4,3' : undefined }),
+          e('line', { x1: '10', y1: '2', x2: '10', y2: '98' }),
+          e('line', { x1: '90', y1: '2', x2: '90', y2: '98' })
+        );
+      case 'end':
+        // Terminal Stadium Pill (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '48', ry: '48' })
+        );
+      case 'wait_for_event':
+        // Radar Telemetry Capsule (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '16', ry: '16' }),
+          e('rect', { x: '5', y: '5', width: '90', height: '90', rx: '13', ry: '13', strokeDasharray: '3,2' })
+        );
+      case 'compensate':
+        // Exception Rollback Box (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('polygon', { points: '8,2 92,2 98,10 98,90 92,98 8,98 2,90 2,10', strokeDasharray: '4,2' })
+        );
+      case 'iterate':
+        // Loop Header (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('polygon', { points: '6,2 94,2 98,12 98,98 2,98 2,12', strokeDasharray: '4,2' })
+        );
+      case 'parallel':
+        // Parallel Sync Rails (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '2', ry: '2' }),
+          e('line', { x1: '2', y1: '4', x2: '98', y2: '4', strokeWidth: '2.5' }),
+          e('line', { x1: '2', y1: '96', x2: '98', y2: '96', strokeWidth: '2.5' })
+        );
+      case 'noop':
+        // Minimal Dotted Delay Pill (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '12', ry: '12', strokeDasharray: '3,3' })
+        );
+      case 'extension':
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '4', ry: '4', strokeDasharray: '4,3' })
+        );
+      case 'cli':
+      default:
+        // Terminal Process Box with left accent (Option 1)
+        return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+          e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '4', ry: '4' }),
+          e('line', { x1: '2', y1: '2', x2: '2', y2: '98' })
+        );
+    }
+  }
+
+  // Default: 'smooth-curves' (Option 3)
+  switch (kind) {
+    case 'decision':
+    case 'branch':
+    case 'choice':
+      // Smooth Bezier Rhombus Diamond (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('path', { d: 'M 46,6 Q 50,2 54,6 L 94,46 Q 98,50 94,54 L 54,94 Q 50,98 46,94 L 6,54 Q 2,50 6,46 Z' })
+      );
+    case 'collector':
+    case 'display':
+      // Smooth Bezier Parallelogram (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('path', { d: 'M 18,4 Q 22,2 26,2 L 94,2 Q 98,2 96,8 L 82,92 Q 80,98 74,98 L 6,98 Q 2,98 4,92 Z' })
+      );
+    case 'approve':
+    case 'assert':
+      // Smooth Bezier Hexagon (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('path', { d: 'M 16,4 Q 18,2 22,2 L 78,2 Q 82,2 84,4 L 96,47 Q 98,50 96,53 L 84,96 Q 82,98 78,98 L 22,98 Q 18,98 16,96 L 4,53 Q 2,50 4,47 Z' })
+      );
+    case 'include':
+    case 'tool':
+      // Subroutine Blueprint (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '6', ry: '6', strokeDasharray: isDynamic ? '4,3' : undefined }),
+        e('line', { x1: '12', y1: '2', x2: '12', y2: '98' }),
+        e('line', { x1: '88', y1: '2', x2: '88', y2: '98' })
+      );
+    case 'end':
+      // Concentric Stadium Pill (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '48', ry: '48' }),
+        e('rect', { x: '5', y: '5', width: '90', height: '90', rx: '45', ry: '45', strokeDasharray: '3,2' })
+      );
+    case 'wait_for_event':
+      // Pulse Stadium (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '18', ry: '18' }),
+        e('rect', { x: '5', y: '5', width: '90', height: '90', rx: '14', ry: '14', strokeDasharray: '3,2' })
+      );
+    case 'compensate':
+      // Smooth Chamfer Exception (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('polygon', { points: '10,2 90,2 98,10 98,90 90,98 10,98 2,90 2,10', strokeDasharray: '4,2' })
+      );
+    case 'iterate':
+      // Smooth Loop Arc (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('polygon', { points: '6,2 94,2 98,12 98,98 2,98 2,12', strokeDasharray: '4,2' })
+      );
+    case 'parallel':
+      // Parallel Sync Bar (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '3', ry: '3' }),
+        e('line', { x1: '2', y1: '4', x2: '98', y2: '4', strokeWidth: '2.5' }),
+        e('line', { x1: '2', y1: '96', x2: '98', y2: '96', strokeWidth: '2.5' })
+      );
+    case 'noop':
+      // Minimal Dotted Pill (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '12', ry: '12', strokeDasharray: '3,3' })
+      );
+    case 'extension':
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '6', ry: '6', strokeDasharray: '4,3' })
+      );
+    case 'cli':
+    default:
+      // Process Blueprint with left accent rail (Option 3)
+      return e('svg', { className: 'node-shape-svg', viewBox: '0 0 100 100', preserveAspectRatio: 'none' },
+        e('rect', { x: '2', y: '2', width: '96', height: '96', rx: '6', ry: '6' }),
+        e('line', { x1: '2', y1: '2', x2: '2', y2: '98', strokeWidth: '2.5', stroke: '#388bfd' })
+      );
+  }
+}
+
+function StepNode({ data }) {
+  const kind = data.kind || 'step';
+  const isDynamic = data.dynamic && kind === 'include';
+  const isEnd = kind === 'end';
+  const nodeStyle = data.nodeStyle || 'smooth-curves';
+  const st = getStepStereotype(kind);
+
+  let statusLine = '';
+  if (data.status === 'delaying' && data.delay_ms) {
+    const secs = (data.delay_ms / 1000).toFixed(data.delay_ms < 1000 ? 2 : 1);
+    statusLine = `delaying ${secs}s`;
+  } else if (data.status) {
+    statusLine = data.status + (data.duration_ms ? ` (${data.duration_ms} ms)` : '');
+  }
+
+  if (nodeStyle === 'header-badges') {
+    const cls = 'node-v2 node-' + kind + ' ' + (data.status || 'pending') + (data.selected ? ' selected' : '') + (isDynamic ? ' dynamic-include' : '');
+    return e('div', { className: cls },
+      e(Handle, { type: 'target', position: Position.Top }),
+      e('div', { className: 'node-v2-header' },
+        e('div', { className: 'header-shape-pill' },
+          e('span', { className: 'header-icon' }, st.icon),
+          e('span', { className: 'header-label' }, st.label),
+          kind === 'decision' && e('span', { className: 'header-adornment' }, '◇'),
+          (kind === 'include' || kind === 'tool') && e('span', { className: 'header-adornment' }, '||'),
+        ),
+        kind === 'cli' && e('span', { style: { fontSize: '9px', color: 'var(--fg-muted)', opacity: 0.6 } }, 'sh'),
+        data.debugBreakpoint && e('span', {
+          className: 'debug-breakpoint-marker',
+          title: 'Breakpoint: ' + data.debugBreakpoint,
+        }, '\u25cf'),
+        data.debugOverride && e('span', { className: 'debug-override-marker', title: 'Debug override applied' }, 'DBG'),
+      ),
+      e('div', { className: 'node-v2-body' },
+        e('div', { className: 'id' }, data.id),
+        data.title ? e('div', { className: 'title' }, data.title) : null,
+        isDynamic && e('div', { className: 'dynamic-subtitle' }, 'resolve_from: catalog \u2014 runtime'),
+        statusLine && e('div', { className: 'status' }, statusLine),
+      ),
+      !isEnd && e(Handle, { type: 'source', position: Position.Bottom }),
+    );
+  }
+
+  const cls = 'node node-' + kind + ' style-' + nodeStyle + ' ' + (data.status || 'pending') + (data.selected ? ' selected' : '') + (isDynamic ? ' dynamic-include' : '');
+  return e('div', { className: cls },
+    e(NodeShapeBg, { kind, isDynamic, nodeStyle }),
+    e(Handle, { type: 'target', position: Position.Top }),
+    e('div', { className: 'node-content' },
+      e('div', { className: 'node-header' },
+        e('span', { className: 'icon-badge' }, st.icon),
+        e('span', { className: 'kind-label' }, st.label),
+        data.debugBreakpoint && e('span', {
+          className: 'debug-breakpoint-marker',
+          title: 'Breakpoint: ' + data.debugBreakpoint,
+        }, '\u25cf'),
+        data.debugOverride && e('span', { className: 'debug-override-marker', title: 'Debug override applied' }, 'DBG'),
+      ),
+      e('div', { className: 'id' }, data.id),
+      data.title ? e('div', { className: 'title' }, data.title) : null,
+      isDynamic && e('div', { className: 'dynamic-subtitle' }, 'resolve_from: catalog \u2014 resolved at run time'),
+      statusLine && e('div', { className: 'status' }, statusLine),
+    ),
+    !isEnd && e(Handle, { type: 'source', position: Position.Bottom }),
+  );
+}
+const nodeTypes = { yawrStep: StepNode, branchMerge: BranchMergeNode, frameBox: FrameBox, regionBox: RegionBox };
+
+// GraphCanvas wraps ReactFlow so it can use useReactFlow() to drive the
+// viewport. It auto-pans to the selected node whenever selection
+// changes; if the user pans manually (mouse drag, wheel zoom), we
+// surface that via onUserPan so App can stop following execution.
+function GraphCanvas({ runID, nodes, edges, selectedNode, onUserPan, onNodeClick }) {
+  const userMoved = useRef(false);
+  const wrapRef = useRef(null);
+  const rf = useReactFlow();
+
+  // New run: forget that the user moved the viewport, so we re-fit
+  // until they touch it again. We deliberately key on runID, NOT
+  // doc.hash — the run-document re-fetches on every frontier
+  // expansion and its hash changes, which would otherwise wipe the
+  // user's intent each time an include opens. Reset only on a real
+  // run-identity change.
+  useEffect(() => {
+    userMoved.current = false;
+  }, [runID]);
+
+  // Detect real user gestures from raw DOM events on the wrapper. We
+  // use capture-phase native listeners so ReactFlow can't swallow
+  // them via stopPropagation, and we only look at events that fitView
+  // / setViewport never synthesize: wheel, mousedown on the pane
+  // background (=pan), touchstart on the pane (=pan/pinch). We
+  // deliberately do NOT mark on every mousedown — that would fire on
+  // node clicks and disable autofit just because the user clicked a
+  // step. Wheel anywhere is fine; only nodes scroll-trap, not the
+  // canvas itself, and the user wheel-zooming is unambiguous intent.
+  // (ReactFlow's own onMoveStart fires for both programmatic and
+  // user-driven moves, and any flag-based disambiguation races
+  // fitView's async dispatch — that's why earlier attempts froze.)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const mark = () => {
+      if (userMoved.current) return;
+      userMoved.current = true;
+      if (onUserPan) onUserPan();
+    };
+    const markIfPane = (ev) => {
+      // Pan only starts on the pane background or the viewport itself,
+      // not on a node, edge, or control button.
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest('.react-flow__node, .react-flow__edge, .react-flow__controls, .react-flow__minimap')) return;
+      mark();
+    };
+    el.addEventListener('wheel', mark, { capture: true, passive: true });
+    el.addEventListener('mousedown', markIfPane, { capture: true });
+    el.addEventListener('touchstart', markIfPane, { capture: true, passive: true });
+    return () => {
+      el.removeEventListener('wheel', mark, { capture: true });
+      el.removeEventListener('mousedown', markIfPane, { capture: true });
+      el.removeEventListener('touchstart', markIfPane, { capture: true });
+    };
+  }, [onUserPan]);
+
+  // Auto-fit while the user hasn't manually panned/zoomed. Re-runs on:
+  //   1. First non-empty render (doc load).
+  //   2. Mid-run frontier expansion (include opens, new nodes appear)
+  //      — without this the user sees a near-empty canvas because the
+  //      old viewport is now zoomed onto a tiny region of the graph.
+  // Once the user pans or zooms, userMoved sticks and we stop
+  // refitting; the pending-input badge is the explicit way to jump.
+  const stepIDsKey = nodes
+    ? nodes.filter(n => n.type === 'yawrStep').map(n => n.id).sort().join('|')
+    : '';
+  useEffect(() => {
+    if (userMoved.current) return;
+    if (!rf || !rf.fitView) return;
+    if (!stepIDsKey) return;
+    // Defer two frames so React Flow has measured the new nodes; a
+    // single-frame defer sometimes fits to a stale layout when many
+    // nodes appear at once (frontier expansion).
+    let cancelled = false;
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled || userMoved.current) return;
+        try { rf.fitView({ padding: 0.15 }); } catch { }
+      });
+    });
+    return () => { cancelled = true; cancelAnimationFrame(raf1); };
+  }, [stepIDsKey, rf]);
+
+  // Pan to the selected step at the user's current zoom whenever it
+  // changes. This keeps the active leaf in view even after the user
+  // has zoomed in, which userMoved would otherwise prevent. We pan
+  // (setCenter at the current zoom), never re-zoom, so the user's
+  // zoom level is preserved. selectedNode changes from both
+  // execution progress (auto-tracker advancing the running leaf) and
+  // direct clicks; in both cases panning to the chosen node is what
+  // the user wants. Skipped while autofit is still in charge —
+  // fitView already shows everything, and panning during the same
+  // frame would fight it.
+  //
+  // We also re-run when `nodes` changes: the auto-tracker can advance
+  // selectedNode the moment a new state event arrives, before the
+  // run-document re-fetch has populated the corresponding ReactFlow
+  // node. Without the nodes dependency the pan would silently no-op
+  // (rf.getNode returns null) and the new active step stays
+  // off-screen until the user pans manually.
+  useEffect(() => {
+    if (!userMoved.current) return;
+    if (!selectedNode) return;
+    if (!rf || !rf.setCenter || !rf.getNode || !rf.getViewport) return;
+    let cancelled = false;
+    // The node may not be measured yet on the first frame after a
+    // frontier expansion. Try a few frames before giving up.
+    let attempts = 0;
+    const tryPan = () => {
+      if (cancelled) return;
+      const n = rf.getNode(selectedNode);
+      let w = n && n.width || 0;
+      let h = n && n.height || 0;
+      if (n && (!w || !h)) {
+        const el = document.querySelector('.react-flow__node[data-id="' + CSS.escape(selectedNode) + '"]');
+        if (el) { const r = el.getBoundingClientRect(); w = r.width; h = r.height; }
+      }
+      if (!n || !n.position || !w || !h) {
+        if (++attempts < 8) requestAnimationFrame(tryPan);
+        return;
+      }
+      const cx = n.position.x + w / 2;
+      const cy = n.position.y + h / 2;
+      const { zoom } = rf.getViewport();
+      try { rf.setCenter(cx, cy, { zoom, duration: 250 }); } catch { }
+    };
+    requestAnimationFrame(tryPan);
+    return () => { cancelled = true; };
+  }, [selectedNode, nodes, rf]);
+
+  return e('div', { ref: wrapRef, style: { width: '100%', height: '100%' } },
+    e(ReactFlow, {
+      nodes, edges, nodeTypes,
+      onNodeClick,
+    },
+      e(Background, null),
+      e(Controls, null),
+      e(MiniMap, null),
+    ),
+  );
+}
+
+// InputsForm renders the declaration-driven input experience (AR-CE-3,
+// F-4): a closed <select> in declared order for each non-redacted enum
+// input, free text for everything else (unconstrained or
+// enumRedacted:true), and no auto-selection beyond a declared default
+// that is itself a member (AR-CE-6 §2). It is the primary input surface
+// once the graphjson DTO carries `inputs[]`; the raw-JSON box above it
+// remains the fallback (AR-CE-3 §3.6) and, whenever non-empty, wins
+// outright over this form (see App.startRun) -- so this form disables
+// itself (visually only; it never blocks the JSON box) while that box
+// holds text, to avoid two silently-conflicting sources of inputs.
+function InputsForm({ decls, values, setValue, disabled }) {
+  if (!decls || decls.length === 0) return null;
+  return e('div', { className: 'inputsForm', style: { padding: '6px 12px', borderBottom: '1px solid var(--border)', opacity: disabled ? 0.5 : 1 } },
+    decls.map(d => {
+      const id = 'input-' + d.name;
+      const v = values[d.name] ?? '';
+      let control;
+      if (d.enumRedacted) {
+        // C1: free text only. No member is ever rendered, logged, or
+        // autocompleted. enumMemberCount MAY be shown as a hint.
+        control = e('input', {
+          id, type: 'text', value: v, disabled,
+          onChange: ev => setValue(d.name, ev.target.value),
+          placeholder: d.enumMemberCount ? `one of ${d.enumMemberCount} permitted values` : 'value',
+        });
+      } else if (d.enum && d.enum.length > 0) {
+        // Closed selector, declared order, no sort/dedupe/case-fold.
+        // The placeholder option's value is "" -- which buildFormInputs
+        // treats as "unset" (never submitted), and which can never
+        // collide with a real member (ENUM-003: "" is never a legal
+        // enum member).
+        control = e('select', { id, value: v, disabled, onChange: ev => setValue(d.name, ev.target.value) },
+          e('option', { value: '' }, d.required ? '\u2014 select \u2014' : '\u2014 unset \u2014'),
+          d.enum.map((m, i) => e('option', { key: i + ':' + m, value: m }, m)),
+        );
+      } else {
+        // Unconstrained string: mandatory free text, verbatim.
+        control = e('input', {
+          id, type: 'text', value: v, disabled,
+          onChange: ev => setValue(d.name, ev.target.value),
+        });
+      }
+      return e('div', { key: d.name, style: { display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 14 } },
+        e('label', { htmlFor: id, style: { fontSize: 12 } }, d.name + (d.required ? ' *' : '') + ':'),
+        control,
+      );
+    }),
+  );
+}
+
+// Cache the entire checkpoint overlay with its validator, never just graph.hash.
+async function fetchPreviewDocument(identity, url, cache, signal) {
+  if (cache.identity !== identity) {
+    cache.identity = identity;
+    cache.etag = '';
+    cache.document = null;
+  }
+  const headers = cache.etag && cache.document ? { 'If-None-Match': cache.etag } : {};
+  const res = await fetch(url, { signal, headers });
+  if (signal.aborted || cache.identity !== identity) return null;
+  if (res.status === 304) {
+    if (!cache.document) throw new Error('Document validator returned 304 without a matching document');
+    return cache.document;
+  }
+  if (!res.ok) throw new Error(await res.text());
+  const document = validateDocumentPresentation(await res.json());
+  if (signal.aborted || cache.identity !== identity) return null;
+  cache.document = document;
+  cache.etag = res.headers.get('ETag') || '';
+  return document;
+}
+
+// ---------- main app ----------
+function App() {
+  const params = new URLSearchParams(location.search);
+  const [runbookPath, setRunbookPath] = useState(params.get('runbookPath') || '');
+  const [inputsJSON, setInputsJSON] = useState(params.get('inputs') || '');
+  const initialStyle = params.get('style') || localStorage.getItem('yawr_preview_style') || 'smooth-curves';
+  const [nodeStyle, setNodeStyle] = useState(initialStyle);
+  const updateStyle = useCallback((newStyle) => {
+    setNodeStyle(newStyle);
+    try { localStorage.setItem('yawr_preview_style', newStyle); } catch {}
+  }, []);
+  // formValues holds the declared-input form state (AR-CE-3 §6, F-4):
+  // one entry per doc.inputs[].name. A value of "" means "nothing
+  // selected/entered" and is never itself submitted -- it is the
+  // "unset" affordance, distinct from an operator-typed empty string,
+  // because the wire never carries the key at all in that case (see
+  // buildFormInputs). The raw-JSON box above remains the fallback
+  // surface (AR-CE-3 §3.6): whenever it is non-empty it wins outright,
+  // exactly as before this form existed.
+  const [formValues, setFormValues] = useState({});
+  const [doc, setDoc] = useState(null);
+  const [error, setError] = useState('');
+  const initialRunID = params.get('runID') || '';
+  const [runID, setRunID] = useState(initialRunID);
+  const activeRunIDRef = useRef(initialRunID);
+  const [isStarting, setIsStarting] = useState(false);
+  const [stateOverlay, setStateOverlay] = useState(null);
+  const [pending, setPending] = useState(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [userSelected, setUserSelected] = useState(false); // sticky once user picks
+  const [selectionIsExplicit, setSelectionIsExplicit] = useState(false);
+  const [connStatus, setConnStatus] = useState('idle'); // idle|connecting|connected|reconnecting|closed
+  const [showProse, setShowProse] = useState(true);
+  const [showPanel, setShowPanel] = useState(true);
+  const [trim, setTrim] = useState(false);
+  const [breakpoints, setBreakpoints] = useState([]);
+  const [isDebugRun, setIsDebugRun] = useState(false);
+  const [debugProfiles, setDebugProfiles] = useState([]);
+  const [selectedDebugProfileID, setSelectedDebugProfileID] = useState('');
+  const [watchesText, setWatchesText] = useState('');
+  const runStatus = stateOverlay && stateOverlay.status;
+  const isTerminal = isTerminalRunStatus(runStatus);
+  const profileRunbookPath = doc && doc.runbook && doc.runbook.path ? doc.runbook.path : runbookPath;
+  const isTerminalRef = useRef(false);
+  const docFetchInFlightRef = useRef(false);
+  const docAbortRef = useRef(null);
+  const runDocETagRef = useRef('');
+  const docCacheRef = useRef({ identity: '', etag: '', document: null });
+  const docFinalRefreshRef = useRef(false);
+  const frontierRefreshKeyRef = useRef('');
+  // This identity changes on every page reload. A late host reply from a
+  // destroyed preview instance can therefore never acknowledge a new one.
+  const hostActionSessionRef = useRef(newPreviewSessionID());
+  const hostActionRequestsRef = useRef(new Map());
+
+  useEffect(() => { isTerminalRef.current = isTerminal; }, [isTerminal]);
+
+  const loadDoc = useCallback(async (opts = {}) => {
+    const manual = !!opts.manual;
+    setError('');
+    if (!runbookPath && !runID) return;
+    if (!manual && isTerminalRef.current) return;
+    if (docFetchInFlightRef.current) {
+      if (opts.final) docFinalRefreshRef.current = true;
+      return;
+    }
+    const controller = new AbortController();
+    docFetchInFlightRef.current = true;
+    docAbortRef.current = controller;
+    try {
+      // While a run is active, fetch the run-scoped document so the
+      // server can frontier-expand only the includes the runtime has
+      // actually entered. Design-time previews stay fully lazy.
+      const url = runID
+        ? '/runs/' + encodeURIComponent(runID) + '/document'
+        : '/preview/document?runbookPath=' + encodeURIComponent(runbookPath);
+      const identity = JSON.stringify([url, runbookPath]);
+      const document = await fetchPreviewDocument(identity, url, docCacheRef.current, controller.signal);
+      if (!document || controller.signal.aborted) return;
+      runDocETagRef.current = docCacheRef.current.etag;
+      setDoc(document);
+    } catch (err) {
+      if (controller.signal.aborted || (err && err.name === 'AbortError')) return;
+      setError(String(err));
+      setDoc(null);
+    } finally {
+      if (docAbortRef.current === controller) {
+        docAbortRef.current = null;
+        docFetchInFlightRef.current = false;
+        if (docFinalRefreshRef.current) {
+          docFinalRefreshRef.current = false;
+          loadDoc({ manual: true });
+        }
+      }
+    }
+  }, [runbookPath, runID]);
+
+  useEffect(() => {
+    runDocETagRef.current = '';
+    docCacheRef.current = { identity: '', etag: '', document: null };
+    docFinalRefreshRef.current = false;
+    setDoc(null);
+    setSelectedNode(null);
+    frontierRefreshKeyRef.current = '';
+    if (docAbortRef.current) {
+      docAbortRef.current.abort();
+      docAbortRef.current = null;
+      docFetchInFlightRef.current = false;
+    }
+    loadDoc({ manual: true });
+    return () => {
+      if (docAbortRef.current) {
+        docAbortRef.current.abort();
+        docAbortRef.current = null;
+        docFetchInFlightRef.current = false;
+      }
+    };
+  }, [runbookPath, runID, loadDoc]);
+
+  useEffect(() => {
+    if (!runID || isTerminal) return;
+    const timer = setInterval(() => loadDoc(), PREVIEW_DOC_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [runID, isTerminal, loadDoc]);
+  useEffect(() => {
+    if (runID && isTerminal) loadDoc({ manual: true, final: true });
+  }, [runID, isTerminal, loadDoc]);
+
+  useEffect(() => {
+    if (!doc || !profileRunbookPath) {
+      setDebugProfiles([]);
+      setSelectedDebugProfileID('');
+      return;
+    }
+    const controller = new AbortController();
+    fetch('/debug-profiles?runbookPath=' + encodeURIComponent(profileRunbookPath), { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      })
+      .then(result => {
+        const profiles = Array.isArray(result.profiles) ? result.profiles : [];
+        setDebugProfiles(profiles);
+        setSelectedDebugProfileID(current => profiles.some(item => item.id === current) ? current : '');
+      })
+      .catch(error => {
+        if (error && error.name === 'AbortError') return;
+        setDebugProfiles([]);
+      });
+    return () => controller.abort();
+  }, [profileRunbookPath, doc && doc.hash]);
+
+  const refreshForUnknownIDs = useCallback((ids) => {
+    if (!runID || isTerminal || !doc || !ids.length) return;
+    const known = new Set(doc.nodes ? doc.nodes.map(n => n.id) : []);
+    const missing = ids.filter(id => id && !known.has(id)).sort();
+    if (!missing.length) return;
+    const key = (doc.hash || '') + ':' + missing.join('|');
+    if (frontierRefreshKeyRef.current === key) return;
+    frontierRefreshKeyRef.current = key;
+    loadDoc();
+  }, [runID, isTerminal, doc, loadDoc]);
+
+  // When state arrives mentioning a step that isn't in the current
+  // graph, the runtime has just entered a previously-opaque include.
+  // Refetch once per unchanged document/missing-ID set; never spin after
+  // a terminal state whose final overlay references an absent node.
+  useEffect(() => {
+    if (!stateOverlay || !stateOverlay.nodes) return;
+    refreshForUnknownIDs(Object.keys(stateOverlay.nodes));
+  }, [stateOverlay, refreshForUnknownIDs]);
+
+  // Same trigger for pending: an awaiting-input frame for an unknown
+  // step ID means the engine just entered an include the renderer has
+  // not yet expanded. Pending arrives on a separate SSE from state and
+  // typically fires first, so without this the UI looks stuck.
+  useEffect(() => {
+    if (!pending || !pending.stepID) return;
+    refreshForUnknownIDs([pending.stepID]);
+  }, [pending, refreshForUnknownIDs]);
+
+  const acknowledgeHostAction = useCallback(async (data) => {
+    const current = pending;
+    const request = current && current.host_action;
+    if (!current || current.kind !== 'host_action' || !request) return;
+    const correlationID = current.correlationID || current.turnID;
+    const requestID = hostActionRequestsRef.current.get(correlationID);
+    if (!requestID ||
+        data.runId !== runID ||
+        data.turnId !== current.turnID ||
+        data.correlationId !== correlationID ||
+        data.previewSessionId !== hostActionSessionRef.current ||
+        data.requestId !== requestID ||
+        data.capability !== request.capability ||
+        !['completed', 'failed', 'timed-out', 'unsupported', 'execution-not-started'].includes(data.status)) {
+      return;
+    }
+    const res = await fetch('/runs/' + encodeURIComponent(runID) + '/interactions/' + encodeURIComponent(current.turnID), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Yawr-Ack-Source': 'preview',
+      },
+      body: JSON.stringify({
+        kind: 'host_action',
+        runID,
+        turnID: current.turnID,
+        correlationID,
+        capability: request.capability,
+        status: data.status,
+        result: data.result,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(await res.text() || ('HTTP ' + res.status));
+    }
+    hostActionRequestsRef.current.delete(correlationID);
+    setPending(p => (p && p.turnID === current.turnID) ? null : p);
+    // Notify the parent wrapper that the broker POST completed so tests
+    // can synchronise on the canonical ack delivery before exiting.
+    if (window.parent !== window) {
+      const targetOrigin = previewParentTargetOrigin();
+      if (targetOrigin) {
+        window.parent.postMessage({
+          type: 'yawr.host-action.ack-delivered',
+          turnId: current.turnID,
+          correlationId: correlationID,
+        }, targetOrigin);
+      }
+    }
+  }, [pending, runID]);
+
+  const acknowledgeHostActionCancellation = useCallback((data) => {
+    const current = pending;
+    const request = current && current.host_action;
+    if (!current || current.kind !== 'host_action' || !request) return Promise.resolve();
+    const correlationID = current.correlationID || current.turnID;
+    const requestID = hostActionRequestsRef.current.get(correlationID);
+    if (!requestID ||
+        data.correlationId !== correlationID ||
+        data.previewSessionId !== hostActionSessionRef.current ||
+        data.requestId !== requestID ||
+        data.status !== 'execution-not-started' ||
+        !['panel-disposed', 'run-replaced', 'reload'].includes(data.reason)) {
+      return Promise.resolve();
+    }
+    return acknowledgeHostAction({
+      runId: runID,
+      turnId: current.turnID,
+      correlationId: correlationID,
+      previewSessionId: hostActionSessionRef.current,
+      requestId: requestID,
+      capability: request.capability,
+      status: 'execution-not-started',
+    });
+  }, [pending, runID, acknowledgeHostAction]);
+
+  // Listen for messages from the host (e.g. VS Code extension forwarding
+  // configuration changes), including scoped host-action acknowledgements.
+  useEffect(() => {
+    const onMsg = (ev) => {
+      const expectedOrigin = previewParentTargetOrigin();
+      if (!expectedOrigin || ev.source !== window.parent || ev.origin !== expectedOrigin) return;
+      const data = ev && ev.data;
+      if (data && data.type === 'reload') loadDoc({ manual: true });
+      if (data && data.type === 'setStyle' && data.style) updateStyle(data.style);
+      if (data && (data.type === 'yawr.host-action.ack' || data.type === 'yawr.host-action.cancel')) {
+        const settle = data.type === 'yawr.host-action.ack'
+          ? acknowledgeHostAction(data)
+          : acknowledgeHostActionCancellation(data);
+        settle.catch(err => setError(String(err)));
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [loadDoc, updateStyle, acknowledgeHostAction, acknowledgeHostActionCancellation]);
+
+  // Re-initialise the declared-input form whenever a new document loads.
+  // Preselection rule (AR-CE-6 §2): a decl's default preselects only when
+  // it is present; for enum decls the engine (ENUM-006) already
+  // guarantees a declared default is a member, so the client is never
+  // asked to repair a non-member default here. No other implicit
+  // selection: a required decl with no default starts genuinely empty.
+  useEffect(() => {
+    const decls = (doc && doc.inputs) || [];
+    const next = {};
+    for (const d of decls) {
+      next[d.name] = (d.default !== undefined && d.default !== null) ? String(d.default) : '';
+    }
+    setFormValues(next);
+  }, [doc && doc.hash]);
+
+  // buildFormInputs turns the declared-input form state into the {name:
+  // value} object POSTed to /runs. A field left at "" (nothing
+  // selected/typed) is omitted entirely -- the "unset" affordance is
+  // "key absent", never a submitted empty string (AR-CE-3 §6.1, CE-R-03).
+  // Every other value is forwarded byte-verbatim: no trim, no case-fold,
+  // no NFC normalisation (AR-CE-5 §1-2).
+  const buildFormInputs = useCallback(() => {
+    const decls = (doc && doc.inputs) || [];
+    const out = {};
+    for (const d of decls) {
+      const v = formValues[d.name];
+      if (v === undefined || v === '') continue;
+      out[d.name] = v;
+    }
+    return out;
+  }, [doc, formValues]);
+
+  const saveDebugProfile = useCallback(async ({ name, target, set }) => {
+    const id = debugProfileID(name);
+    if (!id) throw new Error('Enter a profile name containing letters or numbers.');
+    const response = await fetch('/debug-profiles/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        runbookPath: profileRunbookPath,
+        profile: { name, overrides: [{ target, set }] },
+      }),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const saved = await response.json();
+    setDebugProfiles(current => current.filter(item => item.id !== saved.id).concat([saved])
+      .sort((left, right) => left.name.localeCompare(right.name)));
+    setSelectedDebugProfileID(saved.id);
+    return saved;
+  }, [profileRunbookPath]);
+
+  const startRun = useCallback(async (debug = false) => {
+    if (!runbookPath || isStarting) return;
+    const selectedProfile = debugProfiles.find(item => item.id === selectedDebugProfileID);
+    if (debug && breakpoints.length === 0 && !selectedProfile) {
+      setError('Add a breakpoint or select a debug profile before starting a debug run.');
+      return;
+    }
+    if (debug && selectedProfile && selectedProfile.stale &&
+        !window.confirm('This debug profile was created for an older runbook plan. Run it anyway?')) return;
+    setError('');
+    let inputs = undefined;
+    if (inputsJSON.trim() !== '') {
+      // Raw-JSON box wins outright when non-empty -- it is the
+      // fallback surface (AR-CE-3 §3.6), and its presence signals the
+      // operator chose it over the declared-input form.
+      try { inputs = JSON.parse(inputsJSON); }
+      catch (err) { setError('inputs must be valid JSON: ' + err.message); return; }
+    } else {
+      const formInputs = buildFormInputs();
+      if (Object.keys(formInputs).length > 0) inputs = formInputs;
+    }
+    setIsStarting(true);
+    activeRunIDRef.current = '';
+    setRunID('');
+    setStateOverlay(null);
+    setPending(null);
+    setConnStatus('idle');
+    setUserSelected(false);
+    setSelectionIsExplicit(false);
+    setSelectedNode(null);
+    setIsDebugRun(debug);
+    try {
+      const request = { runbookPath, inputs, actor: 'web-ui' };
+      if (debug) request.debug = buildDebugRunConfig(
+        breakpoints,
+        selectedProfile && selectedProfile.profile,
+        !!(selectedProfile && selectedProfile.stale),
+        parseDebugWatches(watchesText),
+      );
+      const res = await fetch('/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const j = await res.json();
+      activeRunIDRef.current = j.runID;
+      setRunID(j.runID);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setIsStarting(false);
+    }
+  }, [runbookPath, inputsJSON, buildFormInputs, isStarting, breakpoints, debugProfiles, selectedDebugProfileID, watchesText]);
+
+  // /runs/{id}/state SSE
+  useEffect(() => {
+    if (!runID || isTerminal) return;
+    setConnStatus('connecting');
+    const streamRunID = runID;
+    const es = new EventSource('/runs/' + encodeURIComponent(streamRunID) + '/state');
+    // Server emits named "state" events, not the default "message".
+    const onState = (ev) => {
+      if (activeRunIDRef.current !== streamRunID) return;
+      try { setStateOverlay(JSON.parse(ev.data)); } catch {}
+    };
+    es.addEventListener('state', onState);
+    es.onmessage = onState; // tolerate untyped frames too
+    es.onopen = () => {
+      if (activeRunIDRef.current !== streamRunID) return;
+      setConnStatus('connected');
+    };
+    es.onerror = () => {
+      if (activeRunIDRef.current !== streamRunID) return;
+      // EventSource auto-reconnects unless readyState is CLOSED.
+      setConnStatus(es.readyState === 2 /* CLOSED */ ? 'closed' : 'reconnecting');
+    };
+    return () => {
+      es.removeEventListener('state', onState);
+      es.close();
+      setConnStatus('idle');
+    };
+  }, [runID, isTerminal]);
+
+  // Forward a pending typed host action only to an explicitly identified
+  // parent. A standalone or untrusted embedding reports that execution did not start;
+  // it never attempts to emulate host work or sends a wildcard-origin message.
+  useEffect(() => {
+    if (!pending || pending.kind !== 'host_action' || !pending.host_action) return;
+    const correlationID = pending.correlationID || pending.turnID;
+    if (!correlationID || hostActionRequestsRef.current.has(correlationID)) return;
+    const requestID = hostActionSessionRef.current + ':' + correlationID;
+    hostActionRequestsRef.current.set(correlationID, requestID);
+    const targetOrigin = previewParentTargetOrigin();
+    if (window.parent === window || !targetOrigin) {
+      acknowledgeHostAction({
+        runId: runID,
+        turnId: pending.turnID,
+        correlationId: correlationID,
+        previewSessionId: hostActionSessionRef.current,
+        requestId: requestID,
+        capability: pending.host_action.capability,
+        status: 'execution-not-started',
+      }).catch(err => setError(String(err)));
+      return;
+    }
+    window.parent.postMessage({
+      type: 'yawr.host-action.request',
+      version: 'yawr.host-action/v1',
+      capability: pending.host_action.capability,
+      runId: runID,
+      turnId: pending.turnID,
+      correlationId: correlationID,
+      previewSessionId: hostActionSessionRef.current,
+      requestId: requestID,
+      request: pending.host_action.request,
+    }, targetOrigin);
+  }, [pending, runID, acknowledgeHostAction]);
+
+  useEffect(() => () => {
+    const targetOrigin = previewParentTargetOrigin();
+    const hadPendingHostAction = hostActionRequestsRef.current.size > 0;
+    for (const [correlationID, requestID] of hostActionRequestsRef.current) {
+      if (targetOrigin && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'yawr.host-action.cancel',
+          version: 'yawr.host-action/v1',
+          correlationId: correlationID,
+          previewSessionId: hostActionSessionRef.current,
+          requestId: requestID,
+          status: 'execution-not-started',
+          reason: 'run-replaced',
+        }, targetOrigin);
+      }
+    }
+    hostActionRequestsRef.current.clear();
+    // Closing or reloading a preview while its host action is pending is a
+    // lifecycle cancellation of the run, not an invented host result.
+    if (runID && hadPendingHostAction) {
+      fetch('/runs/' + encodeURIComponent(runID), { method: 'DELETE', keepalive: true }).catch(() => {});
+    }
+  }, [runID]);
+
+  // /runs/{id}/interactions SSE
+  useEffect(() => {
+    if (!runID || isTerminal) return;
+    const streamRunID = runID;
+    const es = new EventSource('/runs/' + encodeURIComponent(streamRunID) + '/interactions');
+    es.onmessage = (ev) => {
+      if (activeRunIDRef.current !== streamRunID) return;
+      try {
+        const f = JSON.parse(ev.data);
+        if (f.type === 'pending') {
+          setPending(f);
+          // Auto-focus the step that's asking for input.
+          if (f.stepID) {
+            setSelectionIsExplicit(false);
+            setSelectedNode(f.nodeID || f.stepID);
+            setUserSelected(false); // still allow auto-track to take over after resolution
+          }
+        }
+        else if (f.type === 'resolved') setPending(p => (p && p.turnID === f.turnID ? null : p));
+      } catch {}
+    };
+    return () => es.close();
+  }, [runID, isTerminal]);
+
+  const submitAnswer = useCallback(async (env) => {
+    if (!pending) return;
+    const submittedTurnID = pending.turnID;
+    const res = await fetch('/runs/' + encodeURIComponent(runID) + '/interactions/' + encodeURIComponent(pending.turnID), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(env),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || ('HTTP ' + res.status));
+    }
+    // Don't blindly null pending — the resolved+next-pending pair often
+    // arrives over SSE before this POST response, so a naive
+    // setPending(null) clobbers a freshly-delivered next turn. Only
+    // clear if the visible pending is still the one we just answered.
+    setPending(p => (p && p.turnID === submittedTurnID) ? null : p);
+  }, [runID, pending]);
+
+  const cancelRun = useCallback(async () => {
+    if (!runID) return;
+    try {
+      await fetch('/runs/' + encodeURIComponent(runID), { method: 'DELETE' });
+    } catch (err) { setError(String(err)); }
+  }, [runID]);
+
+  const onNodeClick = useCallback((_ev, node) => {
+    if (!node || (node.data && node.data.synthetic)) return;
+    setUserSelected(true);
+    setSelectionIsExplicit(true);
+    setSelectedNode(node.id || null);
+  }, []);
+
+  // Auto-track the step the user is most likely watching, in priority
+  // order:
+  //   1. The most recently-started leaf that is currently `running`
+  //      (or `delaying`, since that becomes a leaf in flight) —
+  //      whatever the user is waiting on right now.
+  //   2. If nothing is active, the most recently-finished leaf.
+  //   3. If no leaf has any state yet (we're still descending through
+  //      composite parents), the most recently-active composite, so
+  //      the panel shows where execution currently is.
+  // Composite parents (include / iterate / branch / parallel /
+  // compensate) are skipped at the leaf level because they stay
+  // `running` for the entire duration of their children and complete
+  // *after* them: comparing by latest state-change timestamp would
+  // always make the outermost parent win.
+  const kindByID = useMemo(() => {
+    const m = new Map();
+    if (doc && doc.nodes) for (const n of doc.nodes) m.set(n.id, (n.data && n.data.kind) || n.kind || '');
+    return m;
+  }, [doc]);
+  const isComposite = useCallback((id) => {
+    const k = kindByID.get(id) || '';
+    return k === 'include' || k === 'iterate' || k === 'branch' ||
+           k === 'parallel' || k === 'compensate';
+  }, [kindByID]);
+  useEffect(() => {
+    if (userSelected) return;
+    if (!stateOverlay || !stateOverlay.nodes) return;
+    const nodes = Object.values(stateOverlay.nodes);
+    const startedAt = (n) => n.started_at ? Date.parse(n.started_at) : 0;
+    const finishedAt = (n) => n.finished_at ? Date.parse(n.finished_at) : 0;
+    const isActive = (n) => n.status === 'running' || n.status === 'delaying';
+    // Tier 1: latest active leaf (running or delaying). started_at is
+    // the right key here — finished_at is meaningless for active nodes.
+    let pick = null;
+    let pickT = -Infinity;
+    for (const n of nodes) {
+      if (isComposite(n.id)) continue;
+      if (!isActive(n)) continue;
+      const t = startedAt(n);
+      if (t > pickT) { pick = n; pickT = t; }
+    }
+    // Tier 2: nothing active — fall back to most recently-finished leaf.
+    if (!pick) {
+      for (const n of nodes) {
+        if (isComposite(n.id)) continue;
+        const t = Math.max(startedAt(n), finishedAt(n));
+        if (t > pickT) { pick = n; pickT = t; }
+      }
+    }
+    // Tier 3: no leaf has any state — pick the most recently-active
+    // composite so the panel still shows current location.
+    if (!pick) {
+      for (const n of nodes) {
+        const t = Math.max(startedAt(n), finishedAt(n));
+        if (t > pickT) { pick = n; pickT = t; }
+      }
+    }
+    if (pick && pick.id !== selectedNode) {
+      setSelectionIsExplicit(false);
+      setSelectedNode(pick.id);
+    }
+  }, [stateOverlay, userSelected, selectedNode, isComposite]);
+
+  const visibleSelectedNode = visibleSelectedNodeID(
+    selectedNode,
+    selectionIsExplicit,
+    runID,
+    stateOverlay,
+    pending,
+  );
+
+  const structuralDoc = useMemo(() => doc ? withBranchMerges(doc) : null, [doc]);
+
+  // Ordered, navigable list of nodes for prev/next cycling. Mirrors
+  // doc.nodes ordering so the panel matches the prose pane.
+  const nodeOrder = useMemo(
+    () => structuralDoc && structuralDoc.nodes
+      ? structuralDoc.nodes.filter(n => !(n.data && n.data.synthetic)).map(n => n.id)
+      : [],
+    [structuralDoc],
+  );
+  const cycleStep = useCallback((delta) => {
+    if (!nodeOrder.length) return;
+    const idx = visibleSelectedNode ? nodeOrder.indexOf(visibleSelectedNode) : -1;
+    const next = idx < 0 ? (delta > 0 ? 0 : nodeOrder.length - 1)
+      : Math.max(0, Math.min(nodeOrder.length - 1, idx + delta));
+    setUserSelected(true);
+    setSelectionIsExplicit(true);
+    setSelectedNode(nodeOrder[next]);
+  }, [nodeOrder, visibleSelectedNode]);
+
+  // Run dagre once per document structure or style change. Selection / status changes
+  // must NOT re-run the layout, otherwise React Flow's fitView re-fits
+  // on every tick and the viewport zooms erratically (e.g. after a
+  // second run completes, focus snaps to the most recently updated
+  // subgraph and earlier steps appear to vanish off-screen).
+  const baseLayout = useMemo(
+    () => structuralDoc ? layoutDocument(structuralDoc, nodeStyle) : { nodes: [], edges: [] },
+    [structuralDoc, nodeStyle],
+  );
+
+  // Trim mode: hide nodes in branch arms that were not taken. We
+  // compute the visible set from the *full* doc — execution state
+  // dictates which arms are dead — and then either filter the full
+  // layout (preserving exact positions) or re-run dagre on the
+  // trimmed sub-doc (compacting away the empty regions where the
+  // dead arms used to sit).
+  //
+  // Live(id) := state entry exists for id OR for any descendant in
+  // the rendered edge graph. Edge B->C is dead iff B is a 'branch'
+  // with a state entry AND C is not live. BFS from in-degree-0 roots
+  // using only non-dead edges yields the visible set; any node not
+  // reached is hidden.
+  const visibleGraph = useMemo(() => {
+    if (!trim || !structuralDoc) return null; // null = no filter
+    const overlayNodes = (stateOverlay && stateOverlay.nodes) || {};
+    const allEdges = baseLayout.edges || [];
+    const allNodes = baseLayout.nodes || [];
+    if (!allNodes.length) return null;
+    return trimVisibleGraph(allNodes, allEdges, overlayNodes);
+  }, [trim, structuralDoc, baseLayout, stateOverlay]);
+
+  // Trim layout: re-run dagre on the trimmed sub-doc so the visible
+  // nodes pack tightly without leaving the gaps where dead arms used
+  // to sit. We construct a sub-doc with only the visible step nodes
+  // and the edges between them; frames/regions are recomputed from
+  // those positions inside layoutDocument. This DOES move surviving
+  // nodes — that's the point of compacting — but only while trim is
+  // on; toggling trim off restores the cached full-doc layout
+  // verbatim.
+  const trimmedLayout = useMemo(() => {
+    if (!visibleGraph || !structuralDoc) return null;
+    const subDoc = {
+      ...structuralDoc,
+      nodes: structuralDoc.nodes.filter(n => visibleGraph.nodeIDs.has(n.id)),
+      edges: structuralDoc.edges.filter(e => visibleGraph.edgeIDs.has(graphEdgeID(e))),
+    };
+    return layoutDocument(subDoc, nodeStyle);
+  }, [visibleGraph, structuralDoc, nodeStyle]);
+
+  // Choose the active layout source: trimmed when trim is on,
+  // full-doc layout otherwise. Decorate with overlay status +
+  // selection. Position comes from whichever layout we picked.
+  const layout = useMemo(() => {
+    const src = trimmedLayout || baseLayout;
+    const overlayNodes = (stateOverlay && stateOverlay.nodes) || {};
+    return {
+      edges: src.edges.map(ed => {
+        const targetState = edgeRuntimeState(ed, overlayNodes);
+        const className = edgeRuntimeClass(targetState);
+        return { ...ed, className, animated: className === 'edge-running' };
+      }),
+      nodes: src.nodes.map(n => {
+        const ns = overlayNodes[n.id];
+        const data = { ...n.data, selected: n.id === visibleSelectedNode };
+        const phases = breakpoints.filter(item => (item.nodeID || item.step) === n.id).map(item => item.phase);
+        if (phases.length > 0) data.debugBreakpoint = phases.join(' + ');
+        if (ns) {
+          data.status = ns.status;
+          data.duration_ms = ns.duration_ms;
+          data.delay_ms = ns.delay_ms;
+          if (ns.debug_override) data.debugOverride = ns.debug_override;
+        }
+        return { ...n, data };
+      }),
+    };
+  }, [baseLayout, trimmedLayout, stateOverlay, visibleSelectedNode, breakpoints]);
+
+  // The trimmed layout already excludes hidden nodes; the full layout
+  // shows everything. Either way `layout` is exactly what we want to
+  // render — no further filtering needed.
+  const displayLayout = layout;
+
+  return e(React.Fragment, null,
+    e('header', null,
+      e('strong', null, 'yawr'),
+      e('input', { value: runbookPath, onChange: ev => setRunbookPath(ev.target.value), placeholder: '/abs/path/to/x.runbook.yaml' }),
+      e('input', { value: inputsJSON, onChange: ev => setInputsJSON(ev.target.value), placeholder: 'inputs JSON (optional)', style: { width: 220 } }),
+      e('button', { onClick: () => loadDoc({ manual: true }), disabled: !runbookPath && !runID }, 'Load'),
+      e('button', { onClick: () => startRun(shouldStartDebugRun(breakpoints, selectedDebugProfileID)), disabled: !runbookPath || isStarting || (!!runID && !isTerminal) },
+        isStarting ? 'Starting\u2026' : (runID && !isTerminal ? 'Running\u2026' : (isTerminal ? 'Run again' : 'Run'))),
+      e('button', {
+        className: 'toggle' + (isDebugRun ? ' on' : ''),
+        onClick: () => startRun(true),
+        disabled: !runbookPath || (breakpoints.length === 0 && !selectedDebugProfileID) || isStarting || (!!runID && !isTerminal),
+        title: breakpoints.length === 0 && !selectedDebugProfileID ? 'Add a breakpoint or select a debug profile' : 'Start an explicitly debugged run',
+      }, 'Debug Run'),
+      e('select', {
+        className: 'style-picker',
+        value: selectedDebugProfileID,
+        disabled: !!runID && !isTerminal,
+        onChange: event => setSelectedDebugProfileID(event.target.value),
+        title: 'Reusable debug profile for this root runbook',
+      },
+        e('option', { value: '' }, 'Debug profile: none'),
+        debugProfiles.map(item => e('option', { key: item.id, value: item.id },
+          (item.stale ? '[stale] ' : '') + item.name,
+        )),
+      ),
+      runID && !isTerminal && e('button', { className: 'danger', onClick: cancelRun }, 'Cancel'),
+      runID && e('span', { className: 'runID' }, runID + (runStatus ? ' \u2014 ' + runStatus : '')),
+      runID && e('span', {
+        className: 'conn ' + connStatus,
+        title: 'Live state stream: ' + connStatus,
+      }, e('span', { className: 'dot' }), connStatus),
+      e('span', { style: { flex: 1 } }),
+      e('select', {
+        className: 'style-picker',
+        value: nodeStyle,
+        onChange: ev => updateStyle(ev.target.value),
+        title: 'Visual stereotype style (configurable via VS Code setting yawr.preview.nodeStyle)',
+      },
+        e('option', { value: 'smooth-curves' }, 'Style: Smooth Bauhaus'),
+        e('option', { value: 'minimalist' }, 'Style: Linear Minimalist'),
+        e('option', { value: 'header-badges' }, 'Style: Vercel Cards'),
+      ),
+      e('button', {
+        className: 'toggle' + (showProse ? ' on' : ''),
+        onClick: () => setShowProse(v => !v),
+        title: 'Toggle prose pane',
+      }, 'Prose'),
+      e('button', {
+        className: 'toggle' + (showPanel ? ' on' : ''),
+        onClick: () => setShowPanel(v => !v),
+        title: 'Toggle step panel',
+      }, 'Panel'),
+      e('button', {
+        className: 'toggle' + (trim ? ' on' : ''),
+        onClick: () => setTrim(v => !v),
+        title: 'Hide steps in branch arms that were not taken (positions unchanged)',
+      }, 'Trim'),
+    ),
+    e(InputsForm, {
+      decls: (doc && doc.inputs) || [],
+      values: formValues,
+      setValue: (name, v) => setFormValues(prev => ({ ...prev, [name]: v })),
+      disabled: inputsJSON.trim() !== '',
+    }),
+    e('div', { className: 'body style-' + nodeStyle },
+      e('div', { className: 'graph' },
+        doc
+          ? e(ReactFlowProvider, null,
+              e(GraphCanvas, {
+                docHash: (doc && doc.hash) || 'doc',
+                runID,
+                nodes: displayLayout.nodes,
+                edges: displayLayout.edges,
+                selectedNode: visibleSelectedNode,
+                onUserPan: () => setUserSelected(true),
+                onNodeClick,
+              }),
+            )
+          : e('div', { className: 'empty' }, error || 'Enter a runbook path and click Load.'),
+        (error || (isTerminal && runStatus !== 'completed')) && e('div', { className: 'errorBar' },
+          error || (() => {
+            const failed = stateOverlay && stateOverlay.nodes
+              ? Object.values(stateOverlay.nodes).find(n => n.status === 'failed')
+              : null;
+            return failed ? `${failed.id}: ${failed.error || 'failed'}` : `Run ${runStatus}`;
+          })()
+        ),
+      ),
+      doc && showProse && e(ProsePane, {
+        doc,
+        runbookPath,
+        overlay: stateOverlay,
+        structuralNodeIDs: nodeOrder,
+        selectedNode: visibleSelectedNode,
+        onSelect: (id) => { setUserSelected(true); setSelectionIsExplicit(true); setSelectedNode(id); },
+      }),
+      doc && showPanel && e(StepPanel, {
+        nodeID: visibleSelectedNode,
+        doc,
+        overlay: stateOverlay,
+        pending,
+        submitAnswer,
+        cycleStep,
+        nodeOrder,
+        breakpoints,
+        breakpointsDisabled: !!runID && !isTerminal,
+        toggleBreakpoint: (nodeID, phase) => setBreakpoints(current => toggleDebugBreakpoint(current, doc, nodeID, phase)),
+        saveDebugProfile,
+        watchesText,
+        setWatchesText,
+      }),
+    ),
+  );
+}
+
+function PresentedCode({ text, descriptor, label, status, details, expressionPath }) {
+  const target = useRef(null);
+  useEffect(() => target.current ? mountCode(target.current, text, descriptor, label, status, details, expressionPath) : undefined,
+    [text, descriptor, label, status, details, expressionPath]);
+  return e('div', { ref: target });
+}
+function AuthoredExpressions({ details, exclude }) {
+  const target = useRef(null);
+  useEffect(() => target.current ? mountAuthoredExpressions(target.current, details, exclude) : undefined, [details, exclude]);
+  return e('div', { ref: target });
+}
+function PresentationDetails({ details, output, statuses, occurrenceLabel }) {
+  let metadata;
+  try { metadata = details && details.code_presentation && decodeEnvelope(details.code_presentation); }
+  catch { /* Expression metadata is independent of tool metadata. */ }
+  if (!details) return null;
+  const args = Array.isArray(details.arguments) ? details.arguments : [];
+  return e('section', { className: 'presentation-details' },
+    e('h4', null, occurrenceLabel || 'Authored template'),
+    e(AuthoredExpressions, { details, exclude: args.flatMap((arg, index) =>
+      metadata?.arguments.some(field => field.name === arg.name && field.presentation) ? ['/arguments/' + index + '/value'] : []) }),
+    ...args.map((arg, index) => {
+      const field = metadata?.arguments.find(item => item.name === arg.name);
+      if (!field || !field.presentation) return null;
+      return e(PresentedCode, { key: arg.name, label: 'Authored template · ' + arg.name,
+        details, expressionPath: '/arguments/' + index + '/value',
+        text: arg.redacted === true ? undefined : typeof arg.value === 'string' ? arg.value : undefined,
+        status: arg.redacted === true ? 'redacted' : typeof arg.value === 'string' ? 'available' : 'unavailable',
+        descriptor: field.status === 'resolved' ? field.presentation : undefined });
+    }),
+    e('p', null, 'Execution-resolved inputs: Unavailable — not retained'),
+    ...(metadata ? safeOutputs(metadata, output, statuses) : []).map(value => e(PresentedCode, {
+      key: 'output:' + value.name, label: 'Output · ' + value.name,
+      text: value.text, descriptor: value.descriptor, status: value.status,
+    })),
+  );
+}
+function StepPresentation({ node, doc }) {
+  const state = doc.presentation_state;
+  const occurrences = state && Array.isArray(state.occurrences)
+    ? state.occurrences.filter(item => item.identity && item.identity.qualified_node_id === node.id) : [];
+  if (!occurrences.length) return e(PresentationDetails, { details: node.data && node.data.details });
+  return e('div', null, ...occurrences.map((item, index) => {
+    const metadata = item.details && item.details.code_presentation;
+    if (!metadata || metadata.origin !== 'frozen' || metadata.plan_snapshot_digest !== state.plan_snapshot_digest) {
+      return e('p', { key: index }, 'Frozen occurrence metadata unavailable');
+    }
+    const identity = item.identity;
+    const label = ['Occurrence', identity.dispatch_occurrence_id || identity.event_id || identity.frame_id || '',
+      identity.invocation === undefined ? '' : 'invocation ' + identity.invocation,
+      identity.retry_attempt === undefined ? '' : 'retry ' + identity.retry_attempt,
+      identity.frame_step_index === undefined ? '' : 'frame step ' + identity.frame_step_index].filter(Boolean).join(' · ');
+    return e(PresentationDetails, { key: JSON.stringify(identity), occurrenceLabel: label,
+      details: item.details, output: item.output, statuses: item.output_value_status });
+  }));
+}
+function StepPanel({ nodeID, doc, overlay, pending, submitAnswer, cycleStep, nodeOrder, breakpoints, breakpointsDisabled, toggleBreakpoint, saveDebugProfile, watchesText, setWatchesText }) {
+  // Scroll the selected node into view if the panel is long.
+  useEffect(() => {
+    if (!nodeID) return;
+    const el = document.getElementById('panel-anchor');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }, [nodeID]);
+
+  if (!doc) return null;
+  const node = nodeID && doc.nodes ? doc.nodes.find(n => n.id === nodeID) : null;
+  const ns = node && overlay && overlay.nodes ? overlay.nodes[node.id] : null;
+  const idx = nodeID ? nodeOrder.indexOf(nodeID) : -1;
+  const total = nodeOrder.length;
+  const interactionForThisStep = pending && node && (pending.nodeID || pending.stepID) === node.id;
+  const callPath = node ? debugCallPathForNode(doc, node.id) : [];
+  const rawStepID = node && node.data && node.data.step_id || (node && node.id);
+  const debugSupported = node ? debugTargetSupported(doc, node.id) : false;
+  const hasBreakpoint = phase => (breakpoints || []).some(item =>
+    item.step === rawStepID && item.phase === phase && JSON.stringify(item.callPath || []) === JSON.stringify(callPath));
+
+  const header = e('div', { className: 'panelHeader' },
+    e('button', {
+      className: 'nav', onClick: () => cycleStep(-1),
+      disabled: total === 0 || idx === 0,
+      title: 'Previous step',
+    }, '\u2190'),
+    e('h3', { id: 'panel-anchor' },
+      node ? node.id : 'No step selected',
+      ns && e('span', { className: 'pill ' + ns.status }, ns.status),
+    ),
+    e('span', { style: { color: 'var(--fg-muted)', fontSize: 11 } },
+      idx >= 0 ? `${idx + 1} / ${total}` : '',
+    ),
+    e('button', {
+      className: 'nav', onClick: () => cycleStep(1),
+      disabled: total === 0 || (idx >= 0 && idx === total - 1),
+      title: 'Next step',
+    }, '\u2192'),
+  );
+
+  if (!node) {
+    return e('aside', { className: 'panel' }, header,
+      e('div', { className: 'panelBody', style: { color: 'var(--fg-muted)' } },
+        total > 0 ? 'Click a node, or use \u2190/\u2192 to inspect a step.' : 'Load a runbook to see steps.',
+      ),
+    );
+  }
+
+  const items = [];
+  items.push(['kind', (node.data && node.data.kind) || node.kind || '']);
+  if (node.data) {
+    if (node.data.command) items.push(['command', node.data.command]);
+    if (node.data.tool) items.push(['tool', node.data.tool]);
+    if (node.data.title) items.push(['title', node.data.title]);
+  }
+  if (ns) {
+    if (ns.startedAt) items.push(['started', new Date(ns.startedAt).toLocaleTimeString()]);
+    if (ns.finishedAt) items.push(['finished', new Date(ns.finishedAt).toLocaleTimeString()]);
+    if (ns.durationMs != null) items.push(['duration', ns.durationMs + ' ms']);
+    if (ns.attempt) items.push(['attempt', String(ns.attempt)]);
+    if (ns.iteration && ns.iteration.total) items.push(['iteration', ns.iteration.index + ' / ' + ns.iteration.total]);
+    if (ns.error) items.push(['error', ns.error]);
+  }
+
+  return e('aside', { className: 'panel' }, header,
+    e('div', { className: 'panelBody' },
+      e(StepPresentation, { node, doc }),
+      e('dl', null,
+        ...items.flatMap(([k, v]) => [
+          e('dt', { key: 'k-' + k }, k),
+          e('dd', { key: 'v-' + k }, String(v)),
+        ]),
+      ),
+      e('div', { className: 'debug-controls' },
+        e('h4', null, 'Breakpoints'),
+        e('label', null,
+          e('input', {
+            type: 'checkbox',
+            checked: hasBreakpoint('before'),
+            disabled: breakpointsDisabled || !debugSupported,
+            onChange: () => toggleBreakpoint(node.id, 'before'),
+          }),
+          'Break before execution',
+        ),
+        e('label', null,
+          e('input', {
+            type: 'checkbox',
+            checked: hasBreakpoint('after'),
+            disabled: breakpointsDisabled || !debugSupported,
+            onChange: () => toggleBreakpoint(node.id, 'after'),
+          }),
+          'Break after execution, before commit',
+        ),
+        e('label', { htmlFor: 'debug-watches', style: { display: 'block', marginTop: 10 } }, 'Watch expressions'),
+        e('textarea', {
+          id: 'debug-watches', rows: 3, value: watchesText, disabled: breakpointsDisabled,
+          placeholder: 'One GXL expression per line',
+          onChange: event => setWatchesText(event.target.value),
+        }),
+        e('div', { className: 'hint' }, 'Read-only; evaluated when execution pauses.'),
+        !debugSupported && e('div', { className: 'hint' }, 'Debugger v1 does not pause parallel, compensation, or wait-for-event execution paths.'),
+      ),
+      ns && ns.debug_override && e('div', { className: 'debug-audit' },
+        e('h4', null, 'Debug override'),
+        ns.debug_override.actual_vars && e(React.Fragment, null,
+          e('div', { className: 'queryMeta' }, 'Variables before (debug)'),
+          e('pre', null, JSON.stringify(ns.debug_override.actual_vars, null, 2)),
+        ),
+        ns.debug_override.effective_vars && e(React.Fragment, null,
+          e('div', { className: 'queryMeta' }, 'Variables after (debug)'),
+          e('pre', null, JSON.stringify(ns.debug_override.effective_vars, null, 2)),
+        ),
+        e('div', { className: 'queryMeta' }, 'Actual (debug)'),
+        e('pre', null, JSON.stringify(ns.debug_override.actual || {}, null, 2)),
+        e('div', { className: 'queryMeta' }, 'Effective (debug)'),
+        e('pre', null, JSON.stringify(ns.debug_override.effective || {}, null, 2)),
+      ),
+      ns && ns.iteration && Array.isArray(ns.iteration.records) && ns.iteration.records.length > 0 &&
+        e(IterationTable, { records: ns.iteration.records }),
+      ns && isQueryResultOutput(ns.output) && e(QueryResultCard, { output: ns.output }),
+      ns && !isQueryResultOutput(ns.output) && ns.error && String(ns.error).includes('result:') &&
+        e(QueryResultErrorCard, { error: ns.error, output: ns.output }),
+      ns && ns.interaction && !interactionForThisStep &&
+        e(InteractionRecord, { record: ns.interaction }),
+      interactionForThisStep && e('div', { className: 'interactionInline interaction' },
+        e('h4', null, 'Awaiting your input'),
+        e(InteractionForm, { pending, submit: submitAnswer, saveDebugProfile }),
+      ),
+      pending && !interactionForThisStep && e('div', {
+        style: { marginTop: 12, padding: 8, border: '1px dashed var(--warn)', borderRadius: 4, fontSize: 11, color: 'var(--warn)' },
+        title: 'Click to jump',
+        onClick: () => cycleStep(nodeOrder.indexOf(pending.nodeID || pending.stepID) - idx),
+      }, '\u26a1 ' + (pending.stepID || 'another step') + ' is awaiting input \u2014 click to focus'),
+      overlay && overlay.vars && Object.keys(overlay.vars).length > 0 &&
+        e(VarsPanel, { vars: overlay.vars }),
+    ),
+  );
+}
+
+function isQueryResultOutput(output) {
+  return !!output && typeof output.success === 'boolean' && Number.isInteger(output.row_count) && Array.isArray(output.columns) && Array.isArray(output.rows);
+}
+
+function QueryResultErrorCard({ error, output }) {
+  const stdoutDiagnostic = output ? queryDiagnosticExcerpt(output, 'stdout') : { text: '', truncated: false };
+  const stdoutExcerpt = stdoutDiagnostic.text;
+  const stdoutTruncated = stdoutDiagnostic.truncated;
+  return e('div', { className: 'queryResult error' },
+    e('h4', null, 'Query result error'),
+    e('div', { className: 'queryMeta' }, String(error || 'Structured result parsing failed')),
+    stdoutTruncated && e('div', { className: 'queryMeta' }, 'Raw stdout excerpt truncated; full diagnostics are available from the run trace.'),
+    stdoutExcerpt && e('details', { className: 'queryRaw' },
+      e('summary', null, stdoutTruncated ? 'Raw stdout excerpt (truncated)' : 'Raw stdout excerpt'),
+      e('pre', null, String(stdoutExcerpt)),
+    ),
+  );
+}
+
+function QueryResultCard({ output }) {
+  const columns = output.columns.map(c => String(c));
+  const rows = output.rows;
+  const rowCount = output.row_count;
+  const sample = boundedQuerySample(columns, rows);
+  const title = output.success ? 'Query succeeded' : 'Query reported failure';
+  const stdoutDiagnostic = queryDiagnosticExcerpt(output, 'stdout');
+  const stdoutExcerpt = stdoutDiagnostic.text;
+  const stdoutTruncated = stdoutDiagnostic.truncated;
+  const previewTruncated = !!output.preview_truncated || !!output.rows_truncated || !!output.columns_truncated || !!output.budget_exhausted;
+  return e('div', { className: 'queryResult' + (output.success ? '' : ' error') },
+    e('h4', null, title),
+    e('div', { className: 'queryMeta' }, 'Rows: ' + rowCount),
+    e('div', { className: 'queryMeta' }, 'Columns: ' + sample.columnSummary),
+    e('h4', null, 'Sample (' + Math.min(sample.rows.length, rowCount) + ' of ' + rowCount + ')'),
+    (sample.truncated || output.rows_truncated || output.columns_truncated) && e('div', { className: 'queryMeta' }, 'Showing ' + sample.rows.length + ' of ' + rowCount + ' rows' + ((sample.columnsTruncated || output.columns_truncated) ? ' and ' + sample.columns.length + ' of ' + columns.length + ' columns' : '')),
+    (sample.budgetExhausted || output.budget_exhausted) && e('div', { className: 'queryMeta' }, 'Display budget reached; remaining query data is available in the run trace.'),
+    previewTruncated && e('div', { className: 'queryMeta' }, 'Preview output truncated; full diagnostics are available from the run trace.'),
+    rows.length === 0
+      ? e('div', { className: 'queryMeta' }, '0 rows')
+      : e('div', { className: 'queryTableWrap' },
+          e('table', { className: 'queryTable' },
+            e('thead', null, e('tr', null, ...sample.columns.map(c => e('th', { key: c.source }, c.label)))),
+            e('tbody', null,
+              ...sample.rows.map((row, idx) => e('tr', { key: idx },
+                ...row.cells.map((cell, cidx) => e('td', { key: sample.columns[cidx].source + '-' + cidx }, cell)),
+              )),
+            ),
+          ),
+        ),
+    stdoutExcerpt && e('details', { className: 'queryRaw' },
+      e('summary', null, stdoutTruncated ? 'Raw stdout excerpt (truncated)' : 'Raw stdout excerpt'),
+      e('pre', null, String(stdoutExcerpt)),
+    ),
+  );
+}
+
+function boundedQuerySample(columns, rows) {
+  const visibleColumns = [];
+  const sampleRows = [];
+  let budget = Math.max(0, QUERY_RESULT_TOTAL_CHAR_BUDGET - QUERY_RESULT_UI_TEXT_RESERVE);
+  let budgetExhausted = false;
+  for (let i = 0; i < columns.length; i++) {
+    const source = columns[i];
+    const label = formatQueryCell(source);
+    const listCost = label.length + (visibleColumns.length > 0 ? 2 : 0);
+    const headerCost = label.length;
+    const cost = listCost + headerCost;
+    if (cost > budget) {
+      if (visibleColumns.length === 0 && budget > 2) {
+        const capped = truncateToBudget(label, Math.floor(budget / 2));
+        visibleColumns.push({ source, label: capped });
+        budget -= capped.length * 2;
+      }
+      budgetExhausted = true;
+      break;
+    }
+    visibleColumns.push({ source, label });
+    budget -= cost;
+  }
+  const columnsTruncated = visibleColumns.length < columns.length;
+  const columnSummary = columns.length === 0
+    ? '(none)'
+    : visibleColumns.map(c => c.label).join(', ') + (columnsTruncated ? ', \u2026' : '');
+
+  if (visibleColumns.length > 0) {
+    for (const row of rows.slice(0, QUERY_RESULT_SAMPLE_ROWS)) {
+      const cells = [];
+      let rowCost = 0;
+      for (let i = 0; i < visibleColumns.length; i++) {
+        const col = visibleColumns[i];
+        const text = formatQueryCell(queryCellValue(row, col.source, i));
+        cells.push(text);
+        rowCost += text.length;
+      }
+      if (rowCost > budget) {
+        if (sampleRows.length === 0 && budget > 0) {
+          sampleRows.push({ cells: fitCellsToBudget(cells, budget) });
+          budget = 0;
+        }
+        budgetExhausted = true;
+        break;
+      }
+      budget -= rowCost;
+      sampleRows.push({ cells });
+    }
+  }
+  return {
+    columns: visibleColumns,
+    columnSummary,
+    rows: sampleRows,
+    columnsTruncated,
+    budgetExhausted,
+    truncated: sampleRows.length < rows.length || columnsTruncated || budgetExhausted,
+  };
+}
+
+function queryCellValue(row, column, index) {
+  if (Array.isArray(row)) return row[index];
+  if (row && typeof row === 'object') return row[column];
+  return row;
+}
+
+function formatQueryCell(value) {
+  let text;
+  if (value === undefined || value === null) text = '';
+  else if (typeof value === 'string') text = value;
+  else {
+    try { text = JSON.stringify(value); } catch { text = String(value); }
+  }
+  return truncateToBudget(text, QUERY_RESULT_CELL_CHAR_LIMIT);
+}
+
+function truncateToBudget(text, budget) {
+  if (budget <= 0) return '';
+  if (text.length <= budget) return text;
+  if (budget === 1) return '\u2026';
+  return text.slice(0, budget - 1) + '\u2026';
+}
+
+function fitCellsToBudget(cells, budget) {
+  return cells.map(cell => {
+    if (budget <= 0) return '';
+    const out = truncateToBudget(cell, budget);
+    budget -= out.length;
+    return out;
+  });
+}
+
+function queryDiagnosticExcerpt(output, name) {
+  const excerptKey = name + '_excerpt';
+  const truncatedKey = name + '_truncated';
+  if (output && output[excerptKey] !== undefined && output[excerptKey] !== null) {
+    return { text: String(output[excerptKey]), truncated: !!output[truncatedKey] };
+  }
+  if (!output || output[name] === undefined || output[name] === null) return { text: '', truncated: false };
+  const text = String(output[name]);
+  return { text: truncateToBudget(text, QUERY_RESULT_DIAGNOSTIC_CHAR_BUDGET), truncated: text.length > QUERY_RESULT_DIAGNOSTIC_CHAR_BUDGET };
+}
+
+// VarsPanel renders the runtime variable scope: initial runbook vars
+// (seeded from run/started) plus any captures merged from completed
+// steps. Displayed at the bottom of the side panel so users can always
+// see what the engine sees. Internal __* keys are hidden.
+function VarsPanel({ vars }) {
+  const [open, setOpen] = useState(true);
+  const entries = Object.entries(vars)
+    .filter(([k]) => !k.startsWith('__'))
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return null;
+  const fmt = (v) => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+  };
+  return e('div', { style: { marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 8 } },
+    e('div', {
+      style: { fontSize: 11, color: 'var(--fg-muted)', cursor: 'pointer', userSelect: 'none', marginBottom: 4 },
+      onClick: () => setOpen(o => !o),
+    }, (open ? '\u25be' : '\u25b8') + ' Variables (' + entries.length + ')'),
+    open && e('dl', { style: { margin: 0 } },
+      ...entries.flatMap(([k, v]) => [
+        e('dt', { key: 'vk-' + k, style: { fontFamily: 'monospace', fontSize: 11 } }, k),
+        e('dd', {
+          key: 'vv-' + k,
+          style: {
+            fontFamily: 'monospace', fontSize: 11, whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word', margin: '2px 0 6px 12px',
+          },
+        }, fmt(v)),
+      ]),
+    ),
+  );
+}
+
+// IterationTable renders one row per iteration of an iterate node:
+// index, binding (e.g. svc=www.google.com), status, duration. Rows are
+// sorted by index because concurrent iterations can complete out of order.
+function IterationTable({ records }) {
+  const sorted = records.slice().sort((a, b) => (a.index || 0) - (b.index || 0));
+  const fmtVal = (v) => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    try { return JSON.stringify(v); } catch { return String(v); }
+  };
+  return e('div', { style: { marginTop: 12 } },
+    e('div', { style: { fontSize: 11, color: 'var(--fg-muted)', marginBottom: 4 } },
+      'Iterations (' + sorted.length + ')'),
+    e('table', { className: 'iterations', style: { width: '100%', borderCollapse: 'collapse', fontSize: 11 } },
+      e('thead', null,
+        e('tr', null,
+          e('th', { style: { textAlign: 'left', padding: '2px 4px', borderBottom: '1px solid var(--border)' } }, '#'),
+          e('th', { style: { textAlign: 'left', padding: '2px 4px', borderBottom: '1px solid var(--border)' } }, 'binding'),
+          e('th', { style: { textAlign: 'left', padding: '2px 4px', borderBottom: '1px solid var(--border)' } }, 'status'),
+          e('th', { style: { textAlign: 'right', padding: '2px 4px', borderBottom: '1px solid var(--border)' } }, 'duration'),
+        ),
+      ),
+      e('tbody', null,
+        ...sorted.map((r) =>
+          e('tr', { key: 'iter-' + r.index },
+            e('td', { style: { padding: '2px 4px', color: 'var(--fg-muted)' } }, r.index),
+            e('td', { style: { padding: '2px 4px' } },
+              r.as ? e('span', { style: { color: 'var(--fg-muted)' } }, r.as + '=') : null,
+              fmtVal(r.value),
+            ),
+            e('td', { style: { padding: '2px 4px' } },
+              e('span', { className: 'pill ' + (r.status || 'pending') }, r.status || 'pending'),
+            ),
+            e('td', { style: { padding: '2px 4px', textAlign: 'right', color: 'var(--fg-muted)' } },
+              r.duration_ms != null ? r.duration_ms + ' ms' : ''),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function InteractionForm({ pending, submit, saveDebugProfile }) {
+  if (pending.kind === 'choice')    return e(ChoiceForm,    { pending, submit });
+  if (pending.kind === 'decision')  return e(DecisionForm,  { pending, submit });
+  if (pending.kind === 'collector') return e(CollectorForm, { pending, submit });
+  if (pending.kind === 'host_action') return e(HostActionPending, { pending });
+  if (pending.kind === 'debug_break') return e(DebugBreakForm, { key: pending.turnID, pending, submit, saveDebugProfile });
+  return e('div', { className: 'hint' }, 'Unknown interaction kind: ' + pending.kind);
+}
+
+function DebugBreakForm({ pending, submit, saveDebugProfile }) {
+  const debug = pending.debug || {};
+  const actual = debug.actual || null;
+  const [status, setStatus] = useState(() => actual && actual.status || 'completed');
+  const [outputPatchText, setOutputPatchText] = useState('{}');
+  const [varsText, setVarsText] = useState('{}');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [profileName, setProfileName] = useState('');
+  const [saveState, setSaveState] = useState('');
+  const breadcrumb = (debug.callPath || []).map(frame => frame.step_id).concat([pending.stepID]).join(' > ');
+  const currentVars = JSON.stringify(debug.variables || {}, null, 2);
+
+  const send = async body => {
+    setBusy(true);
+    setErr('');
+    try {
+      await submit(body);
+    } catch (error) {
+      setErr(String(error && error.message || error));
+      setBusy(false);
+    }
+  };
+  const continueUnchanged = () => send({ kind: 'debug_break', action: 'continue' });
+  const stepInto = () => send({ kind: 'debug_break', action: 'step_into' });
+  const stepOver = () => send({ kind: 'debug_break', action: 'step_over' });
+  const stepOut = () => send({ kind: 'debug_break', action: 'step_out' });
+  const stop = () => send({ kind: 'debug_break', action: 'stop' });
+  const effectiveSet = () => {
+    const vars = JSON.parse(varsText || '{}');
+    if (!vars || Array.isArray(vars) || typeof vars !== 'object') {
+      throw new Error('Variable overrides must be a JSON object.');
+    }
+    const set = { vars };
+    if (actual) {
+      const outputPatch = JSON.parse(outputPatchText || '{}');
+      if (!outputPatch || Array.isArray(outputPatch) || typeof outputPatch !== 'object') {
+        throw new Error('Output merge patch must be a JSON object.');
+      }
+      set.status = status;
+      if (Object.keys(outputPatch).length > 0) {
+        if (debug.outputProtected) throw new Error('Governance-redacted output cannot be overridden.');
+        set.output_patch = outputPatch;
+      }
+    }
+    return set;
+  };
+  const apply = async () => {
+    try { await send({ kind: 'debug_break', action: 'continue', set: effectiveSet() }); }
+    catch (error) { setErr(String(error && error.message || error)); }
+  };
+  const saveProfile = async () => {
+    if (!saveDebugProfile) return;
+    if (!profileName.trim()) { setErr('Enter a profile name.'); return; }
+    setSaveState('saving'); setErr('');
+    try {
+      await saveDebugProfile({
+        name: profileName.trim(),
+        target: {
+          call_path: (debug.callPath || []).map(frame => ({ ...frame })),
+          step: pending.stepID,
+          phase: debug.phase,
+        },
+        set: effectiveSet(),
+      });
+      setSaveState('saved');
+    } catch (error) {
+      setSaveState('');
+      setErr(String(error && error.message || error));
+    }
+  };
+
+  return e('div', { className: 'debug-break interaction' },
+    e('h4', null, 'Paused ' + (debug.phase || '') + ' step'),
+    e('div', { className: 'breadcrumb' }, breadcrumb),
+    e('label', null, 'Current variables'),
+    e('pre', null, currentVars),
+    Array.isArray(debug.watches) && debug.watches.length > 0 && e('div', { className: 'debug-audit' },
+      e('h4', null, 'Watches'),
+      e('dl', null, ...debug.watches.flatMap((watch, index) => [
+        e('dt', { key: 'watch-expression-' + index }, watch.expression),
+        e('dd', { key: 'watch-value-' + index }, watch.error || JSON.stringify(watch.value)),
+      ])),
+    ),
+    e('label', { htmlFor: 'debug-vars' }, 'Variable overrides'),
+    e('textarea', {
+      id: 'debug-vars', value: varsText, disabled: busy,
+      onChange: event => setVarsText(event.target.value),
+    }),
+    actual && e(React.Fragment, null,
+      e('h4', null, 'Actual result'),
+      e('div', { className: 'queryMeta' }, 'Status: ' + actual.status),
+      actual.error && e('div', { className: 'err' }, actual.error),
+      e('pre', null, JSON.stringify(actual.output || {}, null, 2)),
+      e('h4', null, 'Effective result'),
+      e('label', { htmlFor: 'debug-status' }, 'Status'),
+      e('select', {
+        id: 'debug-status', value: status, disabled: busy,
+        onChange: event => setStatus(event.target.value),
+      },
+        e('option', { value: 'completed' }, 'completed'),
+        e('option', { value: 'failed' }, 'failed'),
+        e('option', { value: 'skipped' }, 'skipped'),
+      ),
+      e('label', { htmlFor: 'debug-output' }, 'Output JSON'),
+      e('textarea', {
+        id: 'debug-output', value: outputPatchText, disabled: busy || !!debug.outputProtected,
+        onChange: event => setOutputPatchText(event.target.value),
+      }),
+      e('div', { className: 'hint' }, debug.outputProtected
+        ? 'Governance-redacted output is read-only.'
+        : 'JSON merge patch; unchanged and unseen output fields are preserved.'),
+    ),
+    saveDebugProfile && e('div', { className: 'debug-controls' },
+      e('h4', null, 'Save for another run'),
+      e('label', { htmlFor: 'debug-profile-name' }, 'Profile name'),
+      e('input', {
+        id: 'debug-profile-name', type: 'text', value: profileName, disabled: saveState === 'saving',
+        onChange: event => { setProfileName(event.target.value); setSaveState(''); },
+      }),
+      e('button', {
+        className: 'secondary', onClick: saveProfile,
+        disabled: !profileName.trim() || saveState === 'saving',
+      }, saveState === 'saving' ? 'Saving...' : (saveState === 'saved' ? 'Saved' : 'Save as debug profile')),
+    ),
+    err && e('div', { className: 'err' }, err),
+    e('div', { className: 'actions' },
+      e('button', { className: 'secondary', onClick: continueUnchanged, disabled: busy }, 'Continue unchanged'),
+      e('button', { onClick: apply, disabled: busy }, 'Apply & Continue'),
+      debug.phase === 'before' && debug.canStepInto && e('button', { className: 'secondary', onClick: stepInto, disabled: busy }, 'Step Into'),
+      e('button', { className: 'secondary', onClick: stepOver, disabled: busy }, 'Step Over'),
+      (debug.callPath || []).length > 0 && e('button', { className: 'secondary', onClick: stepOut, disabled: busy }, 'Step Out'),
+      e('button', { className: 'danger', onClick: stop, disabled: busy }, 'Stop'),
+    ),
+  );
+}
+
+function HostActionPending({ pending }) {
+  const request = pending.host_action || {};
+  const standalone = window.parent === window;
+  return e('div', { className: 'interaction' },
+    e('h4', null, 'Host action'),
+    e('div', { className: 'step' }, pending.stepID || ''),
+    e('div', { className: 'hint' },
+      standalone
+        ? 'This action requires a connected host integration; no host work was started.'
+        : 'Waiting for the connected host to acknowledge the action.'),
+    e('dl', null,
+      e('dt', null, 'capability'),
+      e('dd', null, request.capability || ''),
+    ),
+  );
+}
+
+// PromptBlock renders a step's resolved prompt. Prompts often contain
+// multi-line content (e.g. accumulated reports from `collect` joins);
+// rendering inside a heading collapsed all whitespace and produced an
+// unreadable wall of text, so we use a pre-styled block that preserves
+// newlines and wraps long lines.
+function PromptBlock({ text }) {
+  return e('div', {
+    style: {
+      margin: '0 0 8px',
+      padding: '8px 10px',
+      background: 'var(--bg-muted, #1e1e1e)',
+      border: '1px solid var(--border)',
+      borderRadius: 4,
+      fontFamily: 'inherit',
+      fontSize: 13,
+      lineHeight: 1.45,
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+    },
+  }, text || '');
+}
+
+// InteractionRecord renders the resolved prompt + submitted answer for
+// a completed interactive step (collector / decision / choice). The
+// engine echoes both into step/completed.output.interaction so we can
+// replay what the user saw and answered.
+function InteractionRecord({ record }) {
+  const renderAnswer = () => {
+    const a = record.answer || {};
+    if (record.kind === 'decision') {
+      return e('div', null,
+        e('span', { style: { color: 'var(--fg-muted)' } }, 'route: '),
+        e('strong', null, a.label || ''));
+    }
+    if (record.kind === 'choice') {
+      const sel = Array.isArray(a.selected) ? a.selected : [];
+      if (sel.length === 0) return e('span', { style: { color: 'var(--fg-muted)' } }, '(no selection)');
+      return e('ul', { style: { margin: '4px 0 0 16px', padding: 0 } },
+        ...sel.map((s, i) => e('li', { key: 'sel-' + i }, String(s))));
+    }
+    // collector: a is a {field: value} map
+    const entries = Object.entries(a);
+    if (entries.length === 0) return e('span', { style: { color: 'var(--fg-muted)' } }, '(no fields)');
+    return e('dl', null,
+      ...entries.flatMap(([k, v]) => [
+        e('dt', { key: 'ak-' + k }, k),
+        e('dd', { key: 'av-' + k, style: { whiteSpace: 'pre-wrap' } }, v == null ? '' : String(v)),
+      ]),
+    );
+  };
+  return e('div', { style: { marginTop: 12 } },
+    record.preview_truncated && e('div', { className: 'queryMeta' }, 'Interaction preview truncated; full details are available from the run trace.'),
+    e('div', { style: { fontSize: 11, color: 'var(--fg-muted)', marginBottom: 4 } }, 'Prompt'),
+    record.prompt
+      ? e(PromptBlock, { text: record.prompt })
+      : e('span', { style: { color: 'var(--fg-muted)', fontSize: 11 } }, '(no prompt)'),
+    e('div', { style: { fontSize: 11, color: 'var(--fg-muted)', margin: '8px 0 4px' } }, 'Answer'),
+    renderAnswer(),
+  );
+}
+
+// ProsePane fetches the runbook's "prose" rendering (Markdown) from the
+// server, renders it as HTML, and tags each <li> with the step ID it
+// describes so we can highlight + scroll to the currently-selected step.
+//
+// The server's prose renderer (pkg/preview/render/prose) wraps every
+// step ID in backticks via titleOrID(); we recover that linkage by
+// scanning <code> elements after Markdown→HTML and walking up to the
+// nearest <li>.
+function ProsePane({ doc, runbookPath, overlay, structuralNodeIDs, selectedNode, onSelect }) {
+  const ref = React.useRef(null);
+  const [html, setHtml] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (doc && (doc.presentation_state || doc.nodes?.some(node => node.data?.details?.code_presentation?.origin === 'frozen'))) {
+      setHtml(''); setErr('Historical prose unavailable — not retained. Frozen step details remain available in the inspector.');
+      return;
+    }
+    if (!runbookPath) { setHtml(''); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/preview/document?format=prose&runbookPath=' + encodeURIComponent(runbookPath));
+        if (!res.ok) throw new Error(await res.text());
+        const md = await res.text();
+        if (cancelled) return;
+        setHtml(DOMPurify.sanitize(marked.parse(md, { gfm: true, breaks: false })));
+        setErr('');
+      } catch (e) {
+        if (!cancelled) { setErr(String(e)); setHtml(''); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [runbookPath, doc && doc.presentation_state && doc.presentation_state.run_id, doc && doc.hash]);
+
+  // After each render, walk <code> elements and tag the enclosing <li>
+  // with data-step-id so we can style + scroll to it.
+  useEffect(() => {
+    if (!ref.current || !doc) return;
+    const ids = new Set(doc.nodes.map(n => n.id));
+    const renderedIDs = new Set(structuralNodeIDs || doc.nodes.map(n => n.id));
+    const codes = ref.current.querySelectorAll('code');
+    codes.forEach(c => {
+      if (c.closest('pre,figure,.yawr-code')) return;
+      const id = c.textContent.trim();
+      if (!ids.has(id)) return;
+      const li = c.closest('li');
+      if (!li) return;
+      if (!renderedIDs.has(id)) {
+        li.style.display = 'none';
+        return;
+      }
+      li.style.display = '';
+      // Only tag the first <li> we encounter for an ID; nested ones
+      // will be tagged separately on their own match.
+      if (!li.hasAttribute('data-step-id')) {
+        li.setAttribute('data-step-id', id);
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          onSelect(id);
+        });
+      }
+    });
+    // Decorate with current overlay status (status pill via class).
+    const overlayNodes = (overlay && overlay.nodes) || {};
+    ref.current.querySelectorAll('li[data-step-id]').forEach(li => {
+      const id = li.getAttribute('data-step-id');
+      li.classList.remove('running', 'completed', 'failed', 'skipped', 'cancelled', 'pending');
+      const ns = overlayNodes[id];
+      li.classList.add(ns ? ns.status : 'pending');
+    });
+  }, [html, doc, overlay, structuralNodeIDs, onSelect]);
+  useEffect(() => ref.current ? highlightFences(ref.current) : undefined, [html]);
+
+  // Scroll selected step into view + highlight.
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.querySelectorAll('li.selected').forEach(li => li.classList.remove('selected'));
+    if (!selectedNode) return;
+    const li = ref.current.querySelector(`li[data-step-id="${cssEscape(selectedNode)}"]`);
+    if (li) {
+      li.classList.add('selected');
+      if (li.scrollIntoView) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedNode, html]);
+
+  return e('aside', { className: 'prose', ref },
+    err && e('div', { className: 'err' }, err),
+    e('div', { dangerouslySetInnerHTML: { __html: html } }),
+  );
+}
+
+// CSS.escape polyfill for older webviews that lack it.
+function cssEscape(s) {
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+}
+
+function newPreviewSessionID() {
+  const bytes = new Uint8Array(16);
+  if (window.crypto && window.crypto.getRandomValues) {
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return 'preview-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+function previewParentTargetOrigin() {
+  if (window.parent === window) return null;
+
+  const normalizeParentOrigin = (raw) => {
+    if (!raw) return null;
+    try {
+      const parsed = new URL(raw);
+      if (parsed.origin && parsed.origin !== 'null') return parsed.origin;
+      if (parsed.protocol === 'vscode-webview:' && parsed.host) {
+        return parsed.protocol + '//' + parsed.host;
+      }
+    } catch (_) { /* malformed origin */ }
+    return null;
+  };
+  const isTrustedPreviewParentOrigin = (origin) => {
+    if (!origin) return false;
+    if (origin === location.origin) return true;
+    try { return new URL(origin).protocol === 'vscode-webview:'; }
+    catch (_) { return false; }
+  };
+
+  const ancestorOrigin = normalizeParentOrigin(
+    location.ancestorOrigins && location.ancestorOrigins.length > 0
+      ? location.ancestorOrigins[0] : null,
+  );
+  const referrerOrigin = normalizeParentOrigin(document.referrer);
+  let paramOrigin = null;
+  try {
+    const raw = new URLSearchParams(location.search).get('parentOrigin');
+    paramOrigin = normalizeParentOrigin(raw);
+  } catch (_) { /* malformed parameter — ignore */ }
+
+  if (ancestorOrigin && referrerOrigin && ancestorOrigin !== referrerOrigin) return null;
+  const browserOrigin = ancestorOrigin || referrerOrigin;
+  if (!browserOrigin || !paramOrigin || browserOrigin !== paramOrigin) return null;
+  return isTrustedPreviewParentOrigin(browserOrigin) ? browserOrigin : null;
+}
+
+function InteractionPane({ pending, submit }) {
+  if (pending.kind === 'choice') {
+    return e(ChoiceForm, { pending, submit });
+  }
+  if (pending.kind === 'decision') {
+    return e(DecisionForm, { pending, submit });
+  }
+  if (pending.kind === 'collector') {
+    return e(CollectorForm, { pending, submit });
+  }
+  return null;
+}
+
+function ChoiceForm({ pending, submit }) {
+  const [sel, setSel] = useState(() => {
+    // Pre-select default values if any option marks itself default.
+    return [];
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const min = pending.min || 0;
+  const max = pending.max || 0;
+  const toggle = (v) => setSel(s => {
+    if (!pending.multiple) return [v];
+    return s.includes(v) ? s.filter(x => x !== v) : s.concat([v]);
+  });
+  const onSubmit = async () => {
+    if (sel.length === 0) { setErr('Pick at least one option.'); return; }
+    if (min && sel.length < min) { setErr('Pick at least ' + min + '.'); return; }
+    if (max && sel.length > max) { setErr('Pick at most ' + max + '.'); return; }
+    setBusy(true); setErr('');
+    try { await submit({ kind: 'choice', selected: sel }); }
+    catch (e) { setErr(String(e && e.message || e)); setBusy(false); }
+  };
+  return e('div', { className: 'interaction' },
+    e(PromptBlock, { text: pending.prompt || 'Choose' }),
+    e('div', { className: 'step' }, pending.stepID),
+    (pending.options || []).map(o => e('div', { key: o.value, className: 'opt' },
+      e('input', { type: pending.multiple ? 'checkbox' : 'radio', id: o.value, checked: sel.includes(o.value), onChange: () => toggle(o.value) }),
+      e('label', { htmlFor: o.value, style: { display: 'inline', margin: 0 } },
+        o.label || o.display_value || o.value,
+        o.hint && e('span', { className: 'hint', style: { marginLeft: 6 } }, o.hint),
+      ),
+    )),
+    err && e('div', { className: 'err' }, err),
+    e('button', { onClick: onSubmit, disabled: busy || sel.length === 0 }, busy ? 'Submitting\u2026' : 'Submit'),
+  );
+}
+
+function DecisionForm({ pending, submit }) {
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const choose = async (label) => {
+    setBusy(label); setErr('');
+    try { await submit({ kind: 'decision', label }); }
+    catch (e) { setErr(String(e && e.message || e)); setBusy(''); }
+  };
+  return e('div', { className: 'interaction' },
+    e(PromptBlock, { text: pending.prompt || 'Decide' }),
+    e('div', { className: 'step' }, pending.stepID),
+    (pending.routes || []).map(r => e('div', { key: r.label, style: { marginBottom: 6 } },
+      e('button', {
+        style: { marginRight: 6 },
+        disabled: !!busy,
+        onClick: () => choose(r.label),
+      }, busy === r.label ? (r.display_label || r.label) + '\u2026' : (r.display_label || r.label)),
+      r.hint && e('span', { className: 'hint' }, r.hint),
+    )),
+    err && e('div', { className: 'err' }, err),
+  );
+}
+
+// renderField returns the JSX for one collector field of the given
+// type. It writes into the shared `vals` map via `set(name, value)`.
+function renderField(f, vals, set) {
+  const v = vals[f.name];
+  const id = 'fld-' + f.name;
+  switch (f.type) {
+    case 'number':
+    case 'integer':
+      return e('input', {
+        id, type: 'number', value: v ?? '',
+        step: f.type === 'integer' ? 1 : 'any',
+        onChange: ev => set(f.name, ev.target.value),
+      });
+    case 'date':
+      return e('input', { id, type: 'date', value: v ?? '', onChange: ev => set(f.name, ev.target.value) });
+    case 'datetime':
+      return e('input', { id, type: 'datetime-local', value: v ?? '', onChange: ev => set(f.name, ev.target.value) });
+    case 'boolean':
+      return e('div', { className: 'check' },
+        e('input', { id, type: 'checkbox', checked: !!v, onChange: ev => set(f.name, ev.target.checked) }),
+        e('label', { htmlFor: id, style: { display: 'inline', margin: 0 } }, 'Yes'),
+      );
+    case 'secret':
+    case 'password':
+      return e('input', { id, type: 'password', value: v ?? '', autoComplete: 'off', onChange: ev => set(f.name, ev.target.value) });
+    case 'email':
+      return e('input', { id, type: 'email', value: v ?? '', onChange: ev => set(f.name, ev.target.value) });
+    case 'url':
+      return e('input', { id, type: 'url', value: v ?? '', onChange: ev => set(f.name, ev.target.value) });
+    case 'select':
+    case 'choice':
+    case 'autocomplete': {
+      // Multi-select renders as a list of checkboxes; single as a <select>.
+      if (f.multiple) {
+        const arr = Array.isArray(v) ? v : [];
+        const toggle = (val) => set(f.name, arr.includes(val) ? arr.filter(x => x !== val) : arr.concat([val]));
+        return e('div', null, (f.options || []).map(o => e('div', { key: o.value, className: 'opt' },
+          e('input', { type: 'checkbox', id: id + '-' + o.value, checked: arr.includes(o.value), onChange: () => toggle(o.value) }),
+          e('label', { htmlFor: id + '-' + o.value, style: { display: 'inline', margin: 0 } }, o.label || o.display_value || o.value),
+        )));
+      }
+      return e('select', { id, value: v ?? '', onChange: ev => set(f.name, ev.target.value) },
+        e('option', { value: '' }, f.required ? '\u2014 select \u2014' : '\u2014 (none) \u2014'),
+        (f.options || []).map(o => e('option', { key: o.value, value: o.value }, o.label || o.display_value || o.value)),
+      );
+    }
+    case 'textarea':
+      return e('textarea', { id, value: v ?? '', rows: 3, onChange: ev => set(f.name, ev.target.value) });
+    case 'text':
+    default:
+      if (f.multiline) {
+        return e('textarea', { id, value: v ?? '', rows: 3, onChange: ev => set(f.name, ev.target.value) });
+      }
+      return e('input', { id, type: 'text', value: v ?? '', onChange: ev => set(f.name, ev.target.value) });
+  }
+}
+
+// validateAndCoerce returns {values, errors}. Empty errors map = OK.
+function validateAndCoerce(fields, vals) {
+  const out = {};
+  const errs = {};
+  for (const f of (fields || [])) {
+    const raw = vals[f.name];
+    const isEmpty = raw == null || raw === '' || (Array.isArray(raw) && raw.length === 0);
+    if (f.required && isEmpty && f.type !== 'boolean') {
+      errs[f.name] = 'Required.';
+      continue;
+    }
+    if (isEmpty) continue;
+    switch (f.type) {
+      case 'number': {
+        const n = Number(raw);
+        if (Number.isNaN(n)) { errs[f.name] = 'Must be a number.'; break; }
+        out[f.name] = n; break;
+      }
+      case 'integer': {
+        const n = Number(raw);
+        if (!Number.isInteger(n)) { errs[f.name] = 'Must be an integer.'; break; }
+        out[f.name] = n; break;
+      }
+      case 'boolean':
+        out[f.name] = !!raw; break;
+      default:
+        out[f.name] = raw;
+    }
+  }
+  return { values: out, errors: errs };
+}
+
+function CollectorForm({ pending, submit }) {
+  // Initialise vals from each field's default.
+  const fields = pending.fields || [];
+  const [vals, setVals] = useState(() => {
+    const init = {};
+    for (const f of fields) {
+      if (f.default !== undefined && f.default !== null) {
+        if (f.type === 'boolean') init[f.name] = !!f.default;
+        else init[f.name] = f.default;
+      }
+    }
+    return init;
+  });
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [topErr, setTopErr] = useState('');
+  const set = (k, v) => setVals(s => ({ ...s, [k]: v }));
+  const onSubmit = async () => {
+    const { values, errors: errs } = validateAndCoerce(fields, vals);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    setBusy(true); setTopErr('');
+    try { await submit({ kind: 'collector', values }); }
+    catch (e) { setTopErr(String(e && e.message || e)); setBusy(false); }
+  };
+  return e('div', { className: 'interaction' },
+    e(PromptBlock, { text: pending.prompt || 'Provide details' }),
+    e('div', { className: 'step' }, pending.stepID),
+    fields.map(f => e('div', { key: f.name, className: 'field' },
+      e('label', { htmlFor: 'fld-' + f.name }, f.label || f.display_name || f.name, f.required && e('span', { className: 'req' }, '*')),
+      renderField(f, vals, set),
+      f.hint && e('div', { className: 'hint' }, f.hint),
+      errors[f.name] && e('div', { className: 'err' }, errors[f.name]),
+    )),
+    topErr && e('div', { className: 'err' }, topErr),
+    e('button', { onClick: onSubmit, disabled: busy }, busy ? 'Submitting\u2026' : 'Submit'),
+  );
+}
+
+createRoot(document.getElementById('root')).render(e(App));
+</script>
+</body>
+</html>

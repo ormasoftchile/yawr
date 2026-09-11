@@ -1,0 +1,50 @@
+apiVersion: yawr.tool/v1
+transport:
+  command: ping
+  mode: native
+actions:
+  - name: check
+    description: Ping a host with a fixed packet count
+    argv:
+      - -c
+      - ${count}
+      - ${host}
+    args:
+      host:
+        type: string
+        required: true
+        description: Hostname or IP address to ping
+      count:
+        type: string
+        required: false
+        default: "4"
+        description: Number of ICMP packets to send
+    returns: text
+  - name: check-timeout
+    description: Ping a host with a deadline per packet
+    argv:
+      - -c
+      - ${count}
+      - -W
+      - ${timeout}
+      - ${host}
+    args:
+      host:
+        type: string
+        required: true
+        description: Hostname or IP address to ping
+      count:
+        type: string
+        required: false
+        default: "4"
+        description: Number of ICMP packets to send
+      timeout:
+        type: string
+        required: false
+        default: "5"
+        description: Time in seconds to wait for each reply
+    returns: text
+meta:
+  name: ping
+  version: "1.0"
+  description: Send ICMP ECHO_REQUEST packets to test network reachability

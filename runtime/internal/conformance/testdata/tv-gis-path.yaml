@@ -1,0 +1,172 @@
+# tv-gis-path.yaml
+# Category:    GIS-PATH
+# Grammar ref: spec/grammar/gis.ebnf §2.5 (GISPathSegment, OptionalDotAccess, OptionalBracketAccess)
+# Schema ref:  design/yawr/conformance/vector.schema.json
+# Author:      Tess (Conformance Tester)
+# Date:        2026-06-05T07:28:56.273-07:00
+#
+# Authority:
+#   - Ratification: .squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md
+#   - Proposal:     design/yawr/proposals/gis-optional-chaining.md §2 and proposed vector set
+#   - Grammar:      spec/grammar/gis.ebnf (Barbara editing in parallel); tests GDP override
+#                   production GISPathSegment and its optional forms.
+#   - Spec:         design/yawr/sections/03b-interpolation-syntax.tex (Edith editing in parallel);
+#                   maps to the GIS optional-path interpolation semantics section.
+#
+# Purpose: Pin down GIS optional-chaining (`?.` / `?.[N]`) as an opt-in interpolation
+# tolerance mechanism. Plain paths remain hard-error by default; optional misses resolve
+# to the empty string and short-circuit the entire remaining GDP tail.
+
+vectors:
+
+  - id: TV-GIS-PATH-001
+    category: GIS-PATH
+    description: "Simple optional miss — missing root for ${a?.b} resolves to empty string."
+    input: "${a?.b}"
+    variables: {}
+    expected:
+      value: ""
+    note: "The optional segment ?.b guards the root-to-b hop; missing root a short-circuits to the GIS empty-string optional value."
+    tags: [optional-chaining, simple-miss, root-miss]
+
+  - id: TV-GIS-PATH-002
+    category: GIS-PATH
+    description: "Deep optional miss — missing c short-circuits ${a?.b?.c?.d}."
+    input: "${a?.b?.c?.d}"
+    variables: {a: {b: {present: true}}}
+    expected:
+      value: ""
+    note: "a.b is present; b.c is missing at ?.c. The tail ?.d is not evaluated."
+    tags: [optional-chaining, deep-miss, short-circuit]
+
+  - id: TV-GIS-PATH-003
+    category: GIS-PATH
+    description: "Optional miss before mandatory tail — ${a?.b.c.d} never evaluates c.d."
+    input: "${a?.b.c.d}"
+    variables: {a: {}}
+    expected:
+      value: ""
+    note: "Once ?.b misses, the following mandatory-looking .c.d is part of the short-circuited tail and cannot raise GIS-PATH-MISSING."
+    tags: [optional-chaining, mixed, short-circuit, tail-not-evaluated]
+
+  - id: TV-GIS-PATH-004
+    category: GIS-PATH
+    description: "Mixed path — missing mandatory root in ${a.b?.c.d} remains a hard error."
+    input: "${a.b?.c.d}"
+    variables: {}
+    expected:
+      error_class: GIS-PATH
+      error_code: GIS-PATH-MISSING
+    note: "Root a and segment .b are not optional. Optional chaining begins only at ?.c, so a missing root is still a hard GIS path error."
+    tags: [optional-chaining, mixed, hard-error, mandatory-prefix]
+
+  - id: TV-GIS-PATH-005
+    category: GIS-PATH
+    description: "Mixed path — missing optional c in ${a.b?.c.d} resolves to empty string."
+    input: "${a.b?.c.d}"
+    variables: {a: {b: {}}}
+    expected:
+      value: ""
+    note: "a.b is present; b.c is missing at ?.c. The mandatory-looking .d tail is not evaluated after the optional miss."
+    tags: [optional-chaining, mixed, short-circuit]
+
+  - id: TV-GIS-PATH-006
+    category: GIS-PATH
+    description: "Present-but-null value through ${a?.b} resolves to empty string."
+    input: "${a?.b}"
+    variables: {a: {b: null}}
+    expected:
+      value: ""
+    note: "Null is treated as an optional-chain miss, unlike empty string, false, zero, and empty array."
+    tags: [optional-chaining, "null", miss]
+
+  - id: TV-GIS-PATH-007
+    category: GIS-PATH
+    description: "Present-but-empty-string through ${a?.b} renders the value itself."
+    input: "${a?.b}"
+    variables: {a: {b: ""}}
+    expected:
+      value: ""
+    note: "Same output as a miss, but for a different reason: a.b exists and its actual string value is empty. This is not default substitution."
+    tags: [optional-chaining, empty-string, present-value, no-trigger]
+
+  - id: TV-GIS-PATH-008
+    category: GIS-PATH
+    description: "Present-but-false through ${a?.b} renders false normally."
+    input: "${a?.b}"
+    variables: {a: {b: false}}
+    expected:
+      value: "false"
+    note: "Boolean false is a present PJVM value and must not be confused with a miss."
+    tags: [optional-chaining, "false", present-value, no-trigger]
+
+  - id: TV-GIS-PATH-009
+    category: GIS-PATH
+    description: "Present-but-zero through ${a?.b} renders zero normally."
+    input: "${a?.b}"
+    variables: {a: {b: 0}}
+    expected:
+      value: "0"
+    note: "Number zero is a present PJVM value and follows GIS numeric string coercion."
+    tags: [optional-chaining, zero, present-value, no-trigger]
+
+  - id: TV-GIS-PATH-010
+    category: GIS-PATH
+    description: "Present-but-empty-array through ${a?.b} renders canonical array JSON."
+    input: "${a?.b}"
+    variables: {a: {b: []}}
+    expected:
+      value: "[]"
+    note: "Empty array is present and renders per gis.ebnf §4.2 canonical JSON serialization, not as an optional miss."
+    tags: [optional-chaining, empty-array, present-value, no-trigger]
+
+  - id: TV-GIS-PATH-011
+    category: GIS-PATH
+    description: "Optional bracket happy path — ${items?.[0]?.name} resolves to x."
+    input: "${items?.[0]?.name}"
+    variables: {items: [{name: "x"}]}
+    expected:
+      value: "x"
+    note: "Exercises OPTIONAL_BRACKET_OPEN followed by OPTIONAL_DOT on an array element object."
+    tags: [optional-chaining, optional-bracket, array, success]
+
+  - id: TV-GIS-PATH-012
+    category: GIS-PATH
+    description: "Optional bracket out-of-bounds — ${items?.[5]?.name} resolves empty."
+    input: "${items?.[5]?.name}"
+    variables: {items: [{name: "x"}]}
+    expected:
+      value: ""
+    note: "Index 5 is out of bounds for a one-element array. The optional bracket miss short-circuits ?.name."
+    tags: [optional-chaining, optional-bracket, out-of-bounds, short-circuit]
+
+  - id: TV-GIS-PATH-013
+    category: GIS-PATH
+    description: "Optional bracket on missing collection — ${nope?.[0]} resolves empty."
+    input: "${nope?.[0]}"
+    variables: {}
+    expected:
+      value: ""
+    note: "The optional bracket segment guards the root-to-index hop; missing root nope short-circuits to empty string."
+    tags: [optional-chaining, optional-bracket, missing-collection, root-miss]
+
+  - id: TV-GIS-PATH-014
+    category: GIS-PATH
+    description: "Stdlib composition — str.toLower receives empty string from user?.name."
+    input: "${str.toLower(user?.name)}"
+    variables: {}
+    expected:
+      value: ""
+    note: "Evaluation order is explicit: resolve argument user?.name first; missing user short-circuits that GDP to \"\"; call str.toLower(\"\"); render returned \"\". Optional miss does not propagate through the function call."
+    tags: [optional-chaining, stdlib, evaluation-order, no-function-propagation]
+
+  - id: TV-GIS-PATH-015
+    category: GIS-PATH
+    description: "Optional root syntax ${?.root} is rejected at parse time."
+    input: "${?.root}"
+    variables: {}
+    expected:
+      error_class: GIS-PARSE
+      error_code: GIS-PARSE-003
+    note: "gis.ebnf §2.4 explicitly rejects ${?.root}; root identifier may not be optional. Kept inline because no separate TV-GIS-PARSE file exists yet."
+    tags: [optional-chaining, parse-error, invalid-root-optional]

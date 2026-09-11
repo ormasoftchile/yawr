@@ -1,0 +1,1354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ormasoftchile/yawr/runtime/v2/schemas/runbook.schema.json",
+  "title": "yawr v2 Runbook",
+  "description": "JSON Schema (Draft 2020-12) for a yawr v2 runbook document.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "id",
+    "name",
+    "flow"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "apiVersion": {
+      "type": "string",
+      "const": "yawr.runbook/v1"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "mitigation",
+        "reference",
+        "composable",
+        "rca"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "vars": {
+      "type": "object"
+    },
+    "bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/Binding"}
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Input"
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Output"
+      }
+    },
+    "toolRefs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ToolRef"
+      }
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PackageRequirement"
+      }
+    },
+    "imports": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "defaults": {
+      "$ref": "#/$defs/StepDefaults"
+    },
+    "governance": {
+      "$ref": "#/$defs/GovernanceConfig"
+    },
+    "prose": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "flow": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FlowNode"
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExtensionRef"
+      }
+    },
+    "regions": {
+      "$ref": "#/$defs/RegionManifest"
+    },
+    "expand": {
+      "type": "string",
+      "enum": ["", "eager", "lazy", "auto"]
+    }
+  },
+  "$defs": {
+    "Binding": {
+      "type": "object",
+      "required": ["name", "type", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "type": {"enum": ["any", "string", "bool", "boolean", "int", "integer", "number", "float", "array", "object"]},
+        "mutable": {"type": "boolean"},
+        "value": {},
+        "enum": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "Assignment": {
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "value": {}
+      }
+    },
+    "Input": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "default": {},
+        "from": {
+          "type": "string"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(.*\\S)?$"
+          }
+        }
+      }
+    },
+    "Output": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {"not": {"required": ["value", "value_expr"]}},
+        {"not": {"required": ["value", "value_tree"]}},
+        {"not": {"required": ["value_expr", "value_tree"]}}
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "value_expr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value_tree": {},
+        "optional": {
+          "type": "boolean"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(.*\\S)?$"
+          }
+        }
+      }
+    },
+    "ToolRef": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "PackageRequirement": {
+      "type": "object",
+      "required": [
+        "package",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "StepDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout": {
+          "type": "string"
+        },
+        "retry_max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "continue_on_fail": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GovernanceConfig": {
+      "type": "object",
+      "properties": {
+        "require_approval": {
+          "type": "boolean",
+          "description": "When true, requires operator approval before this step/child executes. Enforced in interactive (TTY) mode; in non-interactive (pipeline/CI) mode, approval is auto-granted. Use an external approval backend for automation-blocking approval."
+        },
+        "allow_commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny_commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny_env_vars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "redact": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "FlowNode": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": [
+            "step"
+          ],
+          "properties": {
+            "step": {
+              "$ref": "#/$defs/Step"
+            }
+          }
+        },
+        {
+          "required": [
+            "iterate"
+          ],
+          "properties": {
+            "iterate": {
+              "$ref": "#/$defs/IterateNode"
+            }
+          }
+        },
+        {
+          "required": [
+            "parallel"
+          ],
+          "properties": {
+            "parallel": {
+              "$ref": "#/$defs/ParallelNode"
+            }
+          }
+        }
+      ]
+    },
+    "Step": {
+      "type": "object",
+      "required": [
+        "id",
+        "type"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "host_action"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "allOf": [
+              {
+                "required": [
+                  "host_action"
+                ]
+              },
+              {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "tool"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "args"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "run"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "shell"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "env"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "stdin"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/StepType"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "when": {
+          "type": "string",
+          "description": "GXL condition expression. NOTE: this field is parsed and validated but not yet evaluated at runtime. Use a branch step with condition: arms for conditional execution. See DEF-004."
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "delay": {
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetryConfig"
+        },
+        "continue_on_fail": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "export": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "capture": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "contract": {
+          "$ref": "#/$defs/Contract"
+        },
+        "command": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "run": {},
+        "shell": {
+          "type": "string"
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "workdir": {
+          "type": "string"
+        },
+        "stdin": {
+          "type": "string"
+        },
+        "tool": {
+          "$ref": "#/$defs/ToolInvocation"
+        },
+        "include": {
+          "$ref": "#/$defs/IncludeConfig"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChoiceOption"
+          }
+        },
+        "variable": {
+          "type": "string"
+        },
+        "default": {
+          "type": "string"
+        },
+        "multiple": {
+          "type": "boolean"
+        },
+        "min_selections": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_selections": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "approvals": {
+          "$ref": "#/$defs/ApprovalGate"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DecisionRoute"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CollectorField"
+          }
+        },
+        "host_action": {
+          "$ref": "#/$defs/HostActionConfig"
+        },
+        "handoff": {
+          "$ref": "#/$defs/HandoffConfig"
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BranchArm"
+          }
+        },
+        "timeout_business_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timezone": {
+          "type": "string"
+        },
+        "business_calendar": {
+          "type": "string"
+        },
+        "on_timeout": {
+          "type": "string"
+        },
+        "assert": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Assertion"
+          }
+        },
+        "compensate": {
+          "$ref": "#/$defs/CompensateConfig"
+        },
+        "assign": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/Assignment"}
+        },
+        "event": {
+          "$ref": "#/$defs/WaitEventConfig"
+        },
+        "outcome": {
+          "$ref": "#/$defs/OutcomeDeclaration"
+        }
+      }
+    },
+    "StepType": {
+      "type": "string",
+      "enum": [
+        "cli",
+        "tool",
+        "include",
+        "choice",
+        "decision",
+        "collector",
+        "host_action",
+        "handoff",
+        "branch",
+        "iterate",
+        "parallel",
+        "approve",
+        "assert",
+        "compensate",
+        "wait_for_event",
+        "end",
+        "extension",
+        "noop",
+        "prompt",
+        "display",
+        "assign",
+        "results"
+      ]
+    },
+    "RetryConfig": {
+      "type": "object",
+      "required": [
+        "max"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "interval": {
+          "type": "string"
+        },
+        "backoff": {
+          "type": "string"
+        },
+        "max_interval": {
+          "type": "string"
+        },
+        "jitter": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "writes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "idempotent": {
+          "type": "boolean"
+        },
+        "deterministic": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ToolInvocation": {
+      "type": "object",
+      "required": [
+        "name",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    "IncludeConfig": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": ["runbook"],
+          "properties": {
+            "runbook": {
+              "type": "string"
+            },
+            "with": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "when": {
+              "type": "string",
+              "description": "GXL condition expression. NOTE: this field is parsed and validated but not yet evaluated at runtime. Use a branch step with condition: arms for conditional execution. See DEF-004."
+            },
+            "gate": {
+              "type": "object",
+              "properties": {
+                "stop_if": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "expand": {
+              "type": "string",
+              "enum": ["", "eager", "lazy", "auto"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["runbook_ref", "resolve_from"],
+          "properties": {
+            "runbook_ref": {
+              "type": "string"
+            },
+            "resolve_from": {
+              "type": "string",
+              "enum": ["catalog"]
+            },
+            "on_not_found": {
+              "type": "string",
+              "enum": ["fail", "continue"]
+            },
+            "with": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "when": {
+              "type": "string",
+              "description": "GXL condition expression. NOTE: this field is parsed and validated but not yet evaluated at runtime. Use a branch step with condition: arms for conditional execution. See DEF-004."
+            },
+            "gate": {
+              "type": "object",
+              "properties": {
+                "stop_if": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ChoiceOption": {
+      "type": "object",
+      "required": [
+        "label",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        }
+      }
+    },
+    "DecisionRoute": {
+      "type": "object",
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "runbook": {
+          "type": "string"
+        },
+        "goto": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        }
+      }
+    },
+    "CollectorField": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "label"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/CollectorFieldType"
+        },
+        "label": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "when": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        },
+        "default": {},
+        "validation": {
+          "$ref": "#/$defs/FieldValidation"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChoiceOption"
+          }
+        },
+        "options_from": {
+          "$ref": "#/$defs/DynamicOptions"
+        },
+        "multiple": {
+          "type": "boolean"
+        },
+        "multiline": {
+          "type": "boolean"
+        },
+        "ephemeral": {
+          "type": "boolean"
+        }
+      }
+    },
+    "HostActionConfig": {
+      "type": "object",
+      "required": [
+        "capability",
+        "request"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "request": {
+          "$ref": "#/$defs/HostActionObject"
+        }
+      }
+    },
+    "HandoffConfig": {
+      "type": "object",
+      "required": ["runbook", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "runbook": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "reason": {
+          "type": "object",
+          "required": ["code", "summary"],
+          "additionalProperties": false,
+          "properties": {
+            "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "summary": { "type": "string", "minLength": 1, "maxLength": 1024 }
+          }
+        },
+        "with": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": { "type": "string", "maxLength": 4096 }
+        },
+        "facts": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": { "type": "string", "maxLength": 4096 }
+        }
+      }
+    },
+    "HostActionObject": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/HostActionValue"
+      }
+    },
+    "HostActionValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string", "maxLength": 4096 },
+        {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/HostActionValue" }
+        },
+        { "$ref": "#/$defs/HostActionObject" }
+      ]
+    },
+    "CollectorFieldType": {
+      "type": "string",
+      "enum": [
+        "text",
+        "number",
+        "integer",
+        "date",
+        "datetime",
+        "boolean",
+        "select",
+        "autocomplete",
+        "file",
+        "image",
+        "multiline"
+      ]
+    },
+    "FieldValidation": {
+      "type": "object",
+      "properties": {
+        "min_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string"
+        },
+        "min": {},
+        "max": {},
+        "step": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "DynamicOptions": {
+      "type": "object",
+      "required": [
+        "provider",
+        "field"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ApprovalGate": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pool": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "on_timeout": {
+          "type": "string"
+        },
+        "escalate_to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "BranchArm": {
+      "type": "object",
+      "properties": {
+        "condition": {
+          "type": "string"
+        },
+        "else": {
+          "enum": [
+            true,
+            null
+          ],
+          "description": "Fallback-arm marker. Prefer a null marker (`else:`); `else: true` remains supported for compatibility."
+        },
+        "label": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlowNode"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "Assertion": {
+      "type": "object",
+      "required": [
+        "type",
+        "subject"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "expected": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "CompensateConfig": {
+      "type": "object",
+      "required": [
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "on": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlowNode"
+          }
+        }
+      }
+    },
+    "WaitEventConfig": {
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "webhook",
+            "message",
+            "signal",
+            "channel"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "payload_schema": {
+          "type": "string"
+        }
+      }
+    },
+    "OutcomeDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        }
+      }
+    },
+    "IterateNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "steps"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "over": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "as": {
+          "type": "string"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "until": {
+          "type": "string"
+        },
+        "collect": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "collect_values": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlowNode"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "ParallelNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "branches"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParallelBranch"
+          }
+        },
+        "join": {
+          "$ref": "#/$defs/ParallelJoin"
+        }
+      }
+    },
+    "ParallelBranch": {
+      "type": "object",
+      "required": [
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FlowNode"
+          }
+        }
+      }
+    },
+    "ParallelJoin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wait_for": {
+          "type": "string"
+        },
+        "on_failure": {
+          "type": "string"
+        }
+      }
+    },
+    "ExtensionRef": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "RegionManifest": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "regions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Region"
+          }
+        }
+      }
+    },
+    "Region": {
+      "type": "object",
+      "required": [
+        "id",
+        "kit",
+        "op_type",
+        "op_id",
+        "label",
+        "members",
+        "entries",
+        "exits"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kit": {
+          "type": "string"
+        },
+        "op_type": {
+          "type": "string"
+        },
+        "op_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "display": {
+          "type": "string",
+          "enum": ["collapsed", "expanded", "always-expanded"]
+        },
+        "status_rule": {
+          "type": "string"
+        },
+        "skip_reason": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

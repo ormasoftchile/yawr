@@ -1,0 +1,6 @@
+version: "0.1.0"
+entrypoint: hello-ext
+capabilities:
+  - capability/tool-registration
+compatibility:
+  yawr_min_version: "0.1.0"

@@ -1,0 +1,187 @@
+apiVersion: yawr.runbook/v1
+
+id: multi-region-rollout
+name: multi-region-rollout
+kind: mitigation
+description: Rolling health check across regions with iterate and branching
+
+toolRefs:
+  - name: ping
+    path: ../../tools/ping.tool.yaml
+  - name: curl
+    path: ../../tools/curl.tool.yaml
+
+vars:
+  # Use real, resolvable subdomains so the example runs end-to-end. The
+  # `regions` here are subdomain prefixes on a single base domain — the
+  # original `us-east.api.contoso.com` style was illustrative but not
+  # routable.
+  service_url: cloudflare.com
+  regions: "www,developers,blog"
+
+inputs:
+  deploy_id:
+    type: string
+    required: false
+    description: Deployment ID to validate
+    from: prompt
+
+defaults:
+  timeout: "300s"
+
+governance:
+  allow_commands: [ curl, ping, kubectl ]
+  deny_env_vars: [ "SECRET_*", "TOKEN" ]
+  redact:
+    - pattern: "(?i)bearer\\s+\\S+"
+      replace: "bearer <redacted>"
+
+flow:
+  - step:
+      id: pre_check
+      type: collector
+      title: Confirm deployment window
+      prompt: |
+        Verify that deployment ${deploy_id} is in the approved change window.
+        Check the change management board before proceeding.
+      fields:
+        - name: change_ticket
+          type: text
+          label: Change ticket ID
+          required: true
+      required_evidence:
+        - kind: checklist
+          name: pre_deploy_check
+          items:
+            - "Change ticket approved"
+            - "Rollback plan documented"
+            - "Monitoring dashboards open"
+
+  - step:
+      id: approve_deploy
+      type: approve
+      title: Approve deployment
+      approvals:
+        min: 1
+        roles: [ "DRI" ]
+
+  - iterate:
+      id: region_checks
+      over: regions
+      as: region
+      steps:
+        - step:
+            id: ping_region
+            type: tool
+            title: Ping ${region} endpoint
+            tool:
+              name: ping
+              action: check
+              args:
+                host: "${region}.${service_url}"
+                count: "3"
+            capture:
+              region_ping: stdout
+
+        - step:
+            id: health_check_region
+            type: tool
+            title: HTTP health check for ${region}
+            tool:
+              name: curl
+              action: head
+              args:
+                # HEAD `/` rather than `/healthz` — public sites don't
+                # expose a health endpoint at that path.
+                url: https://${region}.${service_url}/
+            capture:
+              region_health: stdout
+
+        - step:
+            id: branch_region_health
+            type: branch
+            branches:
+              - condition: 'str.contains(region_health, "200")'
+                label: Region healthy
+                steps:
+                  - step:
+                      id: region_ok
+                      type: assert
+                      title: Assert ${region} is healthy
+                      assert:
+                        - type: contains
+                          subject: "${region_health}"
+                          expected: "200"
+
+              - condition: 'not str.contains(region_health, "200")'
+                label: Region unhealthy
+                steps:
+                  - step:
+                      id: region_escalate
+                      type: collector
+                      title: "${region} health check failed"
+                      prompt: |
+                        Region ${region} returned unexpected health status.
+                        Response: ${region_health}
+                        Consider pausing rollout.
+                      fields:
+                        - name: notes
+                          type: text
+                          label: Notes
+                          required: false
+                          multiline: true
+
+  - step:
+      id: validate_global
+      type: tool
+      title: Global endpoint validation
+      tool:
+        name: curl
+        action: head
+        args:
+          url: https://${service_url}/
+      capture:
+        global_health: stdout
+
+  - step:
+      id: branch_global
+      type: branch
+      branches:
+        - condition: 'str.contains(global_health, "200")'
+          label: All regions healthy
+          steps:
+            - step:
+                id: rollout_complete
+                type: end
+                title: Rollout successful
+                outcome:
+                  category: resolved
+                  code: rollout_success
+
+        - condition: 'not str.contains(global_health, "200")'
+          label: Global check failed
+          steps:
+            - step:
+                id: rollout_failed
+                type: collector
+                title: Global health check failed — initiate rollback
+                prompt: |
+                  Global endpoint returned: ${global_health}
+                  Execute rollback procedure for deployment ${deploy_id}.
+                fields:
+                  - name: rollback_notes
+                    type: text
+                    label: Rollback notes
+                    required: true
+                    multiline: true
+                required_evidence:
+                  - kind: text
+                    name: rollback_notes
+
+            - step:
+                id: end_rollback
+                type: end
+                title: Rollback initiated
+                outcome:
+                  category: needs_rca
+                  code: rollout_failed

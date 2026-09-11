@@ -1,0 +1,60 @@
+# Parallel version of collect-health.
+#
+# Same as collect-health.runbook.yaml but runs all service checks
+# concurrently. Uses the `collect` field on iterate to gather
+# per-iteration results into a JSON array for report review.
+# Shows: iterate + concurrency + include + collect.
+apiVersion: yawr.runbook/v1
+
+id: collect-health-parallel
+name: collect-health-parallel
+kind: mitigation
+description: >
+  Check all services in parallel, collect results, and
+  assemble a health report.
+
+imports:
+  check: check-service.runbook.yaml
+
+vars:
+  services: "www.google.com,www.cloudflare.com,api.github.com"
+
+flow:
+  - iterate:
+      id: parallel_health_checks
+      over: services
+      as: svc
+      concurrency: 3
+      collect:
+        results: "${last_host}: ${last_status}"
+      steps:
+        - step:
+            id: check_svc
+            type: include
+            title: "Check ${svc}"
+            include:
+              runbook: check-service.runbook.yaml
+              with:
+                service_host: "${svc}"
+            capture:
+              last_status: service_status
+              last_host: checked_host
+
+  - step:
+      id: show_report
+      type: collector
+      title: Review accumulated health report
+      # TODO(GXL): replace canonical JSON rendering with list joining once
+      # the normative stdlib includes a join function.
+      prompt: |
+        Health check results across all services:
+
+        ${results}
+
+        Review the report and decide next steps.
+      fields:
+        - name: next_steps
+          type: text
+          label: Next steps
+          required: false
+          multiline: true

@@ -1,0 +1,9 @@
+apiVersion: yawr.runbook/v1
+id: code-echo
+name: Return code as data
+inputs:
+  text: {type: string, required: true}
+outputs:
+  code: {type: string, value: "${text}"}
+flow:
+  - step: {id: noop, type: noop}

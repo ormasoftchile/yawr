@@ -1,0 +1,32 @@
+[
+  {
+    "text": "vars.count >= 2",
+    "expected": {
+      "mode": "gxl",
+      "text_length": 15,
+      "text_digest": "sha256:88135f22020a184f9132554f3cdd1f1bbfd47ecfedf2eaae10e5f6008fb1a4f3",
+      "tokens": [
+        {"start":0,"end":4,"class":"variable"},
+        {"start":4,"end":5,"class":"delimiter"},
+        {"start":5,"end":10,"class":"property"},
+        {"start":11,"end":13,"class":"operator"},
+        {"start":14,"end":15,"class":"number"}
+      ]
+    }
+  },
+  {
+    "text": "Hi ${vars.name}!",
+    "expected": {
+      "mode": "gis",
+      "text_length": 16,
+      "text_digest": "sha256:253fd7be6a84dc69a4ce40ffa93d5b872c2407361e821a03e2dfd0a1bca6f339",
+      "tokens": [
+        {"start":3,"end":5,"class":"interpolation"},
+        {"start":5,"end":9,"class":"variable"},
+        {"start":9,"end":10,"class":"delimiter"},
+        {"start":10,"end":14,"class":"property"},
+        {"start":14,"end":15,"class":"interpolation"}
+      ]
+    }
+  }
+]

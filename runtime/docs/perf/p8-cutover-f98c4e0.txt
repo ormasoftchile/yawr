@@ -1,0 +1,86 @@
+goos: windows
+goarch: amd64
+pkg: github.com/ormasoftchile/yawr/runtime/pkg/gxl
+cpu: 13th Gen Intel(R) Core(TM) i7-13700HX
+BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  226436	      5223 ns/op	    7320 B/op	      42 allocs/op
+BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  275095	      4960 ns/op	    7320 B/op	      42 allocs/op
+BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  253173	      5085 ns/op	    7320 B/op	      42 allocs/op
+BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  275017	      5118 ns/op	    7320 B/op	      42 allocs/op
+BenchmarkEngineGXLParseEval/service.healthy_==_true_and_service.latency_<_100-24         	  214705	      5621 ns/op	    7320 B/op	      42 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  118644	      9341 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  190555	      9942 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  120778	     10254 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  105829	     10320 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/str.contains(service.name,_"api")_and_vars.region_==_"us-east-1"-24         	  147282	      9644 ns/op	    9616 B/op	      69 allocs/op
+BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  169792	      9797 ns/op	    8944 B/op	      68 allocs/op
+BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	   95239	     11363 ns/op	    8944 B/op	      68 allocs/op
+BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  189333	      9148 ns/op	    8944 B/op	      68 allocs/op
+BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  193408	      9233 ns/op	    8944 B/op	      68 allocs/op
+BenchmarkEngineGXLParseEval/list.contains(service.tags,_"critical")_or_service.latency_<_50-24          	  145730	      8643 ns/op	    8944 B/op	      68 allocs/op
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gxl	24.911s
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gxl/eval	0.646s
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gxl/parser	0.589s
+goos: windows
+goarch: amd64
+pkg: github.com/ormasoftchile/yawr/runtime/pkg/gis
+cpu: 13th Gen Intel(R) Core(TM) i7-13700HX
+BenchmarkEngineGISInterpolation/service=${svc.name}_host=${svc.host}-24         	  244802	      4469 ns/op	    5360 B/op	      45 allocs/op
+BenchmarkEngineGISInterpolation/service=${svc.name}_host=${svc.host}-24         	  266316	      4164 ns/op	    5360 B/op	      45 allocs/op
+BenchmarkEngineGISInterpolation/service=${svc.name}_host=${svc.host}-24         	  293211	      4336 ns/op	    5360 B/op	      45 allocs/op
+BenchmarkEngineGISInterpolation/service=${svc.name}_host=${svc.host}-24         	  294805	      4590 ns/op	    5360 B/op	      45 allocs/op
+BenchmarkEngineGISInterpolation/service=${svc.name}_host=${svc.host}-24         	  320536	      4433 ns/op	    5360 B/op	      45 allocs/op
+BenchmarkEngineGISInterpolation/status=${svc.healthy_==_true}_latency=${svc.latency}-24         	  190496	      5961 ns/op	    6352 B/op	      51 allocs/op
+BenchmarkEngineGISInterpolation/status=${svc.healthy_==_true}_latency=${svc.latency}-24         	  239146	      5579 ns/op	    6352 B/op	      51 allocs/op
+BenchmarkEngineGISInterpolation/status=${svc.healthy_==_true}_latency=${svc.latency}-24         	  227353	      5375 ns/op	    6352 B/op	      51 allocs/op
+BenchmarkEngineGISInterpolation/status=${svc.healthy_==_true}_latency=${svc.latency}-24         	  199056	      5393 ns/op	    6352 B/op	      51 allocs/op
+BenchmarkEngineGISInterpolation/status=${svc.healthy_==_true}_latency=${svc.latency}-24         	  205089	      5901 ns/op	    6352 B/op	      51 allocs/op
+BenchmarkEngineGISInterpolation/summary=${str.toUpper(report)}_\${literal}-24                   	  195895	      5941 ns/op	    5384 B/op	      49 allocs/op
+BenchmarkEngineGISInterpolation/summary=${str.toUpper(report)}_\${literal}-24                   	  217998	      6133 ns/op	    5384 B/op	      49 allocs/op
+BenchmarkEngineGISInterpolation/summary=${str.toUpper(report)}_\${literal}-24                   	  237398	      5246 ns/op	    5384 B/op	      49 allocs/op
+BenchmarkEngineGISInterpolation/summary=${str.toUpper(report)}_\${literal}-24                   	  327933	      4943 ns/op	    5384 B/op	      49 allocs/op
+BenchmarkEngineGISInterpolation/summary=${str.toUpper(report)}_\${literal}-24                   	  250405	      6073 ns/op	    5384 B/op	      49 allocs/op
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gis	22.318s
+goos: windows
+goarch: amd64
+pkg: github.com/ormasoftchile/yawr/runtime/pkg/gcp
+cpu: 13th Gen Intel(R) Core(TM) i7-13700HX
+BenchmarkEngineGCPPathResolution-24    	  103676	     15012 ns/op	   21336 B/op	     144 allocs/op
+BenchmarkEngineGCPPathResolution-24    	   83779	     14427 ns/op	   21336 B/op	     144 allocs/op
+BenchmarkEngineGCPPathResolution-24    	   71877	     14921 ns/op	   21336 B/op	     144 allocs/op
+BenchmarkEngineGCPPathResolution-24    	   78794	     15169 ns/op	   21336 B/op	     144 allocs/op
+BenchmarkEngineGCPPathResolution-24    	   93368	     15188 ns/op	   21336 B/op	     144 allocs/op
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gcp	7.793s
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gcp/parser	0.498s
+goos: windows
+goarch: amd64
+pkg: github.com/ormasoftchile/yawr/runtime/pkg/gdp
+cpu: 13th Gen Intel(R) Core(TM) i7-13700HX
+BenchmarkEngineGCPPathResolutionGDP-24    	 3243098	       345.9 ns/op	     160 B/op	       1 allocs/op
+BenchmarkEngineGCPPathResolutionGDP-24    	 3446869	       360.2 ns/op	     160 B/op	       1 allocs/op
+BenchmarkEngineGCPPathResolutionGDP-24    	 3295971	       343.7 ns/op	     160 B/op	       1 allocs/op
+BenchmarkEngineGCPPathResolutionGDP-24    	 3611978	       369.1 ns/op	     160 B/op	       1 allocs/op
+BenchmarkEngineGCPPathResolutionGDP-24    	 3330962	       359.3 ns/op	     160 B/op	       1 allocs/op
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/gdp	8.467s
+goos: windows
+goarch: amd64
+pkg: github.com/ormasoftchile/yawr/runtime/pkg/pjvm
+cpu: 13th Gen Intel(R) Core(TM) i7-13700HX
+BenchmarkEnginePJVMConversion-24    	 1000000	      1210 ns/op	    2368 B/op	       6 allocs/op
+BenchmarkEnginePJVMConversion-24    	 1000000	      1224 ns/op	    2368 B/op	       6 allocs/op
+BenchmarkEnginePJVMConversion-24    	 1000000	      1140 ns/op	    2368 B/op	       6 allocs/op
+BenchmarkEnginePJVMConversion-24    	  995660	      1156 ns/op	    2368 B/op	       6 allocs/op
+BenchmarkEnginePJVMConversion-24    	 1000000	      1138 ns/op	    2368 B/op	       6 allocs/op
+BenchmarkEngineFullFixtureRun/collect-health.runbook.yaml-24         	      31	  39367239 ns/op	 3789180 B/op	   52637 allocs/op
+BenchmarkEngineFullFixtureRun/collect-health.runbook.yaml-24         	      30	  38014123 ns/op	 3796949 B/op	   52638 allocs/op
+BenchmarkEngineFullFixtureRun/collect-health.runbook.yaml-24         	      30	  37085027 ns/op	 3811627 B/op	   52638 allocs/op
+BenchmarkEngineFullFixtureRun/collect-health.runbook.yaml-24         	      31	  40648603 ns/op	 3795686 B/op	   52641 allocs/op
+BenchmarkEngineFullFixtureRun/collect-health.runbook.yaml-24         	      28	  38838204 ns/op	 3821412 B/op	   52639 allocs/op
+PASS
+ok  	github.com/ormasoftchile/yawr/runtime/pkg/pjvm	12.126s

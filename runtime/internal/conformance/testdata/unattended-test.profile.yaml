@@ -1,0 +1,11 @@
+apiVersion: yawr.runtime-profile/v1
+id: unattended-test
+context: test
+attendance: unattended
+approval:
+  scope:
+    allow_read: true
+    allow_mutating: true
+    allow_destructive: true
+transport:
+  allow_subprocess_in_test: true

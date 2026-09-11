@@ -1,0 +1,14 @@
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+const source = process.argv[2];
+if (!source) throw new Error('Pass the frozen interface file.');
+const markdown = await readFile(source, 'utf8');
+const vector = /```json\r?\n([\s\S]*?)\r?\n```/.exec(markdown)?.[1];
+if (!vector) throw new Error('Missing canonical JSON vector.');
+JSON.parse(vector);
+const directory = resolve(import.meta.dirname, '..', 'test', 'fixtures');
+await mkdir(directory, { recursive: true });
+await writeFile(resolve(directory, 'presentation-contract.json'), vector);
+await writeFile(resolve(directory, 'presentation-contract.sha256'), createHash('sha256').update(vector).digest('hex') + '\n');
+console.log('Canonical vector copied byte-for-byte: ' + createHash('sha256').update(vector).digest('hex'));

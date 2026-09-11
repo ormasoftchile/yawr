@@ -1,0 +1,76 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r20-serve-rpc
+name: r20 Serve RPC Test
+description: |
+  Simple runbook for testing yawr serve JSON-RPC and event streaming.
+  Designed to be driven via exec/start + exec/next calls.
+  Tests step-by-step execution, condition evaluation, and variable capture.
+
+flow:
+  # Step 1: Setup — capture environment variable
+  - step:
+      id: capture_env
+      type: cli
+      title: Capture deployment environment
+      command: echo
+      args: ["{{ .env | default \"dev\" }}"]
+      capture:
+        environment: stdout
+
+  # Step 2: Conditional branch based on infix expression
+  - step:
+      id: branch_by_env
+      type: branch
+      title: Route by environment
+      branches:
+        - condition: 'environment == "prod"'
+          label: Production path
+          steps:
+            - step:
+                id: prod_check
+                type: cli
+                title: Production safety check
+                command: echo
+                args: ["PROD deployment — running safety checks"]
+                capture:
+                  check_result: stdout
+
+            - step:
+                id: prod_confirm
+                type: cli
+                title: Confirm production
+                command: echo
+                args: ["Production checks passed"]
+
+        - condition: 'environment == "staging"'
+          label: Staging path
+          steps:
+            - step:
+                id: staging_deploy
+                type: cli
+                title: Deploy to staging
+                command: echo
+                args: ["Deploying to STAGING"]
+                capture:
+                  deploy_result: stdout
+
+        - condition: 'true'
+          label: Development path (default)
+          steps:
+            - step:
+                id: dev_deploy
+                type: cli
+                title: Deploy to development
+                command: echo
+                args: ["Deploying to DEVELOPMENT"]
+                capture:
+                  deploy_result: stdout
+
+  # Step 3: Completion marker
+  - step:
+      id: complete
+      type: cli
+      title: Deployment complete
+      command: echo
+      args: ["Deployment to {{ .environment }} complete"]

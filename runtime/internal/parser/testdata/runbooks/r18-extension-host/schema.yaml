@@ -1,0 +1,57 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r18-extension-host
+name: r18 Extension Host Test Fixture
+description: |
+  Validates the full extension lifecycle: extension declared → loaded → 
+  tool contributed → tool invoked via tool step. Uses the hello-ext 
+  reference extension to demonstrate Phase 7 extension host integration.
+
+# NOTE: This assumes schema supports extensions: []
+# Ken's D8 decision specifies runbook extensions: block
+# If schema doesn't support this yet, Brian will add it during implementation
+extensions:
+  - name: hello-ext
+    path: ../../../extensions/hello-ext
+    grants:
+      - capability/tool-registration
+
+inputs:
+  greeting_name:
+    type: string
+    description: Name to greet
+    default: "yawr"
+
+flow:
+  # Step 1: Invoke the hello tool contributed by hello-ext
+  - step:
+      id: invoke_hello
+      type: tool
+      title: Invoke extension-contributed hello tool
+      tool:
+        name: yawr.hello
+        action: greet
+        args:
+          name: "{{ .greeting_name }}"
+      capture:
+        greeting_result: json.result
+
+  # Step 2: Assert the greeting result contains expected name
+  - step:
+      id: assert_greeting
+      type: assert
+      title: Verify hello extension response
+      assert:
+        - type: contains
+          subject: "{{ .greeting_result }}"
+          expected: "{{ .greeting_name }}"
+          message: "Greeting must contain the provided name"
+
+  # Step 3: Completion
+  - step:
+      id: complete
+      type: end
+      title: Extension host test complete
+      outcome:
+        category: success
+        code: extension_test_passed

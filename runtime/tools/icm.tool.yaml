@@ -1,0 +1,52 @@
+apiVersion: yawr.tool/v1
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
+actions:
+  - name: get_incident
+    description: Retrieve the full record for an IcM incident by ID.
+    args:
+      incident_id:
+        type: string
+        required: true
+        description: IcM incident ID (e.g. "12345678")
+    returns: json
+  - name: update_incident
+    description: |
+      Append a mitigation note or status update to an open IcM incident. Does not close the incident; use resolve_incident for that.
+    args:
+      incident_id:
+        type: string
+        required: true
+        description: IcM incident ID
+      note:
+        type: string
+        required: true
+        description: Free-text mitigation note to append
+      status:
+        type: string
+        required: false
+        description: Optional status transition (e.g. "Mitigated")
+    returns: json
+  - name: resolve_incident
+    description: Mark an IcM incident as resolved with a resolution summary.
+    args:
+      incident_id:
+        type: string
+        required: true
+        description: IcM incident ID
+      summary:
+        type: string
+        required: true
+        description: Resolution summary for the incident record
+    returns: json
+meta:
+  name: icm
+  version: "1.0"
+  description: |
+    IcM (Incident Management) tool via Azure's MCP HTTP endpoint. Provides incident lookup, update, and on-call resolution actions.

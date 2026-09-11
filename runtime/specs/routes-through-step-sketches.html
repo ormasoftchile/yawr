@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yawr - Routes Through a Step</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", sans-serif;
+      --page: #f4f5f7;
+      --surface: #fff;
+      --surface-2: #eef1f4;
+      --line: #c7ccd3;
+      --text: #20242a;
+      --muted: #626a75;
+      --blue: #0969da;
+      --blue-soft: #eaf3fd;
+      --teal: #087f8c;
+      --teal-soft: #e8f6f7;
+      --green: #1a7f37;
+      --green-soft: #edf8f0;
+      --amber: #9a6700;
+      --amber-soft: #fff8e6;
+      --red: #cf222e;
+      --red-soft: #fff1f1;
+      --code: "Cascadia Code", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; margin: 0; color: var(--text); background: var(--page); }
+    button { font: inherit; cursor: pointer; }
+    code { font-family: var(--code); }
+
+    .review { width: 100%; min-width: 0; min-height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+    .review-head { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .review-head h1 { margin: 0; font-size: 16px; letter-spacing: 0; }
+    .review-head p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
+    .size-switch { display: inline-grid; grid-auto-flow: column; overflow: hidden; border: 1px solid #aab2bc; border-radius: 4px; }
+    .size-switch button { min-width: 62px; padding: 5px 9px; border: 0; border-right: 1px solid #aab2bc; color: var(--muted); background: #fff; font-size: 9px; }
+    .size-switch button:last-child { border-right: 0; }
+    .size-switch button.active { color: #fff; background: #3d444d; }
+
+    .review-body { min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr); }
+    .journey { min-height: 0; overflow: auto; padding: 12px 8px; border-right: 1px solid var(--line); background: #e9ecf0; }
+    .journey h2 { margin: 10px 8px 4px; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+    .journey h2:first-child { margin-top: 0; }
+    .journey button { width: 100%; display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 8px; border: 0; border-left: 3px solid transparent; color: var(--text); background: transparent; text-align: left; font-size: 10px; }
+    .journey button span:first-child { color: var(--muted); font: 8px var(--code); }
+    .journey button.active { border-left-color: var(--blue); background: #fff; font-weight: 700; }
+
+    .stage { min-width: 0; min-height: 0; overflow: auto; display: grid; place-items: start center; padding: 16px; }
+    .screen-wrap { width: min(1180px, 100%); }
+    .screen-title { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+    .screen-title h2 { margin: 0; font-size: 14px; }
+    .screen-title span { color: var(--muted); font-size: 9px; }
+
+    .app { width: 100%; min-height: 690px; container-type: inline-size; display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; border: 1px solid #9fa7b2; border-radius: 5px; background: #fff; box-shadow: 0 8px 22px rgba(31, 35, 40, .12); }
+    .toolbar { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line); background: #e9ecf0; }
+    .identity { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+    .identity strong { font-size: 11px; }
+    .identity span { color: var(--muted); font-size: 9px; }
+    .actions, .mode-actions, .row-actions { display: flex; align-items: center; gap: 5px; }
+    .btn { min-height: 27px; padding: 5px 9px; border: 1px solid #b4bbc4; border-radius: 3px; color: var(--text); background: #f8f9fa; font-size: 9px; }
+    .btn.primary { color: #fff; border-color: var(--blue); background: var(--blue); font-weight: 700; }
+    .btn.danger { color: #fff; border-color: var(--red); background: var(--red); }
+    .btn.quiet { border-color: transparent; color: var(--blue); background: transparent; }
+    .btn.wide { width: 100%; min-height: 34px; font-size: 10px; }
+
+    .mode { min-height: 50px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line); border-left: 4px solid var(--blue); background: var(--blue-soft); }
+    .mode.live { border-left-color: var(--amber); background: var(--amber-soft); }
+    .mode.test { border-left-color: var(--teal); background: var(--teal-soft); }
+    .mode.good { border-left-color: var(--green); background: var(--green-soft); }
+    .mode.bad { border-left-color: var(--red); background: var(--red-soft); }
+    .mode-copy { min-width: 0; display: grid; gap: 2px; }
+    .mode-copy strong { font-size: 10px; }
+    .mode-copy span { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+    .scope { display: inline-grid; grid-auto-flow: column; overflow: hidden; border: 1px solid #aeb6c0; border-radius: 3px; }
+    .scope span { padding: 5px 7px; border-right: 1px solid #aeb6c0; color: var(--muted); background: #fff; font-size: 8px; }
+    .scope span:last-child { border-right: 0; }
+    .scope span.active { color: #fff; background: var(--blue); }
+    .state { padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font-size: 7px; font-weight: 700; text-transform: uppercase; }
+
+    .workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+    .canvas { min-width: 0; min-height: 0; position: relative; overflow: hidden; border-right: 1px solid var(--line); background-color: #fafbfd; background-image: radial-gradient(#cbd1d8 .7px, transparent .7px); background-size: 18px 18px; }
+    .canvas-label { position: absolute; z-index: 4; top: 9px; left: 9px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); background: rgba(255,255,255,.95); font-size: 8px; text-transform: uppercase; }
+    .graph { position: absolute; top: 42px; left: 16px; width: 700px; height: 520px; transform-origin: top left; }
+    .graph svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .edge { fill: none; stroke: #818b96; stroke-width: 2; }
+    .edge.to { stroke: var(--blue); }
+    .edge.from { stroke: var(--teal); }
+    .edge.expected { stroke: var(--amber); stroke-dasharray: 6 4; }
+    .edge.actual { stroke: var(--red); stroke-width: 3; }
+
+    .node { position: absolute; width: 150px; min-height: 54px; padding: 8px 9px; border: 1px solid #aeb5be; border-left: 3px solid var(--blue); border-radius: 5px; background: #fff; box-shadow: 0 2px 5px rgba(31,35,40,.09); }
+    .node.branch { border-left-color: var(--amber); border-radius: 16px 5px; }
+    .node.human { border-left-color: var(--teal); background: var(--teal-soft); }
+    .node.from { border-left-color: var(--teal); }
+    .node.target { outline: 3px solid var(--amber); outline-offset: 2px; }
+    .node.selected { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .node.current { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .node.reached { outline-color: var(--green); }
+    .node.muted { opacity: .18; filter: grayscale(1); }
+    .node .kind { color: var(--muted); font-size: 7px; font-weight: 700; text-transform: uppercase; }
+    .node .name { margin-top: 4px; overflow: hidden; font: 700 9px var(--code); text-overflow: ellipsis; white-space: nowrap; }
+    .node .plain { margin-top: 3px; color: var(--muted); font-size: 8px; }
+    .tags { position: absolute; top: -10px; right: 4px; display: flex; gap: 3px; }
+    .tag { padding: 2px 4px; border: 1px solid currentColor; border-radius: 2px; color: var(--blue); background: #eef6ff; font-size: 7px; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
+    .tag.amber { color: var(--amber); background: var(--amber-soft); }
+    .tag.green { color: var(--green); background: var(--green-soft); }
+    .tag.gray { color: var(--muted); background: var(--surface-2); }
+    .tag.red { color: var(--red); background: var(--red-soft); }
+    .stub { position: absolute; min-width: 124px; padding: 7px 8px; border: 1px dashed #8e98a4; border-radius: 3px; color: var(--muted); background: #f2f4f6; font-size: 8px; text-align: center; }
+    .stub.warn { border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+
+    .panel { min-width: 0; overflow: auto; background: #f1f3f5; }
+    .panel-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+    .eyebrow { color: var(--muted); font-size: 8px; font-weight: 700; text-transform: uppercase; }
+    .panel-head h3, .result h3 { margin: 3px 0; font-size: 14px; }
+    .panel-head code { display: block; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+    .section { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .section h4 { margin: 0 0 7px; color: var(--muted); font-size: 8px; text-transform: uppercase; }
+    .section p { margin: 0; font-size: 9px; line-height: 1.4; }
+    .primary-zone { padding: 10px 12px; border-bottom: 1px solid var(--line); background: #fff; }
+    .facts { display: grid; gap: 6px; }
+    .fact { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; font-size: 9px; }
+    .fact span { color: var(--muted); }
+    .counts, .metrics, .coverage-summary { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); background: #fff; }
+    .counts div, .metrics div, .coverage-summary div { padding: 8px 5px; border-right: 1px solid var(--line); text-align: center; }
+    .counts div:last-child, .metrics div:last-child, .coverage-summary div:last-child { border-right: 0; }
+    .counts strong, .metrics strong, .coverage-summary strong { display: block; font-size: 14px; }
+    .counts span, .metrics span, .coverage-summary span { color: var(--muted); font-size: 7px; text-transform: uppercase; }
+    .notice { padding: 8px; border-left: 3px solid var(--teal); background: var(--teal-soft); font-size: 9px; line-height: 1.35; }
+    .notice.warn { border-left-color: var(--amber); background: var(--amber-soft); }
+    .notice.good { border-left-color: var(--green); background: var(--green-soft); }
+    .notice.bad { border-left-color: var(--red); background: var(--red-soft); }
+
+    .steps { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); background: #fff; }
+    .steps.three { grid-template-columns: repeat(3, 1fr); }
+    .step { display: grid; grid-template-columns: 19px 1fr; align-items: center; gap: 6px; padding: 9px 12px; color: var(--muted); font-size: 9px; }
+    .step + .step { border-left: 1px solid var(--line); }
+    .step b { width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid #9fa7b2; border-radius: 50%; font-size: 7px; }
+    .step.active { color: var(--text); font-weight: 700; }
+    .step.active b { color: #fff; border-color: var(--blue); background: var(--blue); }
+    .step.done b { color: #fff; border-color: var(--green); background: var(--green); }
+
+    .rows, .route-list, .run-list, .gap-list { display: grid; }
+    .data-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 7px 0; border-bottom: 1px solid #d5dae0; }
+    .data-row:last-child { border-bottom: 0; }
+    .data-row strong { display: block; font-size: 9px; }
+    .data-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
+    .value { min-width: 90px; align-self: center; padding: 4px 6px; border: 1px solid #9fb6d0; border-radius: 2px; color: var(--blue); background: #fff; font-size: 8px; font-weight: 700; text-align: left; }
+    .value.changed { color: var(--amber); background: var(--amber-soft); }
+    .route-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 7px; align-items: start; padding: 7px 0; border-bottom: 1px solid #d5dae0; font-size: 9px; }
+    .route-row:last-child { border-bottom: 0; }
+    .dot { width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid #9fa7b2; border-radius: 50%; color: var(--muted); font-size: 7px; }
+    .dot.done { color: #fff; border-color: var(--green); background: var(--green); }
+    .dot.now { color: #fff; border-color: var(--blue); background: var(--blue); }
+    .route-row strong { display: block; }
+    .route-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
+    .route-state { color: var(--muted); font-size: 8px; }
+    .route-state.goal { color: var(--amber); font-weight: 700; }
+    .ack { margin-top: 8px; display: grid; grid-template-columns: 14px 1fr; gap: 6px; color: var(--muted); font-size: 8px; line-height: 1.35; }
+    .check { width: 13px; height: 13px; display: grid; place-items: center; border-radius: 2px; color: #fff; background: var(--green); font-size: 8px; }
+    .footer { position: sticky; bottom: 0; display: grid; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); background: #f1f3f5; }
+    .details { color: var(--muted); font-size: 8px; text-align: center; }
+
+    .progress-bar { height: 5px; overflow: hidden; border-radius: 3px; background: #dfe3e8; }
+    .progress-bar span { display: block; width: 66%; height: 100%; background: var(--blue); }
+    .now-box { padding: 8px; border: 1px solid #8ab7ea; border-radius: 4px; background: #eef6ff; }
+    .now-box strong { display: block; margin: 3px 0; font-size: 12px; }
+    .now-box span { color: var(--muted); font-size: 8px; }
+
+    .result { padding: 14px 12px; border-bottom: 1px solid var(--line); background: #fff; }
+    .result-mark { width: 31px; height: 31px; display: grid; place-items: center; margin-bottom: 7px; border-radius: 50%; color: #fff; background: var(--green); font-size: 15px; font-weight: 800; }
+    .result-mark.bad { background: var(--red); }
+    .result p { margin: 4px 0 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .compare div { padding: 8px; border: 1px solid var(--line); border-top: 3px solid var(--amber); background: #fff; }
+    .compare div:last-child { border-top-color: var(--red); }
+    .compare span { display: block; color: var(--muted); font-size: 7px; text-transform: uppercase; }
+    .compare strong { display: block; margin-top: 4px; font-size: 9px; }
+
+    .coverage { min-width: 0; overflow: auto; padding: 13px; background: #fafbfd; }
+    .coverage h3 { margin: 0 0 9px; font-size: 14px; }
+    .gap { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-top: 0; background: #fff; font-size: 9px; }
+    .gap:first-child { margin-top: 10px; border-top: 1px solid var(--line); }
+    .gap.selected { border-left: 3px solid var(--blue); background: #f4f8fd; }
+    .gap > span:first-child { color: var(--muted); font: 8px var(--code); }
+    .gap strong, .gap small { display: block; }
+    .gap small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+    .gap-kind { color: var(--amber); font-size: 8px; font-weight: 700; }
+
+    .review.narrow .screen-wrap { width: min(390px, 100%); }
+    .review.narrow .screen-title span { display: none; }
+    .review.narrow .app { min-height: 760px; height: 760px; }
+    .review.narrow .toolbar { flex-wrap: wrap; }
+    .review.narrow .mode { grid-template-columns: 1fr; }
+    .review.narrow .mode-actions { justify-content: space-between; }
+    .review.narrow .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(255px, 40%) minmax(0, 1fr); }
+    .review.narrow .canvas { border-right: 0; border-bottom: 1px solid var(--line); }
+    .review.narrow .graph { transform: scale(.39); }
+    .review.narrow .panel { overflow: auto; }
+    .review.narrow .coverage { max-height: 310px; }
+
+    @container (max-width: 900px) {
+      .workspace { grid-template-columns: minmax(0, 1fr) 340px; }
+      .graph { transform: scale(.54); }
+      .mode { grid-template-columns: 1fr; }
+      .mode-actions { flex-wrap: wrap; }
+    }
+
+    @container (max-width: 720px) {
+      .workspace { grid-template-columns: 1fr; grid-template-rows: 300px minmax(0, 1fr); }
+      .canvas { border-right: 0; border-bottom: 1px solid var(--line); }
+      .graph { transform: scale(.47); }
+      .panel { overflow: auto; }
+      .coverage { max-height: 300px; }
+    }
+
+    @media (max-width: 700px) {
+      .review-head, .review-body, .journey, .stage { width: 100%; min-width: 0; max-width: 100vw; }
+      .review-body { display: block; overflow: hidden; }
+      .journey { display: flex; gap: 3px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .journey h2 { display: none; }
+      .journey button { min-width: 125px; flex: 0 0 125px; }
+      .stage { max-width: 100vw; padding: 10px; }
+      .screen-title { align-items: flex-start; flex-direction: column; gap: 2px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="review">
+    <header class="review-head">
+      <div><h1>Routes through a step</h1><p>Literal operator flow</p></div>
+      <div class="size-switch" aria-label="Preview width"><button class="active" data-size="wide" aria-pressed="true">Wide</button><button data-size="narrow" aria-pressed="false">Narrow</button></div>
+    </header>
+    <div class="review-body">
+      <nav class="journey" aria-label="Operator journey">
+        <h2>Understand</h2>
+        <button class="active" data-screen="s1"><span>01</span><span>Select a step</span></button>
+        <button data-screen="s2"><span>02</span><span>Routes through it</span></button>
+        <h2>During an actual run</h2>
+        <button data-screen="live-open"><span>A</span><span>Open XTS</span></button>
+        <button data-screen="live-findings"><span>B</span><span>Answer questions</span></button>
+        <button data-screen="live-review"><span>C</span><span>Review answers</span></button>
+        <button data-screen="live-resumed"><span>D</span><span>Run continues</span></button>
+        <h2>Test reaching it</h2>
+        <button data-screen="s3"><span>03</span><span>Set conditions</span></button>
+        <button data-screen="s4"><span>04</span><span>Check and run</span></button>
+        <button data-screen="s5"><span>05</span><span>Test running</span></button>
+        <button data-screen="s6"><span>06</span><span>Step reached</span></button>
+        <button data-screen="s7"><span>07</span><span>Route changed</span></button>
+        <h2>Improve</h2>
+        <button data-screen="s8"><span>08</span><span>Find gaps</span></button>
+      </nav>
+      <main class="stage"><section class="screen-wrap"><div class="screen-title"><h2 id="screen-title"></h2><span id="screen-subtitle"></span></div><div class="app" id="app" role="img"></div></section></main>
+    </div>
+  </div>
+
+  <script>
+    const routeNodes = {
+      base: [
+        ['read_incident', 'Read incident', 18, 42],
+        ['Inspect replication in XTS', 'Open view, then record findings', 18, 157, 'human'],
+        ['primary_health_gate', 'Primary health?', 285, 190, 'branch'],
+        ['confirm_failover', 'Confirm failover', 285, 318],
+        ['validate_secondary', 'Validate secondary', 525, 325, 'from'],
+        ['execute_secondary_failover', 'Execute failover', 525, 450, 'target']
+      ]
+    };
+
+    function node(name, plain, left, top, classes = '', tag = '', tagClass = '', kind = 'Step') {
+      return `<div class="node ${classes}" style="left:${left}px;top:${top}px">${tag ? `<div class="tags"><span class="tag ${tagClass}">${tag}</span></div>` : ''}<span class="kind">${kind}</span><div class="name">${name}</div>${plain ? `<div class="plain">${plain}</div>` : ''}</div>`;
+    }
+
+    function routeGraph(state) {
+      const edgeClass = state === 'changed' ? 'expected' : state === 'setup' || state === 'ready' || state === 'running' ? 'to' : state === 'reached' ? 'from' : 'to';
+      if (state === 'selected') {
+        return `<span class="canvas-label">Full graph</span><div class="graph"><svg viewBox="0 0 700 520"><path class="edge" d="M90 75 C90 125 270 120 270 170"/><path class="edge" d="M270 225 C270 285 435 275 435 330"/><path class="edge" d="M435 385 C435 430 560 420 560 465"/></svg>${node('read_incident','Read incident',15,40)}${node('primary_health_gate','Primary health?',195,160,'branch')}${node('execute_secondary_failover','Execute failover',360,320,'selected','Selected','','Tool')}${node('resolved','Resolved',485,450,'from','','','End')}<div class="stub" style="left:510px;top:70px">467 other steps</div></div>`;
+      }
+      if (state === 'changed') {
+        return `<span class="canvas-label">Expected and actual</span><div class="graph"><svg viewBox="0 0 700 520"><path class="edge to" d="M95 85 C95 140 360 130 360 190"/><path class="edge expected" d="M435 245 C435 300 540 290 540 350"/><path class="edge actual" d="M360 245 C300 300 100 290 100 350"/></svg>${node('read_replication_state','Expected: unavailable',20,45,'','Check value','amber','Condition')}${node('primary_health_gate','Primary health?',285,190,'branch current','First difference','red','Decision')}${node('primary_healthy_exit','Actual: healthy',25,345,'','Actual','red','Outcome')}${node('confirm_failover','Expected route',465,335,'muted','Expected','amber','Choice')}${node('execute_secondary_failover','Not reached',520,450,'target muted','Not reached','gray','Target')}</div>`;
+      }
+      if (state === 'routes') {
+        return `<span class="canvas-label">Routes through this step</span><div class="graph"><svg viewBox="0 0 700 520"><path class="edge to" d="M95 85 C95 130 250 125 250 170"/><path class="edge to" d="M250 225 C250 280 410 270 410 320"/><path class="edge from" d="M410 375 C410 425 555 415 555 460"/><path class="edge expected" d="M250 225 C230 300 80 300 80 365"/></svg><div class="stub" style="left:20px;top:4px">29 more leading steps</div>${node('read_incident','Load incident context',20,45,'','','','To this step')}${node('Inspect replication in XTS','Open view, then record findings',175,160,'human','Human check','','To this step')}${node('execute_secondary_failover','Execute failover',335,310,'target','Selected','','Selected step')}${node('verify_failover','Verify the new primary',480,450,'from','','','From this step')}<div class="stub warn" style="left:10px;top:350px">1 unknown dependency</div><div class="stub" style="left:515px;top:90px">6 more following steps</div></div>`;
+      }
+
+      const labels = {
+        setup: [['Test data','Test answers','','Answer','Test approval','Target'], ['','','','','','amber']],
+        ready: [['Ready','Answers set','','Set','Set','Stop here'], ['green','green','','','','amber']],
+        running: [['Done','Answers used','Done','Now','Next','Stop here'], ['green','green','green','','gray','amber']],
+        reached: [['Used','Answers used','Done','Done','Used','Reached'], ['green','green','green','green','green','green']]
+      }[state];
+      const classes = ['', 'human', 'branch', state === 'running' ? 'current' : '', 'from', `target ${state === 'reached' ? 'reached' : ''}`];
+      const kinds = ['Automated result','Human check','Decision','Choice','Test approval','Target'];
+      const nodes = routeNodes.base.map((item, index) => node(item[0], item[1], item[2], item[3], `${classes[index]} ${item[4] || ''}`, labels[0][index], labels[1][index], kinds[index])).join('');
+      return `<span class="canvas-label">${state === 'running' ? 'Route in progress' : state === 'reached' ? 'Completed route' : 'Route to test'}</span><div class="graph"><svg viewBox="0 0 700 520"><path class="edge ${edgeClass}" d="M95 85 C95 140 360 130 360 190"/><path class="edge ${edgeClass}" d="M95 200 C160 200 240 190 285 200"/><path class="edge ${edgeClass}" d="M360 245 C360 285 360 300 360 325"/><path class="edge ${state === 'running' ? 'expected' : edgeClass}" d="M435 365 C470 365 500 350 525 350"/><path class="edge ${state === 'running' ? 'expected' : 'from'}" d="M600 385 C600 415 600 430 600 450"/></svg>${nodes}</div>`;
+    }
+
+    function xtsRunGraph(state) {
+      const opening = state === 'open';
+      const reviewing = state === 'review';
+      const resumed = state === 'resumed';
+      return `<span class="canvas-label">Inspect replication in XTS</span><div class="graph"><svg viewBox="0 0 700 520"><path class="edge to" d="M135 105 C135 165 325 155 325 220"/><path class="edge to" d="M400 275 C400 330 510 315 510 370"/><path class="edge to" d="M585 425 C585 450 585 455 585 475"/></svg>${node('open_xts_view','Sterling Database Replicas',60,70,opening?'current':'',opening?'Now':'Done',opening?'':'green','Open XTS view')}${node('record_findings','Answer 3 questions',250,210,opening?'human':resumed?'human':'human current',opening?'Next':resumed?'Done':reviewing?'Review':'Now',opening?'gray':resumed?'green':'','Record findings')}${node('primary_health_gate','Findings choose this route',435,360,resumed?'branch current':'branch',opening?'Waiting':resumed?'Now':reviewing?'Waiting':'Next',opening?'gray':resumed?'':'gray','Parent decision')}${node('execute_secondary_failover','Execute failover',510,465,'target',resumed?'Next':'Target',resumed?'gray':'amber','Selected step')}</div>`;
+    }
+
+    function shell({ toolbarTitle, toolbarSub, toolbarActions, modeTitle, modeSub, modeClass = '', modeActions = '', graph, panel }) {
+      return `<div class="toolbar"><div class="identity"><strong>${toolbarTitle}</strong><span>${toolbarSub}</span></div><div class="actions">${toolbarActions}</div></div><div class="mode ${modeClass}"><div class="mode-copy"><strong>${modeTitle}</strong><span>${modeSub}</span></div><div class="mode-actions">${modeActions}</div></div><div class="workspace"><div class="canvas">${graph}</div><aside class="panel">${panel}</aside></div>`;
+    }
+
+    const primary = label => `<button class="btn primary wide">${label}</button>`;
+    const details = '<span class="details">Technical details</span>';
+    const toolbarButtons = '<button class="btn">Run</button><button class="btn">Debug Run</button><button class="btn">Panel</button>';
+    const testToolbar = '<button class="btn">Back to graph</button><button class="btn">Save draft</button>';
+
+    const screens = {
+      s1: {
+        title: '01 Select a step', subtitle: 'One clear next action',
+        aria: 'Execute secondary failover is selected. The only prominent next action is Show routes through this step.',
+        html: shell({ toolbarTitle:'GeoDR0001', toolbarSub:'512 steps', toolbarActions:toolbarButtons, modeTitle:'Selected: Execute secondary failover', modeSub:'This step has not run', modeActions:'<span class="state">Selected</span>', graph:routeGraph('selected'), panel:`<div class="panel-head"><div><span class="eyebrow">Selected step</span><h3>Execute secondary failover</h3><code>execute_secondary_failover</code></div><span class="state">Not run</span></div><div class="primary-zone">${primary('Show routes through this step')}</div><div class="section"><h4>What it does</h4><p>Runs the GeoDR failover command for the selected secondary region.</p></div><div class="section"><h4>Uses</h4><div class="facts"><div class="fact"><span>Incident</span><code>icm_id</code></div><div class="fact"><span>Target region</span><code>secondary_region</code></div></div></div>` })
+      },
+      s2: {
+        title: '02 Routes through this step', subtitle: 'No named concept to learn',
+        aria: 'The graph shows routes to and from Execute secondary failover. Scope choices are Through this step, To this step, and From this step. The primary action is Test reaching this step.',
+        html: shell({ toolbarTitle:'GeoDR0001', toolbarSub:'512 steps', toolbarActions:'<button class="btn">Run</button><button class="btn">Debug Run</button>', modeTitle:'Showing routes through: Execute secondary failover', modeSub:'31 steps lead to it, 7 follow it, 1 dependency is unknown', modeActions:'<div class="scope"><span class="active">Through this step</span><span>To this step</span><span>From this step</span></div><button class="btn">Show full graph</button>', graph:routeGraph('routes'), panel:`<div class="panel-head"><div><span class="eyebrow">Selected step</span><h3>Execute secondary failover</h3><code>execute_secondary_failover</code></div><span class="state">Routes shown</span></div><div class="primary-zone">${primary('Test reaching this step')}</div><div class="section"><h4>What is shown</h4><div class="counts"><div><strong>31</strong><span>Lead to it</span></div><div><strong>7</strong><span>Follow it</span></div><div><strong style="color:var(--amber)">1</strong><span>Unknown</span></div></div></div><div class="section"><div class="notice warn">One dependency is unknown. Its marker stays visible.</div></div>` })
+      },
+      'live-open': {
+        title:'A Open XTS during an actual run', subtitle:'The run waits for the launch result',
+        aria:'During an actual run, Inspect replication in XTS first opens the Sterling Database Replicas view. The primary action is Open XTS. If opening fails, Yawr takes a blocked route and does not ask the questions.',
+        html:shell({ toolbarTitle:'Actual run', toolbarSub:'Inspect replication in XTS', toolbarActions:'<button class="btn">Stop run</button>', modeTitle:'Inspect replication in XTS', modeSub:'Step 1 of 3 - open the view', modeClass:'live', modeActions:'<span class="state">Waiting</span>', graph:xtsRunGraph('open'), panel:`<div class="steps three"><div class="step active"><b>1</b><span>Open XTS</span></div><div class="step"><b>2</b><span>Answer</span></div><div class="step"><b>3</b><span>Review</span></div></div><div class="panel-head"><div><span class="eyebrow">Actual run</span><h3>Open the XTS view</h3></div><span class="state">Waiting</span></div><div class="section"><h4>View to open</h4><div class="facts"><div class="fact"><span>View</span><strong>Database Replicas</strong></div><div class="fact"><span>Environment</span><strong>Production</strong></div><div class="fact"><span>Server</span><code>${'${server}'}</code></div></div></div><div class="section"><div class="notice warn"><strong>This is an actual run.</strong><br>Open XTS is the only confirmation. VS Code will switch to XTS; review the view, then return here.</div></div><div class="primary-zone">${primary('Open XTS')}</div><div class="section"><p>If the view cannot open, Yawr follows the <strong>View could not be opened</strong> route. The questions are not shown.</p></div>` })
+      },
+      'live-findings': {
+        title:'B Return and answer questions', subtitle:'Answers remain a local draft',
+        aria:'After XTS opens, Yawr waits for the operator to return and answer three questions. The answers are not submitted or used for routing yet. The primary action is Review answers.',
+        html:shell({ toolbarTitle:'Actual run paused', toolbarSub:'Inspect replication in XTS', toolbarActions:'<button class="btn">Stop run</button>', modeTitle:'Waiting for you: record what you found', modeSub:'XTS is open - return here after reviewing it', modeClass:'live', modeActions:'<span class="state">Draft answers</span>', graph:xtsRunGraph('findings'), panel:`<div class="steps three"><div class="step done"><b>x</b><span>XTS opened</span></div><div class="step active"><b>2</b><span>Answer</span></div><div class="step"><b>3</b><span>Review</span></div></div><div class="panel-head"><div><span class="eyebrow">What did you find?</span><h3>Record the XTS findings</h3></div></div><div class="section"><div class="rows"><div class="data-row"><strong>Primary health</strong><button class="value">Unavailable v</button></div><div class="data-row"><strong>Secondary health</strong><button class="value">Healthy v</button></div><div class="data-row"><strong>Replication lag</strong><button class="value">Within limit v</button></div></div></div><div class="section"><div class="notice">These answers are still editable. Yawr will not save or route on them until you review and continue.</div></div><div class="footer">${primary('Review answers')}</div>` })
+      },
+      'live-review': {
+        title:'C Review answers before continuing', subtitle:'Nothing is submitted yet',
+        aria:'The operator reviews three collected XTS answers before they are submitted. The source is this actual run. Edit answers returns to the form; Save answers and continue persists one collector response and resumes routing.',
+        html:shell({ toolbarTitle:'Actual run paused', toolbarSub:'Inspect replication in XTS', toolbarActions:'<button class="btn">Stop run</button>', modeTitle:'Review before continuing', modeSub:'These answers have not been submitted to Yawr', modeClass:'live', modeActions:'<span class="state">Review</span>', graph:xtsRunGraph('review'), panel:`<div class="steps three"><div class="step done"><b>x</b><span>XTS opened</span></div><div class="step done"><b>x</b><span>Answered</span></div><div class="step active"><b>3</b><span>Review</span></div></div><div class="panel-head"><div><span class="eyebrow">Collected in this actual run</span><h3>Review the answers</h3></div></div><div class="section"><div class="facts"><div class="fact"><span>Primary health</span><strong>Unavailable</strong></div><div class="fact"><span>Secondary health</span><strong>Healthy</strong></div><div class="fact"><span>Replication lag</span><strong>Within limit</strong></div></div></div><div class="section"><div class="notice warn">Saving persists these three answers and resumes the run. The parent decision will use them to choose the next route.</div></div><div class="section"><h4>Leave and return</h4><div class="facts"><div class="fact"><span>Switch tabs</span><strong>Run stays paused</strong></div><div class="fact"><span>Close graph or Stop run</span><strong>Cancel and discard draft</strong></div></div><p style="margin-top:8px">A paused actual run cannot be reopened after the graph panel is closed.</p></div><div class="footer">${primary('Save answers and continue')}<button class="btn quiet">Edit answers</button></div>` })
+      },
+      'live-resumed': {
+        title:'D Run continues from the answers', subtitle:'The submitted response is now immutable',
+        aria:'After Save answers and continue, the answers are persisted as one collector response and the actual run resumes. The parent decision is current. The answers remain reviewable in run evidence but cannot be edited retroactively.',
+        html:shell({ toolbarTitle:'Actual run', toolbarSub:'GeoDR0001', toolbarActions:'<button class="btn danger">Stop run</button>', modeTitle:'Findings saved - run continuing', modeSub:'Parent decision is using the submitted answers', modeClass:'live', modeActions:'<span class="state">Running</span>', graph:xtsRunGraph('resumed'), panel:`<div class="result"><div class="result-mark">x</div><h3>Answers saved</h3><p>The run resumed and is evaluating <strong>Primary health</strong>.</p></div><div class="section"><h4>Submitted response</h4><div class="facts"><div class="fact"><span>Source</span><strong>This actual run</strong></div><div class="fact"><span>Primary health</span><strong>Unavailable</strong></div><div class="fact"><span>Secondary health</span><strong>Healthy</strong></div><div class="fact"><span>Replication lag</span><strong>Within limit</strong></div></div></div><div class="section"><div class="notice">These answers are immutable run evidence. Review them later from this run; changing them cannot rewrite the route already taken.</div></div>` })
+      },
+      s3: {
+        title:'03 Set conditions', subtitle:'Say what should be true',
+        aria:'Step one of a route test. XTS will not open. The operator supplies an assumed XTS launch result and saved questionnaire answers, plus other automated results and route choices.',
+        html:shell({ toolbarTitle:'Test reaching this step', toolbarSub:'Execute secondary failover', toolbarActions:testToolbar, modeTitle:'Route test - XTS and all external actions are blocked', modeSub:'Use saved results and answers', modeClass:'test', modeActions:'<span class="state">Draft</span>', graph:routeGraph('setup'), panel:`<div class="steps"><div class="step active"><b>1</b><span>Set conditions</span></div><div class="step"><b>2</b><span>Check route</span></div></div><div class="panel-head"><div><span class="eyebrow">What should be true?</span><h3>Set the conditions</h3></div></div><div class="section"><h4>Automated step</h4><div class="rows"><div class="data-row"><div><strong>Incident lookup result</strong><small>Choose a saved result</small></div><button class="value">Example incident v</button></div></div></div><div class="section"><h4>Human check: Inspect replication in XTS</h4><div class="notice warn"><strong>XTS will not open in this route test.</strong><br>Choose the assumed launch result and saved answers Yawr should use.</div><div class="rows"><div class="data-row"><div><strong>Answer source</strong><small>Copied values are still assumptions for this test</small></div><button class="value">Prior run 4f2a v</button></div><div class="data-row"><strong>Assume XTS launch result</strong><button class="value">Opened v</button></div><div class="data-row"><strong>Primary health</strong><button class="value changed">Unavailable v</button></div><div class="data-row"><strong>Secondary health</strong><button class="value">Healthy v</button></div><div class="data-row"><strong>Replication lag</strong><button class="value">Within limit v</button></div></div></div><div class="section"><h4>Other choices</h4><div class="rows"><div class="data-row"><strong>Confirm failover</strong><button class="value">Proceed v</button></div><div class="data-row"><strong>Validate secondary</strong><button class="value">Test approval v</button></div></div></div><div class="footer">${primary('Check this route')}${details}</div>` })
+      },
+      s4: {
+        title:'04 Check and run', subtitle:'See the route and safety boundary first',
+        aria:'The expected route ends by stopping before Execute secondary failover. No external actions will run. The primary action is Run route test.',
+        html:shell({ toolbarTitle:'Test reaching this step', toolbarSub:'Execute secondary failover', toolbarActions:testToolbar, modeTitle:'Route test - nothing external will run', modeSub:'Ready to start', modeClass:'test', modeActions:'<span class="state">Ready</span>', graph:routeGraph('ready'), panel:`<div class="steps"><div class="step done"><b>x</b><span>Conditions set</span></div><div class="step active"><b>2</b><span>Check route</span></div></div><div class="panel-head"><div><span class="eyebrow">Before starting</span><h3>Review and run</h3></div></div><div class="section"><div class="notice"><strong>No external actions will run.</strong><br>XTS, commands, tools, transfers, and connectors are blocked.</div></div><div class="section"><h4>XTS assumptions</h4><div class="facts"><div class="fact"><span>Source</span><strong>Prior actual run 4f2a</strong></div><div class="fact"><span>Launch result</span><strong>Assume opened</strong></div><div class="fact"><span>Primary health</span><strong>Unavailable</strong></div><div class="fact"><span>Secondary health</span><strong>Healthy</strong></div><div class="fact"><span>Replication lag</span><strong>Within limit</strong></div></div><div class="ack"><span class="check">x</span><span>Reviewed for this route test. Copied answers remain assumptions.</span></div></div><div class="section"><h4>Expected route</h4><div class="route-list"><div class="route-row"><span class="dot">1</span><strong>Use saved incident result</strong><span class="route-state">Test data</span></div><div class="route-row"><span class="dot">2</span><div><strong>Use reviewed XTS assumptions</strong><small>Source: prior actual run 4f2a</small></div><span class="route-state">Test answers</span></div><div class="route-row"><span class="dot">3</span><strong>Take primary unavailable route</strong><span class="route-state">Expected</span></div><div class="route-row"><span class="dot">4</span><div><strong>Confirm failover</strong><small>Proceed</small></div><span class="route-state">Set</span></div><div class="route-row"><span class="dot">5</span><strong>Use test approval</strong><span class="route-state">Set</span></div><div class="route-row"><span class="dot">6</span><strong>Stop before Execute failover</strong><span class="route-state goal">Target</span></div></div><div class="ack"><span class="check">x</span><span>I understand XTS will not open and this tests only the runbook route.</span></div></div><div class="footer">${primary('Run route test')}<button class="btn quiet">Edit conditions</button>${details}</div>` })
+      },
+      s5: {
+        title:'05 Test running', subtitle:'Now, next, and target',
+        aria:'The route test is at Confirm failover, step four of six. External actions are blocked. Next is a test approval, then Yawr stops before the target.',
+        html:shell({ toolbarTitle:'Route test', toolbarSub:'Execute secondary failover', toolbarActions:'<button class="btn">Panel</button>', modeTitle:'Testing route - XTS and external actions are blocked', modeSub:'4 of 6 steps', modeClass:'test', modeActions:'<button class="btn danger">Stop test</button>', graph:routeGraph('running'), panel:`<div class="panel-head"><div><span class="eyebrow">Test running</span><h3>4 of 6 steps</h3></div><span class="state">Running</span></div><div class="section"><div class="progress-bar"><span></span></div></div><div class="section"><span class="eyebrow">Now</span><div class="now-box"><strong>Confirm failover</strong><span>Using answer: Proceed</span></div></div><div class="section"><h4>Progress</h4><div class="run-list"><div class="route-row"><span class="dot done">x</span><strong>Saved incident result used</strong><span class="route-state">Done</span></div><div class="route-row"><span class="dot done">x</span><div><strong>Saved XTS findings used</strong><small>XTS was not opened</small></div><span class="route-state">Done</span></div><div class="route-row"><span class="dot done">x</span><strong>Primary unavailable route</strong><span class="route-state">Done</span></div><div class="route-row"><span class="dot now">4</span><div><strong>Confirm failover</strong><small>Proceed</small></div><span class="route-state">Now</span></div><div class="route-row"><span class="dot">5</span><div><strong>Validate secondary</strong><small>Test approval</small></div><span class="route-state">Next</span></div><div class="route-row"><span class="dot">6</span><div><strong>Execute failover</strong><small>Stop before running</small></div><span class="route-state goal">Target</span></div></div></div><div class="footer">${details}</div>` })
+      },
+      s6: {
+        title:'06 Step reached', subtitle:'The result says exactly what happened',
+        aria:'The route test passed. Yawr reached Execute secondary failover and stopped before running it. Zero external actions ran.',
+        html:shell({ toolbarTitle:'Route test result', toolbarSub:'GeoDR0001', toolbarActions:'<button class="btn">Back to graph</button>', modeTitle:'Step reached - command not run', modeSub:'Execute secondary failover', modeClass:'good', modeActions:'<span class="state" style="color:var(--green)">Passed</span>', graph:routeGraph('reached'), panel:`<div class="result"><div class="result-mark">x</div><h3>Route test passed</h3><p>Yawr reached <strong>Execute secondary failover</strong> and stopped before running it.</p></div><div class="section"><div class="metrics"><div><strong>6 / 6</strong><span>Route checks</span></div><div><strong>0</strong><span>External actions</span></div><div><strong>1</strong><span>XTS answer set</span></div></div></div><div class="section"><div class="notice good">The same saved results and answers produced the same route on every check.</div></div><div class="section"><p>After saving, reopen this route test from the selected step's <strong>Saved route tests</strong> list to review, edit, or run it again.</p></div><div class="footer">${primary('Save route test')}<button class="btn quiet">Back to shown routes</button><span class="details">View technical evidence</span></div>` })
+      },
+      s7: {
+        title:'07 Route changed', subtitle:'The first difference is actionable',
+        aria:'The target was not reached. The first difference is Primary health: expected unavailable, actual healthy. The primary action is Fix test conditions.',
+        html:shell({ toolbarTitle:'Route test result', toolbarSub:'GeoDR0001', toolbarActions:'<button class="btn">Back to graph</button>', modeTitle:'Route changed before the target', modeSub:'First difference: Primary health', modeClass:'bad', modeActions:'<span class="state" style="color:var(--red)">Not reached</span>', graph:routeGraph('changed'), panel:`<div class="result"><div class="result-mark bad">!</div><h3>The route went somewhere else</h3><p>The target was not reached. The first difference was <strong>Primary health</strong>.</p></div><div class="section"><h4>First difference</h4><div class="compare"><div><span>Expected</span><strong>Unavailable</strong></div><div><span>Actual</span><strong>Healthy</strong></div></div></div><div class="section"><div class="notice bad">Because the primary was healthy, the runbook ended at No action required.</div></div><div class="footer">${primary('Fix test conditions')}<button class="btn quiet">Back to shown routes</button><span class="details">View technical evidence</span></div>` })
+      },
+      s8: {
+        title:'08 Find gaps', subtitle:'Start with the next actionable gap',
+        aria:'Five steps still need a route test. Secondary lag timeout is the selected gap. The primary action is Create route test.',
+        html:shell({ toolbarTitle:'Route test coverage', toolbarSub:'GeoDR0001', toolbarActions:'<button class="btn">Back to graph</button><button class="btn">Export</button>', modeTitle:'5 steps still need a route test', modeSub:'486 of 491 reached - no external actions', modeActions:'<span class="state">Advisory</span>', graph:`<div class="coverage"><h3>Next gaps</h3><div class="coverage-summary"><div><strong>486 / 491</strong><span>Steps reached</span></div><div><strong>5</strong><span>Still missing</span></div><div><strong>0</strong><span>External actions</span></div></div><div class="gap-list"><div class="gap selected"><span>01</span><div><strong>Secondary lag timeout</strong><small>No route test reaches this decision</small></div><span class="gap-kind">Decision</span></div><div class="gap"><span>02</span><div><strong>Region policy no-match</strong><small>The fallback route has not been reached</small></div><span class="gap-kind">Fallback</span></div><div class="gap"><span>03</span><div><strong>Replica check timeout</strong><small>Current test is not repeatable</small></div><span class="gap-kind">Timeout</span></div><div class="gap"><span>04</span><div><strong>Operator cancellation</strong><small>No test records this outcome</small></div><span class="gap-kind">Outcome</span></div><div class="gap"><span>05</span><div><strong>Secondary unavailable</strong><small>No test reaches this branch</small></div><span class="gap-kind">Branch</span></div></div></div>`, panel:`<div class="panel-head"><div><span class="eyebrow">Selected gap</span><h3>Secondary lag timeout</h3><code>secondary_lag_timeout</code></div><span class="state">Missing</span></div><div class="primary-zone">${primary('Create route test')}</div><div class="section"><h4>Why it is a gap</h4><p>No saved route test reaches this decision with repeatable conditions.</p></div><div class="section"><h4>Coverage details</h4><div class="facts"><div class="fact"><span>Steps</span><strong>486 / 491</strong></div><div class="fact"><span>Decision routes</span><strong>47 / 52</strong></div><div class="fact"><span>Checks</span><strong>34 / 36</strong></div><div class="fact"><span>Outcomes</span><strong>8 / 8</strong></div></div></div><div class="section"><div class="notice warn">This measures routes through Yawr, not external service behavior.</div></div>` })
+      }
+    };
+
+    const review = document.querySelector('.review');
+    const app = document.querySelector('#app');
+    const title = document.querySelector('#screen-title');
+    const subtitle = document.querySelector('#screen-subtitle');
+    const screenButtons = [...document.querySelectorAll('[data-screen]')];
+    const sizeButtons = [...document.querySelectorAll('[data-size]')];
+
+    function showScreen(id) {
+      const screen = screens[id] || screens.s1;
+      title.textContent = screen.title;
+      subtitle.textContent = screen.subtitle;
+      app.innerHTML = screen.html;
+      app.setAttribute('aria-label', screen.aria);
+      [...app.children].forEach(child => child.setAttribute('aria-hidden', 'true'));
+      app.querySelectorAll('button').forEach(button => button.tabIndex = -1);
+      screenButtons.forEach(button => {
+        const active = button.dataset.screen === id;
+        button.classList.toggle('active', active);
+        if (active) button.setAttribute('aria-current', 'step');
+        else button.removeAttribute('aria-current');
+      });
+      document.querySelector('.stage').scrollTop = 0;
+      history.replaceState(null, '', `#${id}`);
+    }
+
+    function setSize(size) {
+      const narrow = size === 'narrow';
+      review.classList.toggle('narrow', narrow);
+      sizeButtons.forEach(button => {
+        const active = button.dataset.size === size;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+    }
+
+    screenButtons.forEach(button => button.addEventListener('click', () => showScreen(button.dataset.screen)));
+    sizeButtons.forEach(button => button.addEventListener('click', () => setSize(button.dataset.size)));
+    const initial = location.hash.slice(1);
+    showScreen(screens[initial] ? initial : 's1');
+    setSize('wide');
+  </script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+apiVersion: yawr.tool/v1
+transport:
+  command: curl
+  mode: native
+actions:
+  - name: get
+    description: Perform an HTTP GET request
+    argv:
+      - -s
+      - -X
+      - GET
+      - ${url}
+    args:
+      url:
+        type: string
+        required: true
+        description: URL to fetch
+    returns: text
+  - name: post
+    description: Perform an HTTP POST request with JSON body
+    argv:
+      - -s
+      - -X
+      - POST
+      - -H
+      - "Content-Type: application/json"
+      - -d
+      - ${body}
+      - ${url}
+    args:
+      url:
+        type: string
+        required: true
+        description: URL to POST to
+      body:
+        type: string
+        required: true
+        description: JSON body to send
+    returns: text
+  - name: head
+    description: Perform an HTTP HEAD request
+    argv:
+      - -s
+      - -I
+      - ${url}
+    args:
+      url:
+        type: string
+        required: true
+        description: URL to query
+    returns: text
+  - name: download
+    description: Download a file to disk
+    argv:
+      - -s
+      - -o
+      - ${output}
+      - ${url}
+    args:
+      url:
+        type: string
+        required: true
+        description: URL to download from
+      output:
+        type: string
+        required: true
+        description: Local file path to save to
+    returns: text
+meta:
+  name: curl
+  version: "1.0"
+  description: Transfer data from or to a server using HTTP/HTTPS

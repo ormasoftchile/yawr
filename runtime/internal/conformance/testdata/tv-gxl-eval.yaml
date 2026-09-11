@@ -1,0 +1,1144 @@
+# tv-gxl-eval.yaml
+# Category:    GXL-EVAL (and cross-cutting GXL-TYPE vectors triggered by eval)
+# Grammar ref: spec/grammar/gxl.ebnf §5 (Semantics Annex), §4 (stdlib)
+# Schema ref:  design/yawr/conformance/vector.schema.json
+# Author:      Tess (Conformance Tester)
+# Date:        2026-06-05T00:27:12-04:00
+#
+# Purpose: Pin down every evaluation-time semantic of GXL: short-circuit
+# behaviour (OQ1), type rules, arithmetic, comparisons, and stdlib
+# function calls. Parse-only concerns belong in tv-gxl-parse.yaml.
+# Path-resolution concerns belong in tv-gxl-path.yaml.
+#
+# Variable names in all vectors: valid GXL identifiers (ASCII, not keywords).
+# No array or object literal syntax in 'input': forbidden by gxl.ebnf §2.6.
+# Arrays and objects MUST come from the 'variables' context map.
+#
+# Open arbitrations:
+#   TESS-CONFLICT-2  : str.unknownMethod classification (parse vs eval)
+#   OI-GXL-03        : negative-operand modulo semantics (cross-runtime)
+#
+# New ambiguities surfaced this batch:
+#   TESS-AMBIG-3: boolean ordered comparison — no error code for bool < bool
+#   TESS-AMBIG-4: array/list equality under == — semantics unspecified
+
+vectors:
+
+  # --- Short-circuit witnesses: AND (OQ1) ---
+  # gxl.ebnf §5.1: false and X → false, X is NOT evaluated.
+  # Witness strategy: the RHS is an expression that WOULD raise an error
+  # if evaluated. Short-circuit proves only the LHS is observed.
+
+  - id: TV-GXL-EVAL-001
+    category: GXL-EVAL
+    description: "'false and missing_var' returns false; missing_var (PATH-001 if evaluated) is NOT evaluated."
+    input: "false and missing_var"
+    variables: {}
+    expected:
+      value: false
+    note: "OQ1 short-circuit witness. missing_var absent from context; evaluating it would raise GXL-PATH-001. Short-circuit must suppress that error."
+    tags: [short-circuit, OQ1, and-operator]
+
+  - id: TV-GXL-EVAL-002
+    category: GXL-EVAL
+    description: "'false and 1 / 0' returns false; division-by-zero subexpr is NOT evaluated."
+    input: "false and 1 / 0"
+    variables: {}
+    expected:
+      value: false
+    note: "OQ1 short-circuit witness. '1/0' would raise GXL-EVAL-002 if evaluated."
+    tags: [short-circuit, OQ1, and-operator]
+
+  - id: TV-GXL-EVAL-003
+    category: GXL-EVAL
+    description: "'false and len(nullVar)' returns false; len(null) is NOT evaluated."
+    input: "false and len(nullVar)"
+    variables: {nullVar: null}
+    expected:
+      value: false
+    note: "OQ1 short-circuit witness. len(null) would raise GXL-TYPE-003 if evaluated."
+    tags: [short-circuit, OQ1, and-operator]
+
+  # --- Short-circuit witnesses: OR (OQ1) ---
+  # gxl.ebnf §5.1: true or X → true, X is NOT evaluated.
+
+  - id: TV-GXL-EVAL-004
+    category: GXL-EVAL
+    description: "'true or missing_var' returns true; missing_var (PATH-001 if evaluated) is NOT evaluated."
+    input: "true or missing_var"
+    variables: {}
+    expected:
+      value: true
+    note: "OQ1 short-circuit witness."
+    tags: [short-circuit, OQ1, or-operator]
+
+  - id: TV-GXL-EVAL-005
+    category: GXL-EVAL
+    description: "'true or 1 / 0' returns true; division-by-zero subexpr is NOT evaluated."
+    input: "true or 1 / 0"
+    variables: {}
+    expected:
+      value: true
+    note: "OQ1 short-circuit witness."
+    tags: [short-circuit, OQ1, or-operator]
+
+  - id: TV-GXL-EVAL-006
+    category: GXL-EVAL
+    description: "'true or len(nullVar)' returns true; len(null) is NOT evaluated."
+    input: "true or len(nullVar)"
+    variables: {nullVar: null}
+    expected:
+      value: true
+    note: "OQ1 short-circuit witness."
+    tags: [short-circuit, OQ1, or-operator]
+
+  # --- NOT operator ---
+  # gxl.ebnf §3 NotExpr, §5.2: 'not' requires bool operand.
+
+  - id: TV-GXL-EVAL-007
+    category: GXL-EVAL
+    description: "'not true' evaluates to false."
+    input: "not true"
+    variables: {}
+    expected:
+      value: false
+    tags: [not-operator]
+
+  - id: TV-GXL-EVAL-008
+    category: GXL-EVAL
+    description: "'not false' evaluates to true."
+    input: "not false"
+    variables: {}
+    expected:
+      value: true
+    tags: [not-operator]
+
+  - id: TV-GXL-EVAL-009
+    category: GXL-EVAL
+    description: "'not null' raises GXL-TYPE-002 — null is not a bool operand."
+    input: "not null"
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "gxl.ebnf §5.5: 'null in boolean pos → GXL-TYPE-002'. 'not' requires a bool operand."
+    tags: [not-operator, "null", type-error]
+
+  - id: TV-GXL-EVAL-010
+    category: GXL-EVAL
+    description: "'not numVar' where numVar is a number raises GXL-TYPE-002."
+    input: "not numVar"
+    variables: {numVar: 42}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "gxl.ebnf §5.2: 'not' requires bool operand; applying to number raises GXL-TYPE-002."
+    tags: [not-operator, type-error]
+
+  - id: TV-GXL-EVAL-011
+    category: GXL-EVAL
+    description: "'not strVar' where strVar is a string raises GXL-TYPE-002."
+    input: "not strVar"
+    variables: {strVar: "hello"}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    tags: [not-operator, type-error]
+
+  # --- Chained logical operators ---
+  # gxl.ebnf §5.1: chains left-to-right; short-circuit applies pairwise.
+
+  - id: TV-GXL-EVAL-012
+    category: GXL-EVAL
+    description: "'true and true and true' evaluates to true (chained AND, all operands true)."
+    input: "true and true and true"
+    variables: {}
+    expected:
+      value: true
+    tags: [and-operator, chained]
+
+  - id: TV-GXL-EVAL-013
+    category: GXL-EVAL
+    description: "'true and false and missing_var' returns false; third operand not evaluated after false short-circuits."
+    input: "true and false and missing_var"
+    variables: {}
+    expected:
+      value: false
+    note: "OQ1: evaluates left-to-right as (true and false) = false, then false and missing_var short-circuits."
+    tags: [and-operator, chained, short-circuit, OQ1]
+
+  - id: TV-GXL-EVAL-014
+    category: GXL-EVAL
+    description: "'false or false or true' evaluates to true (chained OR, rightmost true)."
+    input: "false or false or true"
+    variables: {}
+    expected:
+      value: true
+    tags: [or-operator, chained]
+
+  - id: TV-GXL-EVAL-015
+    category: GXL-EVAL
+    description: "'not (true and false)' evaluates to true — not binds tighter than and."
+    input: "not (true and false)"
+    variables: {}
+    expected:
+      value: true
+    note: "Parenthesisation overrides precedence. (true and false) = false, not false = true."
+    tags: [not-operator, and-operator, precedence]
+
+  # --- Comparison: numbers ---
+  # gxl.ebnf §3 Comparison, §5.2. All numbers are float64 (IEEE 754).
+
+  - id: TV-GXL-EVAL-016
+    category: GXL-EVAL
+    description: "1 == 1 returns true (integer identity)."
+    input: "1 == 1"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, equality, integer]
+
+  - id: TV-GXL-EVAL-017
+    category: GXL-EVAL
+    description: "1 == 2 returns false."
+    input: "1 == 2"
+    variables: {}
+    expected:
+      value: false
+    tags: [comparison, equality, integer]
+
+  - id: TV-GXL-EVAL-018
+    category: GXL-EVAL
+    description: "1 != 2 returns true."
+    input: "1 != 2"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, not-equal, integer]
+
+  - id: TV-GXL-EVAL-019
+    category: GXL-EVAL
+    description: "1 < 2 returns true."
+    input: "1 < 2"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, less-than, integer]
+
+  - id: TV-GXL-EVAL-020
+    category: GXL-EVAL
+    description: "2 > 1 returns true."
+    input: "2 > 1"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, greater-than, integer]
+
+  - id: TV-GXL-EVAL-021
+    category: GXL-EVAL
+    description: "1 <= 1 returns true (equal-to case of less-or-equal)."
+    input: "1 <= 1"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, lte, integer]
+
+  - id: TV-GXL-EVAL-022
+    category: GXL-EVAL
+    description: "3 >= 2 returns true."
+    input: "3 >= 2"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, gte, integer]
+
+  - id: TV-GXL-EVAL-023
+    category: GXL-EVAL
+    description: "-1 < 0 returns true (negative number ordering)."
+    input: "-1 < 0"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, less-than, negative, integer]
+
+  - id: TV-GXL-EVAL-024
+    category: GXL-EVAL
+    description: "9007199254740992 == 9007199254740992 returns true (2^53, max exactly-representable integer)."
+    input: "9007199254740992 == 9007199254740992"
+    variables: {}
+    expected:
+      value: true
+    note: "gxl.ebnf §2.5: integers are exactly representable up to 2^53 as float64. 9007199254740992 = 2^53."
+    tags: [comparison, equality, integer, edge, max-int]
+
+  - id: TV-GXL-EVAL-025
+    category: GXL-EVAL
+    description: "3.14 > 3.0 returns true (float comparison)."
+    input: "3.14 > 3.0"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, greater-than, float]
+
+  # --- Comparison: strings ---
+  # gxl.ebnf §5.2: lexicographic order by Unicode code point.
+
+  - id: TV-GXL-EVAL-026
+    category: GXL-EVAL
+    description: '"abc" == "abc" returns true (string identity).'
+    input: '"abc" == "abc"'
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, equality, string]
+
+  - id: TV-GXL-EVAL-027
+    category: GXL-EVAL
+    description: '"abc" < "abd" returns true (lexicographic: c < d at index 2).'
+    input: '"abc" < "abd"'
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, less-than, string, lexicographic]
+
+  - id: TV-GXL-EVAL-028
+    category: GXL-EVAL
+    description: 'Empty string is less than any non-empty string ("" < "a").'
+    input: '"" < "a"'
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, less-than, string, empty, edge]
+
+  - id: TV-GXL-EVAL-029
+    category: GXL-EVAL
+    description: '"á" > "a" returns true — U+00E1 (225) > U+0061 (97) by code point.'
+    input: '"á" > "a"'
+    variables: {}
+    expected:
+      value: true
+    note: "Unicode code-point ordering. á = U+00E1 (225 dec); a = U+0061 (97 dec). Pins cross-runtime Unicode ordering."
+    tags: [comparison, greater-than, string, unicode]
+
+  # --- Comparison: booleans ---
+
+  - id: TV-GXL-EVAL-030
+    category: GXL-EVAL
+    description: "true == true returns true (boolean identity)."
+    input: "true == true"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, equality, boolean]
+
+  - id: TV-GXL-EVAL-031
+    category: GXL-EVAL
+    description: "false == false returns true."
+    input: "false == false"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, equality, boolean]
+
+  - id: TV-GXL-EVAL-032
+    category: GXL-EVAL
+    description: "true != false returns true."
+    input: "true != false"
+    variables: {}
+    expected:
+      value: true
+    tags: [comparison, not-equal, boolean]
+
+  - id: TV-GXL-EVAL-033
+    category: GXL-EVAL
+    description: "false < true raises GXL-TYPE-005 — ordered comparison on boolean operands is forbidden."
+    input: "false < true"
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-005
+    note: "TESS-AMBIG-3 resolved 2026-06-05 (Barbara). Booleans define equality (==, !=) but no total ordering. Mapping false/true to 0/1 would be implicit coercion, which GXL forbids. New code GXL-TYPE-005 introduced to distinguish this from GXL-TYPE-001 (cross-type mismatch). See gxl.ebnf §5.2, 03a §Type System."
+    tags: [comparison, boolean, edge, TESS-AMBIG-3]
+
+  # --- Cross-type comparisons ---
+  # gxl.ebnf §5.2: NO implicit coercion. Cross-type == raises GXL-TYPE-001.
+
+  - id: TV-GXL-EVAL-034
+    category: GXL-EVAL
+    description: '1 == "1" raises GXL-TYPE-001 — no implicit coercion between number and string.'
+    input: '1 == "1"'
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-001
+    note: "gxl.ebnf §5.2: '\"5\" == 5 → GXL-TYPE-001 (cannot compare string to number)'. Normative. No runtime may coerce."
+    tags: [comparison, cross-type, type-error]
+
+  - id: TV-GXL-EVAL-035
+    category: GXL-EVAL
+    description: "true == 1 raises GXL-TYPE-001 — no implicit coercion between bool and number."
+    input: "true == 1"
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-001
+    note: "gxl.ebnf §5.2: 'true == 1 → GXL-TYPE-001'."
+    tags: [comparison, cross-type, type-error]
+
+  # --- Null comparisons ---
+  # gxl.ebnf §5.2, §5.5: == and != are null-safe; ordered ops with null → GXL-EVAL-004.
+
+  - id: TV-GXL-EVAL-036
+    category: GXL-EVAL
+    description: "null == null returns true."
+    input: "null == null"
+    variables: {}
+    expected:
+      value: true
+    note: "gxl.ebnf §5.2: 'null == null → true'."
+    tags: [comparison, "null", equality]
+
+  - id: TV-GXL-EVAL-037
+    category: GXL-EVAL
+    description: "null != null returns false."
+    input: "null != null"
+    variables: {}
+    expected:
+      value: false
+    tags: [comparison, "null", not-equal]
+
+  - id: TV-GXL-EVAL-038
+    category: GXL-EVAL
+    description: "nullVar == null returns true when nullVar is bound to null."
+    input: "nullVar == null"
+    variables: {nullVar: null}
+    expected:
+      value: true
+    note: "gxl.ebnf §5.2: 'x == null → true if x is null, false otherwise (no error)'."
+    tags: [comparison, "null", equality]
+
+  - id: TV-GXL-EVAL-039
+    category: GXL-EVAL
+    description: "null == 0 returns false — null is not equal to number zero (no error)."
+    input: "null == 0"
+    variables: {}
+    expected:
+      value: false
+    note: "gxl.ebnf §5.2: == with null on either side is null-safe (no error). null ≠ 0."
+    tags: [comparison, "null", equality]
+
+  - id: TV-GXL-EVAL-040
+    category: GXL-EVAL
+    description: "null < 0 raises GXL-EVAL-004 — null forbidden in ordered comparison."
+    input: "null < 0"
+    variables: {}
+    expected:
+      error_class: GXL-EVAL
+      error_code: GXL-EVAL-004
+    note: "gxl.ebnf §5.5: 'null < x → GXL-EVAL-004 (null in ordered comparison)'."
+    tags: [comparison, "null", ordered, eval-error]
+
+  # --- Arithmetic: basic integer operations ---
+  # gxl.ebnf §5.4: GXL uses float64 always. 5/2 = 2.5 (not 2).
+
+  - id: TV-GXL-EVAL-041
+    category: GXL-EVAL
+    description: "1 + 1 evaluates to 2."
+    input: "1 + 1"
+    variables: {}
+    expected:
+      value: 2
+    tags: [arithmetic, addition, integer]
+
+  - id: TV-GXL-EVAL-042
+    category: GXL-EVAL
+    description: "5 - 3 evaluates to 2."
+    input: "5 - 3"
+    variables: {}
+    expected:
+      value: 2
+    tags: [arithmetic, subtraction, integer]
+
+  - id: TV-GXL-EVAL-043
+    category: GXL-EVAL
+    description: "3 * 4 evaluates to 12."
+    input: "3 * 4"
+    variables: {}
+    expected:
+      value: 12
+    tags: [arithmetic, multiply, integer]
+
+  - id: TV-GXL-EVAL-044
+    category: GXL-EVAL
+    description: "7 / 2 evaluates to 3.5 — GXL always uses float64 division."
+    input: "7 / 2"
+    variables: {}
+    expected:
+      value: 3.5
+    note: "gxl.ebnf §5.4: 'Integer division semantics: GXL uses float64 always; 5/2 = 2.5.' Runtimes MUST NOT truncate."
+    tags: [arithmetic, division, float64, edge]
+
+  - id: TV-GXL-EVAL-045
+    category: GXL-EVAL
+    description: "5 % 2 evaluates to 1."
+    input: "5 % 2"
+    variables: {}
+    expected:
+      value: 1
+    tags: [arithmetic, modulo, integer]
+
+  # --- Arithmetic: float and mixed ---
+
+  - id: TV-GXL-EVAL-046
+    category: GXL-EVAL
+    description: "1 + 1.5 evaluates to 2.5 (integer + float, result float)."
+    input: "1 + 1.5"
+    variables: {}
+    expected:
+      value: 2.5
+    tags: [arithmetic, addition, float, mixed]
+
+  - id: TV-GXL-EVAL-047
+    category: GXL-EVAL
+    description: "3.14 * 2.0 evaluates to 6.28."
+    input: "3.14 * 2.0"
+    variables: {}
+    expected:
+      value: 6.28
+    tags: [arithmetic, multiply, float]
+
+  # --- Arithmetic: division and modulo by zero ---
+  # gxl.ebnf §5.4: x/0 and x%0 → GXL-EVAL-002.
+
+  - id: TV-GXL-EVAL-048
+    category: GXL-EVAL
+    description: "1 / 0 raises GXL-EVAL-002 (division by zero)."
+    input: "1 / 0"
+    variables: {}
+    expected:
+      error_class: GXL-EVAL
+      error_code: GXL-EVAL-002
+    note: "gxl.ebnf §5.4: 'x / 0 → GXL-EVAL-002'. No IEEE 754 Infinity is ever produced."
+    tags: [arithmetic, division, div-zero, eval-error]
+
+  - id: TV-GXL-EVAL-049
+    category: GXL-EVAL
+    description: "5 % 0 raises GXL-EVAL-002 (modulo by zero)."
+    input: "5 % 0"
+    variables: {}
+    expected:
+      error_class: GXL-EVAL
+      error_code: GXL-EVAL-002
+    note: "gxl.ebnf §5.4: 'x % 0 → GXL-EVAL-002'. Same code as division-by-zero."
+    tags: [arithmetic, modulo, div-zero, eval-error]
+
+  # --- Arithmetic: negative operands in modulo (OI-GXL-03) ---
+  # gxl.ebnf §7 OI-GXL-03: result has the sign of the dividend (IEEE 754 fmod).
+
+  - id: TV-GXL-EVAL-050
+    category: GXL-EVAL
+    description: "-7 % 3 evaluates to -1 — result sign matches dividend (OI-GXL-03)."
+    input: "-7 % 3"
+    variables: {}
+    expected:
+      value: -1
+    note: "OI-GXL-03 — modulo semantics for negative operands pending cross-runtime arbitration. Grammar specifies IEEE 754 fmod: result sign = sign of dividend. -7 % 3 = -1 in Go (matches). C# Math.IEEERemainder may differ. Vector pins Go behavior as normative."
+    tags: [arithmetic, modulo, negative, OI-GXL-03]
+
+  - id: TV-GXL-EVAL-051
+    category: GXL-EVAL
+    description: "7 % -3 evaluates to 1 — dividend positive, result positive (OI-GXL-03)."
+    input: "7 % -3"
+    variables: {}
+    expected:
+      value: 1
+    note: "OI-GXL-03 — modulo semantics for negative operands pending cross-runtime arbitration. Dividend = 7 (positive), so result = 1. Python would return -2 (sign of divisor); GXL follows dividend-sign rule."
+    tags: [arithmetic, modulo, negative, OI-GXL-03]
+
+  - id: TV-GXL-EVAL-052
+    category: GXL-EVAL
+    description: "-7 % -3 evaluates to -1 — both negative; dividend sign wins (OI-GXL-03)."
+    input: "-7 % -3"
+    variables: {}
+    expected:
+      value: -1
+    note: "OI-GXL-03 — same cross-runtime note applies. Dividend = -7, result = -1."
+    tags: [arithmetic, modulo, negative, OI-GXL-03]
+
+  # --- Arithmetic: type errors ---
+  # gxl.ebnf §5.2: arithmetic on non-number → GXL-TYPE-003.
+
+  - id: TV-GXL-EVAL-053
+    category: GXL-EVAL
+    description: "numVar + strVar raises GXL-TYPE-003 — arithmetic on string operand."
+    input: "numVar + strVar"
+    variables: {numVar: 1, strVar: "hello"}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-003
+    note: "gxl.ebnf §5.2: '+' is numeric addition only. Applying to a string raises GXL-TYPE-003."
+    tags: [arithmetic, type-error, string]
+
+  # --- Function: len ---
+  # gxl.ebnf §4.1: len(string|list) → number. Null → GXL-TYPE-003.
+
+  - id: TV-GXL-EVAL-054
+    category: GXL-EVAL
+    description: 'len("hello") returns 5 — UTF-8 code-point count.'
+    input: 'len("hello")'
+    variables: {}
+    expected:
+      value: 5
+    tags: [stdlib, len, string]
+
+  - id: TV-GXL-EVAL-055
+    category: GXL-EVAL
+    description: "len(myList) returns 2 — element count of a two-element list."
+    input: "len(myList)"
+    variables: {myList: [10, 20]}
+    expected:
+      value: 2
+    tags: [stdlib, len, list]
+
+  - id: TV-GXL-EVAL-056
+    category: GXL-EVAL
+    description: "len(emptyList) returns 0 — empty list has zero elements."
+    input: "len(emptyList)"
+    variables: {emptyList: []}
+    expected:
+      value: 0
+    tags: [stdlib, len, list, empty]
+
+  - id: TV-GXL-EVAL-057
+    category: GXL-EVAL
+    description: "len(emptyStr) returns 0 — empty string has zero code points."
+    input: 'len("")'
+    variables: {}
+    expected:
+      value: 0
+    tags: [stdlib, len, string, empty]
+
+  - id: TV-GXL-EVAL-058
+    category: GXL-EVAL
+    description: "len(emptyObj) raises GXL-TYPE-003 — len does not accept objects."
+    input: "len(emptyObj)"
+    variables: {emptyObj: {}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-003
+    note: "gxl.ebnf §4.1: len accepts string or list only. Object argument raises GXL-TYPE-003."
+    tags: [stdlib, len, object, type-error]
+
+  - id: TV-GXL-EVAL-059
+    category: GXL-EVAL
+    description: "len(nullVar) raises GXL-TYPE-003 — null argument to len is an error."
+    input: "len(nullVar)"
+    variables: {nullVar: null}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-003
+    note: "gxl.ebnf §4.1: 'Null argument → GXL-TYPE-003'."
+    tags: [stdlib, len, "null", type-error]
+
+  # --- Function: str namespace ---
+  # gxl.ebnf §4.2
+
+  - id: TV-GXL-EVAL-060
+    category: GXL-EVAL
+    description: 'str.startsWith("hello", "he") returns true.'
+    input: 'str.startsWith("hello", "he")'
+    variables: {}
+    expected:
+      value: true
+    tags: [stdlib, str, startsWith]
+
+  - id: TV-GXL-EVAL-061
+    category: GXL-EVAL
+    description: 'str.startsWith("hello", "lo") returns false.'
+    input: 'str.startsWith("hello", "lo")'
+    variables: {}
+    expected:
+      value: false
+    tags: [stdlib, str, startsWith]
+
+  - id: TV-GXL-EVAL-062
+    category: GXL-EVAL
+    description: 'str.startsWith("", "") returns true — empty prefix always matches.'
+    input: 'str.startsWith("", "")'
+    variables: {}
+    expected:
+      value: true
+    note: "gxl.ebnf §4.2: 'Empty prefix → always true'."
+    tags: [stdlib, str, startsWith, empty, edge]
+
+  - id: TV-GXL-EVAL-063
+    category: GXL-EVAL
+    description: 'str.endsWith("hello", "lo") returns true.'
+    input: 'str.endsWith("hello", "lo")'
+    variables: {}
+    expected:
+      value: true
+    tags: [stdlib, str, endsWith]
+
+  - id: TV-GXL-EVAL-064
+    category: GXL-EVAL
+    description: 'str.endsWith("hello", "he") returns false.'
+    input: 'str.endsWith("hello", "he")'
+    variables: {}
+    expected:
+      value: false
+    tags: [stdlib, str, endsWith]
+
+  - id: TV-GXL-EVAL-065
+    category: GXL-EVAL
+    description: 'str.endsWith("world", "") returns true — empty suffix always matches.'
+    input: 'str.endsWith("world", "")'
+    variables: {}
+    expected:
+      value: true
+    note: "gxl.ebnf §4.2: 'Empty suffix → always true'."
+    tags: [stdlib, str, endsWith, empty, edge]
+
+  - id: TV-GXL-EVAL-066
+    category: GXL-EVAL
+    description: 'str.contains("hello world", "world") returns true.'
+    input: 'str.contains("hello world", "world")'
+    variables: {}
+    expected:
+      value: true
+    tags: [stdlib, str, contains]
+
+  - id: TV-GXL-EVAL-067
+    category: GXL-EVAL
+    description: 'str.contains("hello", "xyz") returns false.'
+    input: 'str.contains("hello", "xyz")'
+    variables: {}
+    expected:
+      value: false
+    tags: [stdlib, str, contains]
+
+  - id: TV-GXL-EVAL-068
+    category: GXL-EVAL
+    description: 'str.contains("hello", "") returns true — empty substr always matches.'
+    input: 'str.contains("hello", "")'
+    variables: {}
+    expected:
+      value: true
+    note: "gxl.ebnf §4.2: 'Empty substr → always true'."
+    tags: [stdlib, str, contains, empty, edge]
+
+  - id: TV-GXL-EVAL-069
+    category: GXL-EVAL
+    description: 'str.toLower("HELLO") returns "hello".'
+    input: 'str.toLower("HELLO")'
+    variables: {}
+    expected:
+      value: "hello"
+    tags: [stdlib, str, toLower]
+
+  - id: TV-GXL-EVAL-070
+    category: GXL-EVAL
+    description: 'str.toUpper("hello") returns "HELLO".'
+    input: 'str.toUpper("hello")'
+    variables: {}
+    expected:
+      value: "HELLO"
+    tags: [stdlib, str, toUpper]
+
+  - id: TV-GXL-EVAL-071
+    category: GXL-EVAL
+    description: 'str.trim("  hello  ") returns "hello" — leading and trailing spaces removed.'
+    input: 'str.trim("  hello  ")'
+    variables: {}
+    expected:
+      value: "hello"
+    tags: [stdlib, str, trim]
+
+  - id: TV-GXL-EVAL-072
+    category: GXL-EVAL
+    description: 'str.trim("hello") returns "hello" — no-op when no surrounding whitespace.'
+    input: 'str.trim("hello")'
+    variables: {}
+    expected:
+      value: "hello"
+    tags: [stdlib, str, trim, edge]
+
+  - id: TV-GXL-EVAL-073
+    category: GXL-EVAL
+    description: 'str.length("hello") returns 5 — alias for len(string).'
+    input: 'str.length("hello")'
+    variables: {}
+    expected:
+      value: 5
+    note: "gxl.ebnf §4.2: 'str.length is an alias for len(s)'."
+    tags: [stdlib, str, length]
+
+  - id: TV-GXL-EVAL-074
+    category: GXL-EVAL
+    description: "str.toLower(nullVar) raises GXL-TYPE-003 — null argument rejected."
+    input: "str.toLower(nullVar)"
+    variables: {nullVar: null}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-003
+    note: "gxl.ebnf §4.2: 'Null argument → GXL-TYPE-003' for all str functions."
+    tags: [stdlib, str, "null", type-error]
+
+  # --- Function: list namespace ---
+  # gxl.ebnf §4.3
+
+  - id: TV-GXL-EVAL-075
+    category: GXL-EVAL
+    description: "list.contains(myList, 2) returns true — 2 is present in [1,2,3]."
+    input: "list.contains(myList, 2)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: true
+    tags: [stdlib, list, contains]
+
+  - id: TV-GXL-EVAL-076
+    category: GXL-EVAL
+    description: "list.contains(myList, 99) returns false — 99 is not in [1,2,3]."
+    input: "list.contains(myList, 99)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: false
+    tags: [stdlib, list, contains]
+
+  - id: TV-GXL-EVAL-077
+    category: GXL-EVAL
+    description: "list.contains(myList, null) returns false — null item is never found in a list."
+    input: "list.contains(myList, null)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: false
+    note: "gxl.ebnf §4.3: 'Null item → false (null is never in a list)'."
+    tags: [stdlib, list, contains, "null", edge]
+
+  - id: TV-GXL-EVAL-078
+    category: GXL-EVAL
+    description: "list.indexOf(myList, 2) returns 1 — zero-based index of first match."
+    input: "list.indexOf(myList, 2)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: 1
+    note: "gxl.ebnf §4.3 [OQ4 — ratified]: 'Returns the zero-based index of the first element equal to item'."
+    tags: [stdlib, list, indexOf, OQ4]
+
+  - id: TV-GXL-EVAL-079
+    category: GXL-EVAL
+    description: "list.indexOf(myList, 99) returns -1 — item not found sentinel."
+    input: "list.indexOf(myList, 99)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: -1
+    note: "gxl.ebnf §4.3 [OQ4 — ratified]: 'or -1 if item is not found'."
+    tags: [stdlib, list, indexOf, not-found, OQ4]
+
+  - id: TV-GXL-EVAL-080
+    category: GXL-EVAL
+    description: "list.indexOf(myList, null) returns -1 — null item always not found."
+    input: "list.indexOf(myList, null)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: -1
+    note: "gxl.ebnf §4.3: 'Null item → always -1'."
+    tags: [stdlib, list, indexOf, "null", edge]
+
+  - id: TV-GXL-EVAL-081
+    category: GXL-EVAL
+    description: "list.length(myList) returns 3 — element count of [1,2,3]."
+    input: "list.length(myList)"
+    variables: {myList: [1, 2, 3]}
+    expected:
+      value: 3
+    note: "gxl.ebnf §4.3: 'Alias for len(l)'."
+    tags: [stdlib, list, length]
+
+  # --- Wrong argument count → GXL-TYPE-004 ---
+  # gxl.ebnf §6.2: "Wrong argument count: function called with wrong number of arguments."
+
+  - id: TV-GXL-EVAL-082
+    category: GXL-EVAL
+    description: "str.startsWith with 3 args raises GXL-TYPE-004 — too many arguments."
+    input: 'str.startsWith("hello", "he", "extra")'
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-004
+    note: "str.startsWith signature: (s: string, prefix: string) → bool. Exactly 2 args required."
+    tags: [stdlib, str, wrong-arity, type-error]
+
+  - id: TV-GXL-EVAL-083
+    category: GXL-EVAL
+    description: "str.startsWith with 1 arg raises GXL-TYPE-004 — too few arguments."
+    input: 'str.startsWith("hello")'
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-004
+    note: "str.startsWith requires exactly 2 args. Providing 1 raises GXL-TYPE-004."
+    tags: [stdlib, str, wrong-arity, type-error]
+
+  # --- Unknown namespace method (TESS-CONFLICT-2 reference) ---
+  # gxl.ebnf §3: "Unknown methods raise GXL-PARSE-006 at parse time."
+  # Note: TESS-CONFLICT-2 is specifically about str.foo WITHOUT parens (TV-GXL-PARSE-083).
+  # str.unknownMethod("arg") WITH parens should be GXL-PARSE-006 per grammar §3.
+  # Including here to establish eval-file reference; error is parse-time.
+
+  - id: TV-GXL-EVAL-084
+    category: GXL-EVAL
+    description: 'str.unknownMethod("test") raises a parse error — unknown method in str namespace.'
+    input: 'str.unknownMethod("test")'
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-006
+    note: "gxl.ebnf §3: 'Unknown methods raise GXL-PARSE-006 at parse time.' Error occurs before evaluation. Awaiting Barbara arbitration of TESS-CONFLICT-2 (str.foo without parens classification — see TV-GXL-PARSE-083). This WITH-parens variant is unambiguously GXL-PARSE-006."
+    tags: [stdlib, str, unknown-method, parse-error, TESS-CONFLICT-2]
+
+  # --- Type identity witnesses ---
+  # gxl.ebnf §5.2: each scalar type is equal to itself.
+
+  - id: TV-GXL-EVAL-085
+    category: GXL-EVAL
+    description: '"a" == "a" returns true — string identity.'
+    input: '"a" == "a"'
+    variables: {}
+    expected:
+      value: true
+    tags: [type-identity, string, equality]
+
+  - id: TV-GXL-EVAL-086
+    category: GXL-EVAL
+    description: "Array/list equality — myArr == myArr raises GXL-TYPE-001; == is restricted to scalars and null."
+    input: "myArr == myArr"
+    variables: {myArr: [1, 2, 3]}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-001
+    note: "TESS-AMBIG-4 resolved 2026-06-05 (Barbara). Equality operators (== and !=) are defined only for scalar types (number, string, bool) and null. Applying == to a list operand is a type mismatch → GXL-TYPE-001. Deep structural equality is not supported in GXL v1; OQ2 scalars-only default aligns with this decision. See gxl.ebnf §5.2, 03a §Type System."
+    tags: [type-identity, list, equality, TESS-AMBIG-4]
+
+  # --- GDP path in function argument (OI-GXL-05) ---
+  # gxl.ebnf §7 OI-GXL-05: GDP path in argument position resolves before passing to function.
+
+  - id: TV-GXL-EVAL-087
+    category: GXL-EVAL
+    description: 'str.contains(config_key, "prod") resolves GDP config_key before passing to str.contains.'
+    input: "str.contains(config_key, \"prod\")"
+    variables: {config_key: "prod-east-1"}
+    expected:
+      value: true
+    note: "OI-GXL-05: GDP path in argument position is resolved first, then passed to function. Confirms resolution order."
+    tags: [stdlib, str, gdp-in-arg, OI-GXL-05]
+
+  # --- now() stdlib (ratified 2026-06-05; resolves DEFERRED-001) ---
+  # gxl.ebnf §4.1b: now() is a zero-argument top-level builtin returning
+  # the current UTC timestamp as "YYYY-MM-DDTHH:MM:SSZ".
+
+  - id: TV-GXL-EVAL-088
+    category: GXL-EVAL
+    description: "now() returns a string matching ISO-8601 UTC format YYYY-MM-DDTHH:MM:SSZ."
+    input: 'now()'
+    variables: {}
+    expected:
+      type: string
+      assert: regex
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+    note: "gxl.ebnf §4.1b: now() returns current UTC timestamp as string. Fixed format: YYYY-MM-DDTHH:MM:SSZ, no fractional seconds, Z suffix mandatory. Assertion is a regex match because the exact value is non-deterministic (per-evaluation semantics). Conformance harness MUST verify the value matches the pattern, not an exact string equality."
+    tags: [stdlib, now, timestamp, iso8601]
+
+  - id: TV-GXL-EVAL-089
+    category: GXL-EVAL
+    description: "now(1) raises GXL-TYPE-004 at parse time — arity violation (now takes zero arguments)."
+    input: 'now(1)'
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-004
+      timing: parse-time
+    note: "gxl.ebnf §4.1b: now() takes exactly zero arguments. GXL-TYPE-004 (wrong argument count) is raised at parse time because arity is statically known to be zero. Providing any argument is a compile-time wrong-argument-count error, consistent with the treatment of len() called with zero args."
+    tags: [stdlib, now, wrong-arity, type-error, parse-time]
+
+  - id: TV-GXL-EVAL-090
+    category: GXL-EVAL
+    description: "now (bare keyword, no parens) raises GXL-PARSE-001 — unexpected token."
+    input: 'now'
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "gxl.ebnf §4.1b and §2.2: 'now' is a reserved keyword (KW_NOW). A bare 'now' without parentheses cannot match NowCall (LPAREN required). 'now' as a KEYWORD cannot match IDENT, so GDP also fails. Under PEG ordered alternation all Primary alternatives fail → GXL-PARSE-001 (unexpected token). Analogous to 'str.foo' without parens → GXL-PARSE-001 (see gxl.ebnf §3 note on NamespaceCall). GXL-PARSE-010 does NOT apply here because 'now' is not being used as an identifier name; it simply appears in a position where no production matches."
+    tags: [stdlib, now, bare-keyword, parse-error, GXL-PARSE-001]
+
+  # --- TESS-AMBIG-3 companion: additional boolean-ordering variants ---
+
+  - id: TV-GXL-EVAL-091
+    category: GXL-EVAL
+    description: "true >= false raises GXL-TYPE-005 — ordered comparison on boolean operands is forbidden."
+    input: "true >= false"
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-005
+    note: "TESS-AMBIG-3 companion vector. Confirms that >= on booleans also raises GXL-TYPE-005, not just <. Symmetric with TV-GXL-EVAL-033."
+    tags: [comparison, boolean, edge, TESS-AMBIG-3]
+
+  # --- TESS-AMBIG-4 companion: object equality ---
+
+  - id: TV-GXL-EVAL-092
+    category: GXL-EVAL
+    description: "Object equality — myObj == myObj raises GXL-TYPE-001; == is restricted to scalars and null."
+    input: "myObj == myObj"
+    variables: {myObj: {a: 1}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-001
+    note: "TESS-AMBIG-4 companion vector for object operands. Equality restricted to scalars + null; object operand → GXL-TYPE-001. Mirrors TV-GXL-EVAL-086 (list operand)."
+    tags: [type-identity, object, equality, TESS-AMBIG-4]
+
+  # --- Truthy coercion arbitration (Strict, 2026-06-07) ---
+
+  - id: TV-GXL-EVAL-093
+    category: GXL-EVAL
+    description: "Truthy strict: null in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: null}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: boolean context accepts only bool; null is not coerced. Existing bool sanity vectors: TV-GXL-EVAL-007 and TV-GXL-EVAL-008."
+    tags: [truthy, not-operator, "null", type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-094
+    category: GXL-EVAL
+    description: "Truthy strict: number 0 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: 0}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: numeric zero is not falsy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, zero, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-095
+    category: GXL-EVAL
+    description: "Truthy strict: number 1 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: 1}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: nonzero numbers are not truthy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, nonzero, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-096
+    category: GXL-EVAL
+    description: "Truthy strict: number -1 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: -1}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: negative numbers are not truthy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, negative, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-097
+    category: GXL-EVAL
+    description: "Truthy strict: number 0.0 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: 0.0}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: floating-point zero is not falsy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, float, zero, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-098
+    category: GXL-EVAL
+    description: "Truthy strict: empty string in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: ""}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: the empty string is not falsy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, string, empty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-099
+    category: GXL-EVAL
+    description: "Truthy strict: string \"false\" in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: "false"}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: the string \"false\" is not the boolean false. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, string, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-100
+    category: GXL-EVAL
+    description: "Truthy strict: whitespace string in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: " "}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: whitespace strings are not truthy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, string, whitespace, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-101
+    category: GXL-EVAL
+    description: "Truthy strict: empty array in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: []}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: arrays come from variables because GXL has no array literal syntax; empty arrays are not falsy."
+    tags: [truthy, not-operator, array, empty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-102
+    category: GXL-EVAL
+    description: "Truthy strict: array [0] in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: [0]}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: arrays come from variables because GXL has no array literal syntax; non-empty arrays are not truthy."
+    tags: [truthy, not-operator, array, nonempty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-103
+    category: GXL-EVAL
+    description: "Truthy strict: array [null] in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: [null]}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: arrays come from variables because GXL has no array literal syntax; arrays containing null are not truthy."
+    tags: [truthy, not-operator, array, "null", type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-104
+    category: GXL-EVAL
+    description: "Truthy strict: empty object in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: {}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: objects come from variables because GXL has no object literal syntax; empty objects are not falsy."
+    tags: [truthy, not-operator, object, empty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-105
+    category: GXL-EVAL
+    description: "Truthy strict: object {a: 0} in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: {a: 0}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: objects come from variables because GXL has no object literal syntax; non-empty objects are not truthy."
+    tags: [truthy, not-operator, object, nonempty, type-error, arbitration-2026-06-07]

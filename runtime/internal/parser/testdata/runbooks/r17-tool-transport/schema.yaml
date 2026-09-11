@@ -1,0 +1,163 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r17-tool-transport
+name: r17 Tool Transport Test Fixture
+description: |
+  Exercises all three tool transports (stdio, jsonrpc, mcp) using reference
+  tool binaries. Tests the tool runtime's ability to spawn processes,
+  negotiate protocols, and capture structured output across different
+  transport implementations.
+
+inputs:
+  test_message:
+    type: string
+    description: Test message for echo transport
+    default: "transport-test"
+
+flow:
+  # Test 1: stdio transport with echo tool
+  - step:
+      id: test_stdio_echo
+      type: tool
+      title: Test stdio transport with echo
+      tool:
+        name: echo
+        action: echo
+        args:
+          message: "{{ .test_message }}"
+      capture:
+        echo_result: stdout
+
+  - step:
+      id: assert_stdio_echo
+      type: assert
+      title: Verify stdio echo output
+      assert:
+        - type: eq
+          subject: "{{ .echo_result }}"
+          expected: "{{ .test_message }}"
+          message: "Echo stdout must match input message"
+
+  # Test 2: stdio-jsonrpc transport with jsonrpc-server
+  - step:
+      id: test_jsonrpc_ping
+      type: tool
+      title: Test JSON-RPC transport with ping
+      tool:
+        name: jsonrpc-server
+        action: ping
+        args: {}
+      capture:
+        jsonrpc_result: json.result.message
+
+  - step:
+      id: assert_jsonrpc_ping
+      type: assert
+      title: Verify JSON-RPC ping response
+      assert:
+        - type: eq
+          subject: "{{ .jsonrpc_result }}"
+          expected: "pong"
+          message: "JSON-RPC ping must return pong"
+
+  # Test 3: stdio-jsonrpc transport with add action
+  - step:
+      id: test_jsonrpc_add
+      type: tool
+      title: Test JSON-RPC transport with add
+      tool:
+        name: jsonrpc-server
+        action: add
+        args:
+          a: 5
+          b: 7
+      capture:
+        add_result: json.result.sum
+
+  - step:
+      id: assert_jsonrpc_add
+      type: assert
+      title: Verify JSON-RPC add result
+      assert:
+        - type: eq
+          subject: "{{ .add_result }}"
+          expected: "12"
+          message: "JSON-RPC add must return correct sum"
+
+  # Test 4: MCP transport with mcp-server ping
+  - step:
+      id: test_mcp_ping
+      type: tool
+      title: Test MCP transport with ping
+      tool:
+        name: mcp-server
+        action: mcp-ping
+        args: {}
+      capture:
+        mcp_ping_result: json.content.0.text
+
+  - step:
+      id: assert_mcp_ping
+      type: assert
+      title: Verify MCP ping response
+      assert:
+        - type: eq
+          subject: "{{ .mcp_ping_result }}"
+          expected: "pong"
+          message: "MCP ping must return pong"
+
+  # Test 5: MCP transport with lookup action
+  - step:
+      id: test_mcp_lookup
+      type: tool
+      title: Test MCP transport with lookup
+      tool:
+        name: mcp-server
+        action: mcp-lookup
+        args:
+          id: "test-id-123"
+      capture:
+        mcp_lookup_result: json.content.0.text
+
+  - step:
+      id: assert_mcp_lookup
+      type: assert
+      title: Verify MCP lookup response
+      assert:
+        - type: contains
+          subject: "{{ .mcp_lookup_result }}"
+          expected: "test-id-123"
+          message: "MCP lookup must return the requested ID"
+
+  # Test 6: Builtin stub with slack-notify
+  - step:
+      id: test_builtin_stub
+      type: tool
+      title: Test builtin stub with slack-notify
+      tool:
+        name: slack-notify
+        action: send-message
+        args:
+          channel: "#test-channel"
+          message: "Transport test complete"
+      capture:
+        stub_result: json.status
+
+  - step:
+      id: assert_builtin_stub
+      type: assert
+      title: Verify builtin stub response
+      assert:
+        - type: eq
+          subject: "{{ .stub_result }}"
+          expected: "ok"
+          message: "Builtin stub must return status ok"
+
+  # Final step
+  - step:
+      id: complete
+      type: end
+      title: Tool transport tests complete
+      outcome:
+        category: success
+        code: transport_tests_passed

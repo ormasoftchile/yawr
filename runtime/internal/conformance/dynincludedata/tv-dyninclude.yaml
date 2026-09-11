@@ -1,0 +1,997 @@
+# Dynamic Include (runbook_ref) conformance corpus
+#
+# Sourced from: .squad/decisions/inbox/tess-dynamic-include-vectors.md (2026-08-15)
+# Feature: include.runbook_ref + resolve_from: catalog
+#
+# ⚠️ STATUS: All vectors require the unimplemented dynamic-include runtime feature.
+#    The harness test (dyninclude_conformance_test.go) guards all runs with
+#    t.Skip("pending dynamic include implementation"). Author these vectors now
+#    so implementers build against them.
+#
+# Format: mirrors tv-enum.yaml / enum_vector.go shape.
+#   variables: synthetic workspace filesystem (POSIX path -> file content)
+#   input:     workspace-relative POSIX path of the entry-point runbook
+#   expected:  error_class/error_code for failures; value for success
+#
+# Error class DYN (new; Barbara ratification pending — see open-questions inbox).
+# Open questions with expected_status: undecided are noted inline.
+
+vectors:
+
+  # ─── Group 1: Reference Syntax / Rejection ─────────────────────────────────
+
+  - id: TV-DYN-REF-001
+    category: DYN-REF
+    description: Bare id is accepted as a legal identity and proceeds to catalog lookup.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-disk-pressure"
+                resolve_from: catalog
+                on_not_found: continue
+    expected:
+      # on_not_found: continue + empty catalog = completed with runbook_found: false
+      # (this also exercises TV-DYN-CAT-008 / TV-DYN-NFD-003)
+      value:
+        runbook_found: false
+    note: "Happy-path syntax acceptance. With an empty catalog the step completes via on_not_found: continue."
+
+  - id: TV-DYN-REF-003
+    category: DYN-REF
+    description: Relative path ./child is rejected with DYN-001 before any catalog lookup.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "./child"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-001
+    note: "Path-injection guard: ./x must be structurally rejected regardless of catalog state."
+
+  - id: TV-DYN-REF-004
+    category: DYN-REF
+    description: Parent-traversal ../escape is rejected with DYN-001.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "../escape"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-001
+
+  - id: TV-DYN-REF-005
+    category: DYN-REF
+    description: Absolute POSIX path /etc/passwd is rejected with DYN-001.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "/etc/passwd"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-001
+
+  - id: TV-DYN-REF-008
+    category: DYN-REF
+    description: Three-segment path pkg/sub/id is rejected with DYN-001 (too many slashes).
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "pkg/sub/id"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-001
+    note: "Only 0 or 1 slashes permitted. Two slashes = path-like; rejected."
+
+  - id: TV-DYN-REF-011
+    category: DYN-REF
+    description: Empty-string runbook_ref (literal) is rejected with DYN-002.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: ""
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-002
+
+  - id: TV-DYN-REF-012
+    category: DYN-REF
+    description: Runtime-rendered empty runbook_ref (template resolves to empty string) is DINC-002 recoverable via on_not_found continue.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        vars:
+          suggested_tsg_id: ""
+        flow:
+          - step:
+              id: try-include
+              type: include
+              include:
+                runbook_ref: "${suggested_tsg_id}"
+                resolve_from: catalog
+                on_not_found: continue
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+    expected:
+      value: {}
+    note: >
+      suggested_tsg_id is empty string; ${suggested_tsg_id} renders to ""; executeDynamic
+      calls ValidateRenderedRef("") → RefValidationEmpty → DINC-002; handleResolveError
+      with on_not_found: continue → recovery path; run succeeds.
+      This is the ICM path where no TSG is suggested — an empty suggestion must reach the
+      recoverable not-found branch, not a hard failure.
+    tags: [ref, runtime, on_not_found, empty-ref]
+
+  - id: TV-DYN-REF-021
+    category: DYN-REF
+    description: Identity containing RTL override character U+202E is rejected with DYN-001.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: "apiVersion: yawr.runbook/v1\nid: orchestrator\nname: orchestrator\nflow:\n  - step:\n      id: inc\n      type: include\n      include:\n        runbook_ref: \"contoso/tsg\u202e\"\n        resolve_from: catalog\n"
+    expected:
+      error_class: DYN
+      error_code: DYN-001
+    note: "Bidirectional control characters (U+202E RIGHT-TO-LEFT OVERRIDE) must be rejected unconditionally."
+
+  # ─── Group 2: Template Rendering ───────────────────────────────────────────
+
+  - id: TV-DYN-TMPL-002
+    category: DYN-TMPL
+    description: runbook_ref template rendering a valid variable produces the correct bare identity.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        vars:
+          suggested_tsg_id: "tsg-disk-pressure"
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "${suggested_tsg_id}"
+                resolve_from: catalog
+                on_not_found: continue
+    expected:
+      value:
+        runbook_found: false
+    note: "Template renders to tsg-disk-pressure; empty catalog → not-found continue path."
+
+  - id: TV-DYN-TMPL-003
+    category: DYN-TMPL
+    description: runbook_ref template rendering to empty string is rejected with DYN-002.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        vars:
+          suggested_tsg_id: ""
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "${suggested_tsg_id}"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-002
+
+  - id: TV-DYN-TMPL-005
+    category: DYN-TMPL
+    description: runbook_ref template rendering to a number is rejected with DYN-004.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        vars:
+          tsg_count: 42
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "${tsg_count}"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-004
+    note: "Non-string render result must be rejected before catalog lookup."
+
+  - id: TV-DYN-TMPL-011
+    category: DYN-TMPL
+    description: A rendered value containing ${ is treated as a literal — no double-evaluation occurs.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        vars:
+          tsg_id: "${other_var}"
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "${tsg_id}"
+                resolve_from: catalog
+                on_not_found: continue
+    expected:
+      error_class: DYN
+      error_code: DYN-001
+    note: >
+      tsg_id renders to the literal string "${other_var}". The runtime MUST NOT
+      re-evaluate that string as a GIS template. However, "${other_var}" contains
+      { and } which are outside the safe-id profile [A-Za-z0-9_-]; ValidateRenderedRef
+      rejects it with DINC-001 (always fatal per B-5). on_not_found: continue covers
+      only DINC-002 (not-found); DINC-001 (invalid syntax) is always fatal regardless.
+      Production behavior is correct; the prior expectation was wrong.
+
+  # ─── Group 3: Catalog Resolution ───────────────────────────────────────────
+
+  - id: TV-DYN-CAT-002
+    category: DYN-CAT
+    description: Bare id hit in exactly one package succeeds with runbook_found true.
+    input: runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: contoso-tsgs
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: tsg-disk-pressure
+              path: runbooks/tsg-disk-pressure.runbook.yaml
+      runbooks/tsg-disk-pressure.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: tsg-disk-pressure
+        name: TSG - Disk Pressure
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        requires:
+          - package: contoso-tsgs
+            version: "1.0.0"
+            path: .
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-disk-pressure"
+                resolve_from: catalog
+    expected:
+      value:
+        runbook_found: true
+    note: "Bare id unique across catalog → resolved successfully."
+
+  - id: TV-DYN-CAT-003
+    category: DYN-CAT
+    description: Bare id present in two packages is rejected as AMBIGUOUS with DYN-005.
+    input: runbook.yaml
+    variables:
+      pkg-a/yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: pkg-a
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: tsg-disk-pressure
+              path: runbooks/tsg.runbook.yaml
+      pkg-a/runbooks/tsg.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: tsg-disk-pressure
+        name: TSG Disk (pkg-a)
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      pkg-b/yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: pkg-b
+          version: "2.0.0"
+        exports:
+          runbooks:
+            - id: tsg-disk-pressure
+              path: runbooks/tsg.runbook.yaml
+      pkg-b/runbooks/tsg.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: tsg-disk-pressure
+        name: TSG Disk (pkg-b)
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        requires:
+          - package: pkg-a
+            version: "1.0.0"
+            path: pkg-a
+          - package: pkg-b
+            version: "2.0.0"
+            path: pkg-b
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-disk-pressure"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-005
+    note: "Ambiguous bare id: operator must use package-qualified form."
+
+  # ─── Group 4: Not-Found Behaviour ──────────────────────────────────────────
+
+  - id: TV-DYN-NFD-001
+    category: DYN-NFD
+    description: Missing on_not_found defaults to fail; step fails with DYN-006.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-does-not-exist"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-006
+
+  - id: TV-DYN-NFD-003
+    category: DYN-NFD
+    description: on_not_found continue completes step with runbook_found false (boolean).
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-does-not-exist"
+                resolve_from: catalog
+                on_not_found: continue
+    expected:
+      value:
+        runbook_found: false
+    note: "runbook_found must be boolean false, not string 'false'."
+
+  - id: TV-DYN-NFD-005
+    category: DYN-NFD
+    description: on_not_found continue on a found entry sets runbook_found to boolean true.
+    input: runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: contoso-tsgs
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: tsg-disk-pressure
+              path: tsg.runbook.yaml
+      tsg.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: tsg-disk-pressure
+        name: TSG Disk
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        requires:
+          - package: contoso-tsgs
+            version: "1.0.0"
+            path: .
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-disk-pressure"
+                resolve_from: catalog
+                on_not_found: continue
+    expected:
+      value:
+        runbook_found: true
+
+  - id: TV-DYN-NFD-009
+    category: DYN-NFD
+    description: Invalid on_not_found value is rejected at schema/plan-load time, not execution time.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "tsg-disk"
+                resolve_from: catalog
+                on_not_found: explode
+    expected:
+      error_class: SCHEMA
+      error_code: SCHEMA-001
+    note: "on_not_found: explode must be rejected by schema validation before execution."
+
+  # ─── Group 6: Cycle and Depth ───────────────────────────────────────────────
+
+  - id: TV-DYN-CYCLE-001
+    category: DYN-CYCLE
+    description: Direct self-reference (A dynamically includes A) is detected as a cycle at runtime.
+    input: orchestrator.runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: self-ref-pkg
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: orchestrator
+              path: orchestrator.runbook.yaml
+      orchestrator.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        requires:
+          - package: self-ref-pkg
+            version: "1.0.0"
+            path: .
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "orchestrator"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-013
+    note: "The runtime resolves the catalog entry to the same runbook currently executing — cycle."
+
+  - id: TV-DYN-CYCLE-007
+    category: DYN-CYCLE
+    description: Include depth exactly at the limit (depth 10) is allowed.
+    input: depth-1.runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: depth-pkg
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: depth-10
+              path: depth-10.runbook.yaml
+      depth-10.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-10
+        name: Depth 10 leaf
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      depth-9.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-9
+        name: Depth 9
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "depth-10"
+                resolve_from: catalog
+      depth-8.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-8
+        name: Depth 8
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-9.runbook.yaml
+      depth-7.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-7
+        name: Depth 7
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-8.runbook.yaml
+      depth-6.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-6
+        name: Depth 6
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-7.runbook.yaml
+      depth-5.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-5
+        name: Depth 5
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-6.runbook.yaml
+      depth-4.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-4
+        name: Depth 4
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-5.runbook.yaml
+      depth-3.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-3
+        name: Depth 3
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-4.runbook.yaml
+      depth-2.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-2
+        name: Depth 2
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-3.runbook.yaml
+      depth-1.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: depth-1
+        name: Depth 1 (entry)
+        requires:
+          - package: depth-pkg
+            version: "1.0.0"
+            path: .
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: depth-2.runbook.yaml
+    expected:
+      value: {}
+    note: "Boundary case: 9 static includes + 1 dynamic = depth 10 = limit. MUST succeed."
+
+  # ─── Group 7: Governance Composition ───────────────────────────────────────
+
+  - id: TV-DYN-GOV-001
+    category: DYN-GOV
+    description: Child governance with require_approval false cannot widen parent require_approval true.
+    input: parent.runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: gov-pkg
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: child-tsg
+              path: child.runbook.yaml
+      child.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: child-tsg
+        name: Child TSG
+        governance:
+          require_approval: false
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      parent.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: parent
+        name: Parent
+        requires:
+          - package: gov-pkg
+            version: "1.0.0"
+            path: .
+        governance:
+          require_approval: true
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "child-tsg"
+                resolve_from: catalog
+    expected:
+      # Effective governance: require_approval=true (parent wins; child cannot widen)
+      # The child runs under approval-required policy; step requires approval before proceeding.
+      error_class: DYN
+      error_code: DYN-015
+    note: "Child attempting to widen (remove) require_approval must be rejected."
+    tags: [governance, security, non-widening]
+
+  - id: TV-DYN-GOV-005
+    category: DYN-GOV
+    description: Child with empty deny_commands cannot remove a parent deny pattern.
+    input: parent.runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: gov-pkg
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: child-tsg
+              path: child.runbook.yaml
+      child.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: child-tsg
+        name: Child TSG
+        governance:
+          deny_commands: []
+        flow:
+          - step:
+              id: dangerous
+              type: cli
+              command: rm
+              args: []
+      parent.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: parent
+        name: Parent
+        requires:
+          - package: gov-pkg
+            version: "1.0.0"
+            path: .
+        governance:
+          deny_commands:
+            - "rm*"
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "child-tsg"
+                resolve_from: catalog
+    expected:
+      error_class: GOVERNANCE
+      error_code: GOVERNANCE-001
+    note: >
+      Parent denies 'rm -rf *'. Child declares empty deny_commands — cannot remove parent deny.
+      The effective deny list retains the parent pattern. rm -rf /tmp/scratch matches → denied.
+    tags: [governance, security, non-widening, deny_commands]
+
+  - id: TV-DYN-GOV-015
+    category: DYN-GOV
+    description: Child claiming a capability not in parent governance is rejected with DYN-015.
+    input: parent.runbook.yaml
+    variables:
+      yawr-package.yaml: |
+        apiVersion: yawr.tool-package/v1
+        meta:
+          name: gov-pkg
+          version: "1.0.0"
+        exports:
+          runbooks:
+            - id: child-tsg
+              path: child.runbook.yaml
+      child.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: child-tsg
+        name: Child TSG
+        governance:
+          capabilities:
+            - network:write
+        flow:
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+      parent.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: parent
+        name: Parent
+        requires:
+          - package: gov-pkg
+            path: .
+        governance:
+          capabilities:
+            - network:read
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "child-tsg"
+                resolve_from: catalog
+    expected:
+      error_class: DYN
+      error_code: DYN-015
+    tags: [governance, security, non-widening, capabilities]
+
+  # ─── Group 12: Schema Structural Validation ─────────────────────────────────
+
+  - id: TV-DYN-SCHEMA-003
+    category: DYN-SCHEMA
+    description: Include block with neither runbook nor runbook_ref fails schema validation.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: r
+        name: r
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                with:
+                  x: "1"
+    expected:
+      error_class: SCHEMA
+      error_code: SCHEMA-001
+    note: "Exactly-one-of runbook/runbook_ref violated: neither present."
+
+  - id: TV-DYN-SCHEMA-004
+    category: DYN-SCHEMA
+    description: Include block with both runbook and runbook_ref fails schema validation.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: r
+        name: r
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook: child.yaml
+                runbook_ref: "${id}"
+                resolve_from: catalog
+    expected:
+      error_class: SCHEMA
+      error_code: SCHEMA-001
+    note: "Exactly-one-of runbook/runbook_ref violated: both present."
+
+  - id: TV-DYN-SCHEMA-005
+    category: DYN-SCHEMA
+    description: runbook_ref without resolve_from fails schema validation.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: r
+        name: r
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "${id}"
+    expected:
+      error_class: SCHEMA
+      error_code: SCHEMA-001
+
+  - id: TV-DYN-SCHEMA-007
+    category: DYN-SCHEMA
+    description: resolve_from with unapproved value 'filesystem' fails schema validation.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: r
+        name: r
+        flow:
+          - step:
+              id: inc
+              type: include
+              include:
+                runbook_ref: "${id}"
+                resolve_from: filesystem
+    expected:
+      error_class: SCHEMA
+      error_code: SCHEMA-001
+    note: "resolve_from must be exactly 'catalog'. filesystem/url/etc. must be rejected by schema."
+
+  # ─── Group 12 (compatibility): conditional guard via branch/condition: ───────
+  # Per B-19: `when:` on steps is validated at plan time but never evaluated at
+  # runtime (DEF-004). The correct authoring pattern for conditional dynamic
+  # includes is branch/condition:, which is what the ICM e2e tests already use.
+
+  - id: TV-DYN-COMPAT-001
+    category: DYN-COMPAT
+    description: branch condition false guard prevents catalog lookup — no resolution event emitted.
+    input: runbook.yaml
+    variables:
+      runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: orchestrator
+        name: orchestrator
+        vars:
+          do_include: "false"
+        flow:
+          - step:
+              id: conditional-include
+              type: branch
+              branches:
+                - condition: 'do_include == "true"'
+                  label: do-include
+                  steps:
+                    - step:
+                        id: inc
+                        type: include
+                        include:
+                          runbook_ref: "${suggested_tsg_id}"
+                          resolve_from: catalog
+          - step:
+              id: end
+              type: end
+              outcome: {category: success, code: ok}
+    expected:
+      value: {}
+    note: >
+      Branch condition 'do_include == "true"' is false (do_include="false") so no arm matches.
+      Branch returns StepStatusSkipped; end step runs; run succeeds.
+      Zero include/resolved trace events for this site.
+      Rewritten from when: guard per B-19 — branch/condition: is the correct conditional mechanism.
+
+  # ─── Group 13: End-to-End Motivating Scenario ───────────────────────────────
+
+  - id: TV-DYN-E2E-002
+    category: DYN-E2E
+    description: ICM orchestrator path where suggested TSG does not exist exercises on_not_found continue branch.
+    input: orchestrator.runbook.yaml
+    variables:
+      orchestrator.runbook.yaml: |
+        apiVersion: yawr.runbook/v1
+        id: icm-orchestrator
+        name: ICM Orchestrator
+        vars:
+          # In real execution this is set by a CLI step; for this vector
+          # it is pre-set to a value that does not match any catalog entry.
+          suggested_tsg_id: "tsg-no-such-procedure"
+        flow:
+          - step:
+              id: try-include
+              type: include
+              include:
+                runbook_ref: "${suggested_tsg_id}"
+                resolve_from: catalog
+                on_not_found: continue
+          - step:
+              id: route
+              type: branch
+              branches:
+                - condition: 'not runbook_found'
+                  label: no-tsg
+                  steps:
+                    - step:
+                        id: end-degraded
+                        type: end
+                        outcome: {category: degraded, code: tsg-not-available}
+                - else: true
+                  label: has-tsg
+                  steps:
+                    - step:
+                        id: end-success
+                        type: end
+                        outcome: {category: success, code: ok}
+    expected:
+      value:
+        outcome_category: degraded
+        outcome_code: tsg-not-available
+    note: >
+      Motivating use-case: suggested TSG not in catalog; on_not_found: continue fires;
+      branch on runbook_found == false; end with degraded outcome.
+    tags: [e2e, on_not_found, branch]

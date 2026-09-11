@@ -1,0 +1,388 @@
+(* ============================================================
+   YAWR Interpolation Syntax (GIS) — Reference Grammar
+   Version:    1.0.0-draft
+   Date:       2026-06-06T01:40:00-04:00
+   Author:     Barbara — Lead / Architect
+   Arbitration: 2026-06-06 — GIS miss semantics (Option A ratified)
+                Mandatory path miss is hard error; optional chaining
+                (?./?.[N]) is opt-in soft-miss. Legacy zero-value-on-miss
+                was under-specified leak, not contract.
+   References:
+     - design/yawr/expression-language-proposal.md §2
+     - .squad/decisions/inbox/copilot-directive-gxl-oq1-oq2-ratification.md
+       (OQ3: Portable JSON Value Model — Barbara to spec in Stream A)
+     - .squad/decisions/inbox/barbara-gxl-phase1-plan.md §3 (TV-GIS-*)
+     - .squad/decisions/inbox/barbara-gis-miss-arbitration.md (Phase G SPEC-AMBIG)
+     - gxl.ebnf (embedded expression grammar)
+
+   Interpolation sites (all string-typed fields that embed run variables):
+     title, args, stdin, tool argv[], display.content,
+     assert[].subject, assert[].expected, artifact paths, event.id,
+     include.with values
+
+   This file is the SINGLE SOURCE OF TRUTH for both the Go and C#
+   GIS parser implementations.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 1 — NOTATION CONVENTIONS
+   See gxl.ebnf §1 for full notation description.
+   Additional convention used in this file:
+     TEMPLATE_CHAR  denotes any character that appears in the
+                    raw (non-interpolated) portion of a template.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 2 — LEXICAL GRAMMAR
+   GIS operates at a higher level than GXL: the outer structure
+   is a template string (a sequence of raw text and interpolation
+   blocks). The embedded GXL expressions are tokenized by the GXL
+   lexer (gxl.ebnf §2) when encountered inside '${...}'.
+   ============================================================ *)
+
+(* --- 2.1 Template String Structure ---
+   A GIS template is the entire value of a string-typed runbook
+   field (after YAML parsing has resolved the field's value to a
+   raw string). The GIS lexer processes the resulting string as a
+   sequence of segments.
+*)
+
+TemplateString = { RawSegment | EscapeSequence | Interpolation } ;
+
+(* A TemplateString that contains zero Interpolation blocks is
+   returned as-is (pass-through). No error is raised. *)
+
+
+(* --- 2.2 Raw Segment ---
+   Any sequence of characters that is not the start of an escape
+   sequence or an interpolation block.
+*)
+
+RawSegment     = RAW_CHAR { RAW_CHAR } ;
+RAW_CHAR       = (* any Unicode code point except '\' and '$' *)
+               | '$' (* ONLY when NOT followed by '{' — see §2.3 *)
+               ;
+               (* A bare '$' not followed by '{' is passed through
+                  literally. This permits environment-variable-style
+                  references in tool argv (which are resolved by the
+                  OS process environment, not by GIS) to coexist with
+                  GIS templates in the same string value without
+                  escaping, ONLY where the $ is not immediately
+                  followed by '{'. *)
+
+
+(* --- 2.3 Escape Sequences --- *)
+
+EscapeSequence = '\' ESCAPE_TARGET ;
+ESCAPE_TARGET  = '$' LBRACE    (* '\${' → literal '${' in output    *)
+               | '\'            (* '\\' → literal '\'                *)
+               | 'n'            (* '\n' → U+000A LINE FEED           *)
+               | 'r'            (* '\r' → U+000D CARRIAGE RETURN     *)
+               | 't'            (* '\t' → U+0009 CHARACTER TABULATION*)
+               ;
+               (* '\${' is the primary escape for literal dollar-brace.
+                  Any other '\X' not in the list above is passed through
+                  as literal '\X' with a GIS-PARSE-002 warning (NOT a
+                  hard error). This is intentionally lenient to avoid
+                  breaking YAML values that contain literal backslashes
+                  from other systems.
+                  ## Note: deviation from GXL
+                  GXL raises GXL-PARSE-004 for unknown escape sequences.
+                  GIS is lenient by design because GIS template strings
+                  often arrive via YAML scalar values that have already
+                  had their own escape processing applied. Strict escape
+                  rejection would break authors using raw backslashes in
+                  tool argument strings. *)
+
+LBRACE         = '{' ;
+
+
+(* --- 2.4 Interpolation Block --- *)
+
+Interpolation  = '$' '{' GISExpression '}' ;
+               (* The GIS lexer recognizes the two-character sequence
+                  '$' '{' as the start of an interpolation block.
+                  The block ends at the first unmatched '}' that is not
+                  inside a nested grouping within the GISExpression.
+                  An unclosed '${' (no matching '}') → GIS-PARSE-001. *)
+
+GISExpression  = Expression ;
+               (* 'Expression' is the top-level non-terminal of the
+                  GXL syntactic grammar (gxl.ebnf §3), with the GIS-only
+                  GDP extension defined below.
+                  
+                  ## Relationship to GXL
+                  The expression inside '${...}' is formally a full
+                  GXL Expression. In practice, the overwhelming
+                  majority of interpolation sites use a bare GDP path:
+                    ${hostname}
+                    ${config.region}
+                    ${items[0].name}
+                    ${user?.email}
+                    ${items?.[0].name}
+                  These are all valid GIS expressions (GDP as Primary).
+                  
+                  Full GXL expressions are also valid:
+                    ${str.toLower(env)}
+                    ${count + 1}
+                    ${status == "ok"}
+                  The result is coerced to string per §4 rules.
+                  
+                  This superset design allows future GIS tooling to add
+                  expression-aware IDE support without a grammar change.
+                  Implementations MUST support the full GXL grammar
+                  inside '${...}', not just GDP paths.
+
+                  ## Explicitly rejected forms
+                    ${}        — empty interpolation block → GIS-PARSE-004.
+                    $${foo}    — dollar-doubling escape is not recognized;
+                                use '\${foo}' for a literal interpolation.
+                    ${?.root}  — root identifier may not be optional; the
+                                first GDP segment is always mandatory to
+                                prevent variable-name typo masking.
+                  Everything else that is valid GXL is valid GIS, subject
+                  to GIS-specific path optionality below.
+               *)
+
+
+(* --- 2.5 GIS-only Optional-Chaining GDP Extension ---
+   Ratified by: .squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md
+
+   Use '.' for the default hard-error contract: a missing variable or
+   segment raises GIS-PATH-MISSING. Use '?.' only when the author is
+   explicitly opting into tolerance for a legitimately optional segment.
+   Once any '?.' or '?.[N]' segment misses, evaluation short-circuits:
+   the entire remaining GDP tail is not evaluated and the GDP resolves
+   to the empty string "". '?.[N]' is the optional bracket equivalent
+   of '[N]' for array indexing.
+*)
+
+(* GIS imports the GXL Expression grammar but overrides GDP only within
+   GISExpression. GXL boolean expressions and GCP capture paths do NOT
+   receive this extension. Precedence is unchanged: '.', '?.', '[N]',
+   and '?.[N]' are path-segment connectors with identical precedence,
+   evaluated left-to-right as part of Primary GDP resolution. *)
+
+GDP                  = IDENT { GISPathSegment } ;
+
+GISPathSegment       = DotAccess
+                     | OptionalDotAccess
+                     | BracketAccess
+                     | OptionalBracketAccess
+                     ;
+
+DotAccess            = DOT IDENT ;
+OptionalDotAccess    = OPTIONAL_DOT IDENT ;
+BracketAccess        = LBRACKET INTEGER RBRACKET ;
+OptionalBracketAccess = OPTIONAL_BRACKET_OPEN INTEGER RBRACKET ;
+
+OPTIONAL_DOT         = '?.' ;
+OPTIONAL_BRACKET_OPEN = '?.[' ;
+                       (* Longest-match tokenization is required. When
+                          the GIS lexer sees '?', it MUST look ahead: if
+                          the next character is '.' and the following
+                          character is '[', emit OPTIONAL_BRACKET_OPEN
+                          and consume all three characters; if the next
+                          character is '.' but the following character is
+                          not '[', emit OPTIONAL_DOT and consume exactly
+                          '?' and '.'. The sequence '?.' is therefore a
+                          single token, never '?' followed by DOT;
+                          standalone '?' remains invalid in GDP paths. *)
+
+
+(* ============================================================
+   SECTION 3 — SYNTACTIC GRAMMAR SUMMARY
+   
+   TemplateString → sequence of alternating raw text and ${...} blocks.
+   
+   There is no ambiguity: the only special sequences are:
+     '\${'  →  literal '${'  (escape)
+     '${'   →  start of interpolation block
+     '$' (not followed by '{')  →  literal '$'
+   
+   Unmatched '}' outside an interpolation block is a literal '}'.
+   Unmatched '{' is a literal '{'. Only '${' starts an interpolation.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 4 — PORTABLE JSON VALUE MODEL  [OQ3 — resolved]
+
+   4.1  Definition
+   ────────────────
+   The YAWR Portable JSON Value Model (PJVM) is the runtime type
+   system shared by GXL, GIS, and GCP. It is derived from RFC 8259
+   (JSON) with the following explicit constraints:
+
+   PJVM types:
+     null      — absence of value (JSON null)
+     boolean   — true or false (JSON true/false)
+     number    — IEEE 754 double-precision float64; finite values only.
+                 NaN and Infinity are NOT part of PJVM. A capture path
+                 that would yield NaN/Infinity MUST substitute null and
+                 raise GIS-TYPE-001 if interpolated.
+     string    — UTF-8 encoded text (JSON string). No length limit is
+                 specified, but implementations SHOULD document any
+                 practical limit.
+     array     — ordered sequence of PJVM values (JSON array).
+     object    — unordered set of string-keyed PJVM values (JSON object).
+                 Key collisions in the source are resolved by retaining
+                 the last occurrence (RFC 8259 §4 conformant behavior).
+
+   Explicitly excluded from PJVM:
+     date      — no Date type. Dates are strings in a documented format.
+     binary    — no Blob/Buffer type. Binary is base64-encoded string.
+     undefined — JavaScript 'undefined' is mapped to null.
+     NaN       — IEEE 754 not-a-number: not permitted in PJVM values.
+     Infinity  — IEEE 754 infinities: not permitted in PJVM values.
+     int64     — No distinct integer type; all numbers are float64.
+     decimal   — No arbitrary-precision decimal; all numbers are float64.
+
+   Rationale: These exclusions ensure that a value serialized in Go
+   and deserialized in C# (or vice versa) is bit-for-bit identical in
+   its PJVM representation, with no runtime-specific surprises.
+
+   4.2  Type Coercion to String (for GIS interpolation)
+   ──────────────────────────────────────────────────────
+   When a GXL expression inside '${...}' resolves to a PJVM value,
+   that value is converted to a string for embedding in the template
+   output. The coercion rules are:
+
+   null    →  "null"
+                (the four-character string, not the empty string)
+   true    →  "true"
+   false   →  "false"
+   number  →  shortest round-trip decimal representation.
+               The representation MUST satisfy:
+                 parse(repr(x)) == x  (round-trip fidelity)
+               Rules:
+                 • Integer-valued floats: no decimal point.
+                     42.0 → "42"  (not "42.0")
+                 • Non-integer floats: minimal decimal digits.
+                     3.14 → "3.14"
+                     1e20 → "100000000000000000000"  (if < 1e21)
+                     1e21 → "1e+21"  (switches to scientific above 1e21)
+                 • Negative zero: → "0"  (not "-0")
+                 • NaN/Infinity: NOT representable; → GIS-TYPE-001.
+               This matches the ECMAScript Number::toString algorithm
+               and Go's strconv.FormatFloat(x, 'f'/'g', -1, 64).
+   string  →  the string value, as-is (no quoting, no escaping).
+   array   →  canonical JSON serialization:
+                 • '[' followed by comma-separated element coercions
+                   followed by ']'. No extra whitespace.
+                 • Array elements are recursively coerced to their
+                   canonical JSON form (not to string first).
+                 Example: [1, "a", true] → '[1,"a",true]'
+   object  →  canonical JSON serialization with SORTED KEYS:
+                 • '{' followed by comma-separated "key":value pairs
+                   where keys are sorted lexicographically (Unicode
+                   code point order, ascending) followed by '}'.
+                 • No extra whitespace.
+                 Example: {z:1, a:2} → '{"a":2,"z":1}'
+
+   Rationale for sorted object keys: canonical serialization ensures
+   that '${capture_var}' produces the same string regardless of which
+   runtime generated the object, making audit trail comparisons
+   reliable.
+
+   4.3  Unresolved Variables and Optional Path Misses
+   ───────────────────────────────────────────────────
+   If the GXL expression inside '${...}' references a variable that
+   is not in the context map (GXL-PATH-001), the GIS evaluator
+   propagates the error as GIS-PATH-MISSING unless the miss occurs at
+   a GIS optional path segment ('?.' or '?.[N]').
+   
+   Silent empty-string substitution is FORBIDDEN by default. Missing
+   variables and path segments are hard errors unless the author has
+   explicitly marked the segment optional. For an optional-chain miss,
+   the GDP resolves to the empty string "" per §2.5; authors who need
+   non-empty defaults must use 'vars:' or capture defaults.
+*)
+
+
+(* ============================================================
+   SECTION 5 — ERROR CLASS CATALOG
+
+   5.1  Parse Errors  (raised at load/plan time)
+   ──────────────────────────────────────────────
+   GIS-PARSE-001  Unclosed interpolation block: '${' appears in template
+                  with no matching '}'. The template is rejected.
+   GIS-PARSE-002  Unknown escape sequence: a '\X' sequence where X is not
+                  a recognized escape target. Emitted as a WARNING (not
+                  a hard error; see §2.3 note). The literal '\X' is
+                  passed through.
+   GIS-PARSE-003  Invalid GXL expression inside '${...}': the GXL parser
+                  raised a GXL-PARSE-* error. The specific GXL error code
+                  is included in the GIS-PARSE-003 diagnostic.
+   GIS-PARSE-004  Empty interpolation block: '${}' with no expression.
+
+   5.2  Path Errors  (raised at evaluation time)
+   ────────────────────────────────────────────────
+   GIS-PATH-MISSING  The GXL expression inside '${...}' raised
+                     GXL-PATH-001 (variable not found). The template
+                     rendering fails with this error, including the
+                     variable name and the template field location.
+
+   5.3  Type Errors  (raised at evaluation time)
+   ──────────────────────────────────────────────
+   GIS-TYPE-001   The resolved value cannot be serialized to a string
+                  under PJVM coercion rules. Specifically: a number that
+                  is NaN or Infinity. (The runtime should substitute null
+                  at capture time rather than letting NaN propagate.)
+   GIS-TYPE-002   GXL type error propagated from the embedded expression
+                  (e.g., GXL-TYPE-001, GXL-TYPE-002). The specific GXL
+                  error code is included in the diagnostic.
+*)
+
+
+(* ============================================================
+   SECTION 6 — STREAM A OPEN ISSUES
+
+   OI-GIS-01: Escape convention divergence from proposal
+     ## RATIFIED 2026-06-05T00:14:04-04:00 (ormasoftchile via Copilot)
+     ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
+     '\${' is the canonical escape for literal '${'. This grammar is
+     authoritative. The original proposal (expression-language-proposal.md
+     §2.6) specified '$${' (dollar doubling) — that convention is formally
+     REMOVED. '$${' is not a recognized escape and parsers MUST reject it
+     with a parse error. Edith (Stream B) must amend proposal §2.6 to
+     reflect this ratification. No further team input required.
+
+   OI-GIS-02: Bare '$' in tool argv coexistence
+     Tool definitions that contain '${ENV_VAR}' environment-variable
+     references (shell-style, resolved at process spawn time) and GIS
+     '${variable}' references in the SAME string value could be
+     ambiguous. Currently the grammar treats ALL '${...}' as GIS
+     interpolation. If a tool argv value must contain a literal shell
+     '${ENV_VAR}' reference that should NOT be GIS-interpolated, the
+     author must use '\${ENV_VAR}'. Affected tools identified in Don's
+     audit: echo.tool.yaml, jsonrpc-server.tool.yaml.
+
+   OI-GIS-03: Maximum interpolation depth
+     A GXL expression inside '${...}' may reference a list or object
+     that, when serialized to string, produces a very large JSON blob.
+     No size limit is specified. Implementations SHOULD document their
+     practical limits and raise a runtime error (not defined in this
+     grammar) if the serialized string exceeds the limit.
+
+   OI-GIS-04: Nested '${...}' inside string literals within GXL
+     A GXL expression like '${str.trim("${foo}")}' contains a literal
+     string "\"${foo}\"" inside the expression. The outer GIS parser
+     must not split this at the inner '${'. Since the GXL lexer
+     handles string tokenization first, the outer GIS parser must
+     correctly identify the end '}' of the interpolation block by
+     tracking nesting inside string literals. Implementations must
+     pass the entire token stream to the GXL parser and use the GXL
+     parser's 'end of expression' signal to find the closing '}',
+     rather than naive character scanning. Conformance vectors must
+     cover this case.
+
+   OI-GIS-05: Type coercion locale sensitivity
+     str.toLower and str.toUpper perform Unicode case mapping. For the
+     invariant locale (default), this is well-defined. If a future
+     version adds a locale parameter, the coercion-to-string output
+     might differ by locale. For now: all case operations are locale-
+     invariant (Unicode case algorithm, no locale sensitivity).
+*)

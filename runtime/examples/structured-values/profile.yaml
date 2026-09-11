@@ -1,0 +1,11 @@
+apiVersion: yawr.runtime-profile/v1
+id: structured-values
+context: test
+attendance: unattended
+approval:
+  scope:
+    allow_read: true
+    allow_mutating: false
+    allow_destructive: false
+transport:
+  allow_subprocess_in_test: false

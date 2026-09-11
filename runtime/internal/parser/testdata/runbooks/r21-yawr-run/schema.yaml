@@ -1,0 +1,158 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r21-yawr-run
+name: r21 yawr run CLI Adapter Test Fixture
+description: |
+  Integration test fixture for Phase 10 `yawr run` CLI adapter.
+  
+  Tests the standalone execution mode (no EventDispatcher, no serve):
+  - Variable overrides (--var environment=prod)
+  - Infix condition evaluation (environment == "prod")
+  - Tool invocation (echo command)
+  - Environment variable capture
+  - Trace event generation (trace.jsonl output)
+  - Serve-only constraint enforcement (wait_for_event rejection)
+  
+  Expected trace event sequence (when environment=prod):
+    1. run/started
+    2. step/started (id: capture_env)
+    3. step/completed (id: capture_env, captured: environment="prod")
+    4. step/started (id: branch_by_env)
+    5. step/completed (id: branch_by_env, branch: "Production path")
+    6. step/started (id: prod_check)
+    7. step/completed (id: prod_check, captured: check_result="PROD deployment...")
+    8. step/started (id: prod_confirm)
+    9. step/completed (id: prod_confirm)
+    10. step/started (id: complete)
+    11. step/completed (id: complete)
+    12. run/completed
+
+# Variables can be overridden via CLI: yawr run schema.yaml --var environment=staging
+inputs:
+  environment:
+    type: string
+    description: Deployment environment (dev, staging, prod)
+    default: "dev"
+
+flow:
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 1: Capture deployment environment from input variable
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: capture_env
+      type: cli
+      title: Capture deployment environment
+      command: echo
+      args:
+        - "{{ .environment }}"
+      capture:
+        # Store the echoed value as 'environment' variable for downstream steps
+        environment: stdout
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 2: Conditional routing based on environment (infix condition syntax)
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: branch_by_env
+      type: branch
+      title: Route by deployment environment
+      branches:
+        # Branch 1: Production path (highest priority)
+        - condition: 'environment == "prod"'
+          label: Production path
+          steps:
+            - step:
+                id: prod_check
+                type: cli
+                title: Production safety check
+                command: echo
+                args:
+                  - "PROD deployment — running safety checks"
+                capture:
+                  check_result: stdout
+
+            - step:
+                id: prod_confirm
+                type: cli
+                title: Confirm production readiness
+                command: echo
+                args:
+                  - "Production checks passed"
+
+        # Branch 2: Staging path
+        - condition: 'environment == "staging"'
+          label: Staging path
+          steps:
+            - step:
+                id: staging_deploy
+                type: cli
+                title: Deploy to staging
+                command: echo
+                args:
+                  - "Deploying to STAGING environment"
+                capture:
+                  deploy_result: stdout
+
+        # Branch 3: Development path (default fallback)
+        - condition: 'true'
+          label: Development path (default)
+          steps:
+            - step:
+                id: dev_deploy
+                type: cli
+                title: Deploy to development
+                command: echo
+                args:
+                  - "Deploying to DEVELOPMENT environment"
+                capture:
+                  deploy_result: stdout
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 3: Completion marker (uses captured variable from Step 1)
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: complete
+      type: cli
+      title: Deployment complete
+      command: echo
+      args:
+        - "Deployment to {{ .environment }} complete"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SCENARIO 2 (serve-only): wait_for_event rejection test
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Uncomment the following step to test the serve-only constraint.
+# Expected behavior:
+#   - `yawr run schema.yaml` MUST reject with exit code 2 (validation error)
+#   - Error message: "step type 'wait_for_event' requires yawr serve mode"
+#
+# This validates that the Runtime Core correctly enforces the EventDispatcher
+# availability check before dispatching wait_for_event steps.
+#
+# Integration test pattern:
+#   1. Load this fixture
+#   2. Inject the wait_for_event step below
+#   3. Run: yawr run <modified-fixture>
+#   4. Assert: exit code == 2
+#   5. Assert: stderr contains "wait_for_event requires yawr serve mode"
+#
+# ──────────────────────────────────────────────────────────────────────────────
+#
+#   - step:
+#       id: wait_approval
+#       type: wait_for_event
+#       title: Wait for manual approval (serve-only)
+#       event:
+#         source: webhook
+#         id: deployment_approved
+#         filter:
+#           approver_role: "release_manager"
+#       timeout: 300s
+#       on_timeout: fail
+#       capture:
+#         approver_id: payload.approver_id
+#         approval_timestamp: payload.timestamp
+#
+# ══════════════════════════════════════════════════════════════════════════════

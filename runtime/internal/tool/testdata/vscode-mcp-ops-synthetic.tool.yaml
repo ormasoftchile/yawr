@@ -1,0 +1,30 @@
+apiVersion: yawr.tool/v1
+meta:
+  name: ops-synthetic-vscode
+  version: "1.0.0"
+  description: "Contract-identical VS Code MCP binding for ops-synthetic, demonstrating vscode-mcp transport parity with the native mcp-http binding."
+transport:
+  mode: vscode-mcp
+actions:
+  - name: status-query
+    description: "Query the operational status of a named service."
+    classification: read-only
+    idempotent: true
+    args:
+      target:
+        type: string
+        required: true
+        description: "Service name to query"
+    returns: string
+  - name: pattern-search
+    description: "Search log patterns in a named service."
+    classification: read-only
+    idempotent: true
+    args:
+      target:
+        type: string
+        required: true
+      query:
+        type: string
+        required: true
+    returns: string

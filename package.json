@@ -1,0 +1,30 @@
+{
+  "name": "@yawr/repository",
+  "private": true,
+  "workspaces": [
+    "apps/vscode"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "extension:compile": "npm run compile --workspace apps/vscode",
+    "extension:test": "npm test --workspace apps/vscode",
+    "extension:test:cross-repo": "npm run test:cross-repo --workspace apps/vscode",
+    "extension:test:authoring:core": "npm run test:authoring:core --workspace apps/vscode",
+    "extension:test:authoring:native": "npm run test:authoring:native --workspace apps/vscode",
+    "extension:test:relocation": "node --test --test-name-pattern=\"source Extension Host|VS Code test configuration|component wiring|repoBoundary/rule[123456]\" apps/vscode/test/ciE2eWiring.test.js apps/vscode/test/repoBoundary.test.js",
+    "extension:package-helper": "npm run package:helper --workspace apps/vscode --",
+    "extension:package": "npm run package --workspace apps/vscode",
+    "extension:e2e": "npm run test:e2e --workspace apps/vscode",
+    "extension:e2e:vsix": "npm run test:e2e:vsix --workspace apps/vscode",
+    "runtime:build": "go build -C runtime -trimpath -buildvcs=false ./cmd/yawr",
+    "runtime:build:yawr": "go build -C runtime -trimpath -buildvcs=false -o ../yawr.exe ./cmd/yawr",
+    "runtime:test": "go test -C runtime ./... -count=1",
+    "check:root": "node scripts/verify-root-wiring.mjs",
+    "check:extension": "npm run extension:compile && npm run extension:test",
+    "check:integration": "npm run extension:test:relocation",
+    "check": "npm run check:root && npm run check:integration && npm run check:extension",
+    "check:with-go": "npm run runtime:build && npm run runtime:test && npm run check"
+  }
+}

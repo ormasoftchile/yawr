@@ -1,0 +1,11 @@
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
+const require = createRequire(import.meta.url);
+const { bundledPresentationHelper, verifyPresentationHelper, finiteHelper } = require('../out/presentationClient.js');
+const { decodeAuthoringCapabilities, parseAuthoringJSON } = require('../out/authoringProtocol.js');
+const { decodeExpressionCapabilities } = require('../out/expressionPresentationProtocol.js');
+const binary = bundledPresentationHelper(resolve(import.meta.dirname, '..'));
+await verifyPresentationHelper(binary);
+decodeAuthoringCapabilities(await finiteHelper(binary, ['authoring', 'capabilities', '--v3'], '', undefined, undefined, parseAuthoringJSON), 3);
+decodeExpressionCapabilities(await finiteHelper(binary, ['presentation', 'expressions', 'capabilities']));
+console.log('Matching packaged helper capabilities verified.');

@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    {
+      "runID": "r-active-001",
+      "state": "running",
+      "runbookPath": "runbooks/deploy.yaml",
+      "startedAt": "2026-04-21T10:00:00.000000000Z",
+      "source": "active"
+    },
+    {
+      "runID": "r-done-002",
+      "state": "completed",
+      "runbookPath": "runbooks/check.yaml",
+      "startedAt": "2026-04-20T09:00:00.000000000Z",
+      "completedAt": "2026-04-20T09:05:32.000000000Z",
+      "source": "persisted"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# Fixture: multi-root-a version of shared-tool.
+# Used by activeProjectRegistry.test.js to verify that the active project's
+# definitions win over the first workspace folder's definitions when the
+# runbook is in the second folder.
+meta: {name: shared-tool}
+transport:
+  mode: vscode-mcp
+  vscode_tool: tool-from-root-a
+actions:
+  - name: run
+    outputs:
+      result:
+        type: string
+        required: true

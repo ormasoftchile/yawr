@@ -1,0 +1,14 @@
+# Deepest level — no further invocations
+apiVersion: yawr.runbook/v1
+
+id: chain-level-5
+name: chain-level-5
+kind: reference
+description: Level 5 (leaf) — end of the chain
+
+flow:
+  - step:
+      id: done
+      type: noop
+      title: Chain complete
+      delay: 1s

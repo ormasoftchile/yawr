@@ -1,0 +1,40 @@
+{
+  "request": {
+    "type": "yawr.host-action.request",
+    "version": "yawr.host-action/v1",
+    "capability": "product.open-resource",
+    "runId": "run-1",
+    "turnId": "turn-1",
+    "correlationId": "correlation-1",
+    "previewSessionId": "preview-session-1",
+    "requestId": "preview-session-1:correlation-1",
+    "request": {
+      "resource": "incident-42",
+      "options": {
+        "focus": true
+      }
+    }
+  },
+  "acknowledgment": {
+    "type": "yawr.host-action.ack",
+    "version": "yawr.host-action/v1",
+    "runId": "run-1",
+    "turnId": "turn-1",
+    "correlationId": "correlation-1",
+    "previewSessionId": "preview-session-1",
+    "requestId": "preview-session-1:correlation-1",
+    "capability": "product.open-resource",
+    "status": "completed",
+    "result": { "state": "opened" },
+    "error": null
+  },
+  "cancellation": {
+    "type": "yawr.host-action.cancel",
+    "version": "yawr.host-action/v1",
+    "correlationId": "correlation-1",
+    "previewSessionId": "preview-session-1",
+    "requestId": "preview-session-1:correlation-1",
+    "status": "execution-not-started",
+    "reason": "run-replaced"
+  }
+}

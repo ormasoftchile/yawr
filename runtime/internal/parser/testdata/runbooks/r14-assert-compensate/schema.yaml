@@ -1,0 +1,92 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r14-assert-compensate
+name: r14 Assert and Compensate
+description: |
+  Demonstrates the assert step type for validation and the compensate
+  step type for rollback. A cli step runs a deployment command, an
+  assert verifies the output meets expectations, and a compensate
+  step is registered to rollback on failure.
+
+inputs:
+  target_version:
+    type: string
+    description: Version to deploy
+    default: "v1.2.3"
+
+flow:
+  # Step 1: Register compensation handler
+  - step:
+      id: register_rollback
+      type: compensate
+      title: Register rollback compensation
+      compensate:
+        on: any
+        steps:
+          - step:
+              id: rollback_deployment
+              type: cli
+              title: Rollback to previous version
+              command: echo
+              args: ["Rolling back deployment"]
+
+          - step:
+              id: clear_caches
+              type: cli
+              title: Clear application caches
+              command: echo
+              args: ["Clearing caches after rollback"]
+
+  # Step 2: Execute deployment
+  - step:
+      id: deploy
+      type: cli
+      title: Deploy new version
+      command: echo
+      args: ["Deploying version {{ .target_version }}"]
+      capture:
+        deploy_output: stdout
+
+  # Step 3: Assert deployment success
+  - step:
+      id: verify_deployment
+      type: assert
+      title: Verify deployment output
+      assert:
+        - type: eq
+          subject: "{{ .deploy_output }}"
+          expected: "Deploying version {{ .target_version }}"
+          message: "Deployment output must match expected message"
+        - type: contains
+          subject: "{{ .deploy_output }}"
+          expected: "Deploying"
+          message: "Output must contain 'Deploying'"
+
+  # Step 4: Health check
+  - step:
+      id: health_check
+      type: cli
+      title: Run health check
+      command: echo
+      args: ["Health check passed"]
+      capture:
+        health_status: stdout
+
+  # Step 5: Assert health check
+  - step:
+      id: verify_health
+      type: assert
+      title: Verify health check passed
+      assert:
+        - type: contains
+          subject: "{{ .health_status }}"
+          expected: "passed"
+          message: "Health check must report as passed"
+
+  # Step 6: Confirm success
+  - step:
+      id: confirm
+      type: cli
+      title: Confirm deployment success
+      command: echo
+      args: ["Deployment verified and complete"]

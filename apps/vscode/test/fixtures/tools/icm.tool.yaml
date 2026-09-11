@@ -1,0 +1,24 @@
+# Fixture: icm tool definition used by mcpBridge and toolDefinitionRegistry tests.
+# transport.vscode_tool provides the registered MCP tool name (transport-level).
+meta: {name: icm}
+transport:
+  mode: vscode-mcp
+  vscode_tool: icm-get-incident
+actions:
+  - name: get-incident
+    outputs:
+      title:
+        type: string
+        required: true
+      service:
+        type: string
+        required: true
+      environment:
+        type: string
+        required: true
+      logical_server:
+        type: string
+        required: true
+      database:
+        type: string
+        required: true

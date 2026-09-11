@@ -1,0 +1,422 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: oncall-escalation-ladder
+name: On-Call Escalation Ladder
+kind: mitigation
+description: |
+  Escalates critical alerts through on-call chain until acknowledged.
+  Tries primary -> secondary -> manager -> director. Broadcasts to all
+  if no acknowledgment after 30 minutes, then escalates to executives.
+
+inputs:
+  alert_id:
+    type: string
+    required: true
+    description: Alert ID from monitoring system
+    from: webhook.alert_id
+  affected_service:
+    type: string
+    required: true
+    description: Name of the affected service
+    from: webhook.service
+  alert_description:
+    type: string
+    required: true
+    description: Alert description
+    from: webhook.description
+
+toolRefs: []
+
+governance:
+  rules:
+    - effects: ["alerting.page", "alerting.broadcast"]
+      action: allow
+
+flow:
+  # Step 1: Receive Critical Alert
+  - step:
+      id: receive_critical_alert
+      type: extension
+      title: Receive critical alert from monitoring
+      extension:
+        name: pagerduty
+        action: receive-webhook
+      capture:
+        alert_timestamp: json.timestamp
+        alert_severity: json.severity
+
+  # Step 2: Lookup On-Call Schedule
+  - step:
+      id: lookup_oncall_schedule
+      type: extension
+      title: Lookup current on-call schedule
+      extension:
+        name: pagerduty
+        action: get-oncall-schedule
+        args:
+          service: "{{ .affected_service }}"
+      capture:
+        primary_oncall: json.primary
+        secondary_oncall: json.secondary
+        manager_oncall: json.manager
+        director_oncall: json.director
+
+  # Steps 3-6: Escalation loops per level
+  # GAP: Dynamic escalation chain (iterate over escalation_chain list) is not expressible.
+  #      Workaround: four explicit iterate blocks, one per escalation level.
+  # GAP: Cross-iterate convergence not supported — once any iterate converges (acknowledged),
+  #      remaining iterates should be skipped. Workaround: guard each with when: condition.
+
+  - iterate:
+      id: try_primary
+      max: 3
+      over: null
+      steps:
+        - step:
+            id: page_primary
+            type: extension
+            title: "Page primary on-call (attempt {{ .iteration }}/3)"
+            extension:
+              name: pagerduty
+              action: page-engineer
+              args:
+                engineer: "{{ .primary_oncall }}"
+                alert_id: "{{ .alert_id }}"
+                urgency: high
+            capture:
+              pagerduty_incident_id: json.incident_id
+
+        - step:
+            id: wait_primary_ack
+            type: cli
+            title: Wait 5 minutes for acknowledgment
+            command: sleep
+            args: ["300"]
+
+        - step:
+            id: check_primary_ack
+            type: extension
+            title: Check if incident acknowledged
+            extension:
+              name: pagerduty
+              action: get-incident-status
+              args:
+                incident_id: "{{ .pagerduty_incident_id }}"
+            capture:
+              acknowledged: json.acknowledged
+              acknowledger: json.acknowledger
+
+        - step:
+            id: break_if_acked_primary
+            type: branch
+            title: Exit escalation if acknowledged
+            branches:
+              - condition: 'acknowledged'
+                label: Acknowledged by primary
+                steps:
+                  - step:
+                      id: set_primary_acked
+                      type: cli
+                      title: Mark incident as acknowledged
+                      command: echo
+                      args: ["Incident acknowledged"]
+                      continue_on_fail: false
+
+  - iterate:
+      id: try_secondary
+      max: 3
+      over: null
+      when: '!acknowledged'
+      steps:
+        - step:
+            id: page_secondary
+            type: extension
+            title: "Page secondary on-call (attempt {{ .iteration }}/3)"
+            extension:
+              name: pagerduty
+              action: page-engineer
+              args:
+                engineer: "{{ .secondary_oncall }}"
+                alert_id: "{{ .alert_id }}"
+                urgency: high
+
+        - step:
+            id: wait_secondary_ack
+            type: cli
+            title: Wait 5 minutes
+            command: sleep
+            args: ["300"]
+
+        - step:
+            id: check_secondary_ack
+            type: extension
+            title: Check if incident acknowledged
+            extension:
+              name: pagerduty
+              action: get-incident-status
+              args:
+                incident_id: "{{ .pagerduty_incident_id }}"
+            capture:
+              acknowledged: json.acknowledged
+              acknowledger: json.acknowledger
+
+        - step:
+            id: break_if_acked_secondary
+            type: branch
+            title: Exit if acknowledged
+            branches:
+              - condition: 'acknowledged'
+                label: Acknowledged
+                steps:
+                  - step:
+                      id: mark_secondary_acked
+                      type: cli
+                      title: Mark acknowledged
+                      command: echo
+                      args: ["Acknowledged by {{ .acknowledger }}"]
+                      continue_on_fail: false
+
+  - iterate:
+      id: try_manager
+      max: 2
+      over: null
+      when: '!acknowledged'
+      steps:
+        - step:
+            id: page_manager
+            type: extension
+            title: "Page manager on-call (attempt {{ .iteration }}/2)"
+            extension:
+              name: pagerduty
+              action: page-engineer
+              args:
+                engineer: "{{ .manager_oncall }}"
+                alert_id: "{{ .alert_id }}"
+                urgency: high
+
+        - step:
+            id: wait_manager_ack
+            type: cli
+            title: Wait 5 minutes
+            command: sleep
+            args: ["300"]
+
+        - step:
+            id: check_manager_ack
+            type: extension
+            title: Check if incident acknowledged
+            extension:
+              name: pagerduty
+              action: get-incident-status
+              args:
+                incident_id: "{{ .pagerduty_incident_id }}"
+            capture:
+              acknowledged: json.acknowledged
+              acknowledger: json.acknowledger
+
+        - step:
+            id: break_if_acked_manager
+            type: branch
+            title: Exit if acknowledged
+            branches:
+              - condition: 'acknowledged'
+                label: Acknowledged
+                steps:
+                  - step:
+                      id: mark_manager_acked
+                      type: cli
+                      title: Mark acknowledged
+                      command: echo
+                      args: ["Acknowledged by manager"]
+                      continue_on_fail: false
+
+  - iterate:
+      id: try_director
+      max: 2
+      over: null
+      when: '!acknowledged'
+      steps:
+        - step:
+            id: page_director
+            type: extension
+            title: "Page director on-call (attempt {{ .iteration }}/2)"
+            extension:
+              name: pagerduty
+              action: page-engineer
+              args:
+                engineer: "{{ .director_oncall }}"
+                alert_id: "{{ .alert_id }}"
+                urgency: critical
+
+        - step:
+            id: wait_director_ack
+            type: cli
+            title: Wait 5 minutes
+            command: sleep
+            args: ["300"]
+
+        - step:
+            id: check_director_ack
+            type: extension
+            title: Check if incident acknowledged
+            extension:
+              name: pagerduty
+              action: get-incident-status
+              args:
+                incident_id: "{{ .pagerduty_incident_id }}"
+            capture:
+              acknowledged: json.acknowledged
+              acknowledger: json.acknowledger
+
+        - step:
+            id: break_if_acked_director
+            type: branch
+            title: Exit if acknowledged
+            branches:
+              - condition: 'acknowledged'
+                label: Acknowledged
+                steps:
+                  - step:
+                      id: mark_director_acked
+                      type: cli
+                      title: Mark acknowledged
+                      command: echo
+                      args: ["Acknowledged by director"]
+                      continue_on_fail: false
+
+  # Step 7: Emergency Broadcast to All
+  - step:
+      id: emergency_broadcast
+      type: extension
+      title: Emergency broadcast to all on-call engineers
+      when: '!acknowledged'
+      extension:
+        name: pagerduty
+        action: broadcast-all
+        args:
+          alert_id: "{{ .alert_id }}"
+          service: "{{ .affected_service }}"
+
+  - step:
+      id: create_war_room
+      type: extension
+      title: Create war room Zoom meeting
+      when: '!acknowledged'
+      extension:
+        name: zoom
+        action: create-meeting
+        args:
+          topic: "Critical Incident War Room"
+      capture:
+        war_room_url: json.join_url
+
+  - step:
+      id: slack_critical_alert
+      type: extension
+      title: Alert critical-alerts Slack channel
+      when: '!acknowledged'
+      extension:
+        name: slack
+        action: send-message
+        args:
+          channel: "#critical-alerts"
+          message: "CRITICAL incident unacknowledged for 30 minutes. War room: {{ .war_room_url }}"
+
+  # Step 8: Wait for Any Acknowledgment (polling loop, 60 minutes)
+  - iterate:
+      id: wait_any_ack
+      max: 60
+      over: null
+      when: '!acknowledged'
+      steps:
+        - step:
+            id: check_ack_broadcast
+            type: extension
+            title: "Check for any acknowledgment (minute {{ .iteration }}/60)"
+            extension:
+              name: pagerduty
+              action: get-incident-status
+              args:
+                incident_id: "{{ .pagerduty_incident_id }}"
+            capture:
+              acknowledged: json.acknowledged
+              acknowledger: json.acknowledger
+
+        - step:
+            id: wait_one_minute
+            type: cli
+            title: Wait 1 minute
+            command: sleep
+            args: ["60"]
+
+        - step:
+            id: break_if_acked_broadcast
+            type: branch
+            title: Exit if acknowledged
+            branches:
+              - condition: 'acknowledged'
+                label: Acknowledged
+                steps:
+                  - step:
+                      id: mark_broadcast_acked
+                      type: cli
+                      title: Mark acknowledged
+                      command: echo
+                      args: ["Acknowledged by {{ .acknowledger }}"]
+                      continue_on_fail: false
+
+  # Step 9: Executive Escalation
+  - step:
+      id: executive_escalation
+      type: extension
+      title: Escalate to CTO and CEO
+      when: '!acknowledged'
+      extension:
+        name: pagerduty
+        action: executive-escalation
+        args:
+          alert_id: "{{ .alert_id }}"
+          service: "{{ .affected_service }}"
+
+  # Step 10: Record Acknowledgment
+  - step:
+      id: record_acknowledgment
+      type: extension
+      title: Record acknowledgment and create incident channel
+      extension:
+        name: incident-tracker
+        action: record-ack
+        args:
+          alert_id: "{{ .alert_id }}"
+          acknowledger: "{{ .acknowledger }}"
+
+  - step:
+      id: invoke_incident_response
+      type: include
+      title: Invoke incident response runbook
+      # NOTE: type:include shares caller variable space — if isolation needed, use future type:call (not in v2.0)
+      include:
+        runbook: incident-response/generic-incident-response.yaml
+        with:
+          alert_id: "{{ .alert_id }}"
+          service: "{{ .affected_service }}"
+
+  # Step 11: Post-Incident Escalation Report
+  - step:
+      id: escalation_report
+      type: extension
+      title: Generate escalation report
+      extension:
+        name: report-generator
+        action: generate-escalation-report
+        args:
+          alert_id: "{{ .alert_id }}"
+          acknowledger: "{{ .acknowledger }}"
+
+  - step:
+      id: complete
+      type: end
+      title: Escalation complete
+      outcome:
+        category: resolved
+        code: escalation_acknowledged

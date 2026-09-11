@@ -1,0 +1,501 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: gdpr-data-deletion
+name: Customer Data Deletion (GDPR/CCPA)
+kind: reference
+description: |
+  Processes customer data deletion request per GDPR right-to-be-forgotten.
+  Verifies identity, obtains legal approval, deletes data across all systems,
+  verifies deletion, and generates deletion certificate.
+
+inputs:
+  customer_email:
+    type: string
+    required: true
+    description: Email of customer requesting deletion
+    from: webhook.email
+  deletion_request_id:
+    type: string
+    required: true
+    description: Deletion request ID from compliance system
+    from: webhook.request_id
+
+toolRefs:
+  - name: psql
+  - name: aws
+
+governance:
+  rules:
+    - effects: ["data.read"]
+      action: allow
+    - effects: ["data.delete", "data.redact"]
+      action: require-approval
+      min_approvers: 1
+      roles: [data-protection-officer]
+
+flow:
+  # Step 1: Receive Deletion Request
+  - step:
+      id: receive_deletion_request
+      type: extension
+      title: Receive and log deletion request
+      extension:
+        name: compliance-db
+        action: log-deletion-request
+        args:
+          email: "{{ .customer_email }}"
+          request_id: "{{ .deletion_request_id }}"
+      capture:
+        request_timestamp: json.timestamp
+
+  # Step 2: Identity Verification
+  - step:
+      id: identity_verification
+      type: collector
+      title: Verify customer identity
+      prompt: |
+        Verify identity for deletion request {{ .deletion_request_id }}.
+        Customer email: {{ .customer_email }}
+      fields:
+        - name: verification_email_responded
+          type: text
+          label: Customer responded to verification email? (yes/no)
+          required: true
+        - name: identity_doc_provided
+          type: text
+          label: Identity document provided (if high-value account)? (yes/no/na)
+          required: true
+        - name: verification_complete
+          type: text
+          label: Verification completed? (yes/no)
+          required: true
+      approvals:
+        min: 1
+        roles: [privacy-team]
+        timeout: 720h # 30 days in hours — GDPR deadline
+        on_timeout: fail
+
+  # Step 3: Legal Review
+  - step:
+      id: legal_review
+      type: collector
+      title: Legal review and approval
+      prompt: |
+        Legal review for GDPR deletion request {{ .deletion_request_id }}.
+        Customer: {{ .customer_email }}
+        
+        Check for legal holds before approving deletion.
+      fields:
+        - name: no_active_litigation
+          type: text
+          label: No active litigation involving customer? (yes/no)
+          required: true
+        - name: no_regulatory_investigation
+          type: text
+          label: No regulatory investigation requiring data retention? (yes/no)
+          required: true
+        - name: no_other_retention_basis
+          type: text
+          label: No other legal basis to retain data? (yes/no)
+          required: true
+        - name: legal_approved
+          type: text
+          label: "Type 'approve' to approve deletion"
+          required: true
+      approvals:
+        min: 1
+        roles: [legal-counsel]
+        timeout: 120h # GAP: prose says "5 business days"
+        on_timeout: fail
+
+  # Step 4: Search All Data Stores (parallel)
+  - step:
+      id: search_all_data
+      type: parallel
+      title: Search all data stores for customer data
+      branches:
+        - label: Production database
+          steps:
+            - step:
+                id: search_db
+                type: cli
+                title: Search production database
+                command: psql
+                args:
+                  - "-h"
+                  - "prod-db"
+                  - "-c"
+                  - "SELECT id FROM users WHERE email=current_setting('app.search_email');"
+                env:
+                  PGPASSWORD: "{{ .db_password }}"
+                capture:
+                  db_user_id: stdout
+                contract:
+                  effects: ["data.read"]
+
+        - label: S3 buckets
+          steps:
+            - step:
+                id: search_s3
+                type: cli
+                title: Search S3 buckets for customer data
+                command: aws
+                args:
+                  - s3api
+                  - list-objects
+                  - "--bucket"
+                  - "user-data-bucket"
+                  - "--query"
+                  - "Contents[].Key"
+                capture:
+                  s3_keys: stdout
+
+        - label: Application logs
+          steps:
+            - step:
+                id: search_logs
+                type: extension
+                title: Search Elasticsearch logs
+                extension:
+                  name: elasticsearch
+                  action: search
+                  args:
+                    query: "email:{{ .customer_email }}"
+                capture:
+                  log_entries: json.hits.total.value
+
+        - label: Analytics
+          steps:
+            - step:
+                id: search_analytics
+                type: extension
+                title: Search Mixpanel analytics
+                extension:
+                  name: mixpanel
+                  action: get-user-profile
+                  args:
+                    email: "{{ .customer_email }}"
+                capture:
+                  analytics_profile_exists: json.found
+
+        - label: CRM
+          steps:
+            - step:
+                id: search_crm
+                type: extension
+                title: Search Salesforce CRM
+                extension:
+                  name: salesforce
+                  action: search-account
+                  args:
+                    email: "{{ .customer_email }}"
+                capture:
+                  crm_account_id: json.account_id
+
+        - label: Support tickets
+          steps:
+            - step:
+                id: search_zendesk
+                type: extension
+                title: Search Zendesk support tickets
+                extension:
+                  name: zendesk
+                  action: search-tickets
+                  args:
+                    email: "{{ .customer_email }}"
+                capture:
+                  zendesk_ticket_ids: json.ticket_ids
+      join:
+        wait_for: all
+        on_failure: continue # collect inventory even if some searches fail
+
+  # Step 5: DPO Review
+  - step:
+      id: dpo_review
+      type: collector
+      title: DPO confirms deletion scope
+      prompt: |
+        Data inventory for customer {{ .customer_email }}:
+        - Database user ID: {{ .db_user_id }}
+        - S3 objects: found
+        - Log entries: {{ .log_entries }}
+        - Analytics profile: {{ .analytics_profile_exists }}
+        - CRM account: {{ .crm_account_id }}
+        - Zendesk tickets: found
+        
+        WARNING: Deletion is PERMANENT and cannot be undone.
+        Confirm deletion scope is complete?
+      fields:
+        - name: scope_confirmed
+          type: text
+          label: "Type 'confirm' to confirm deletion scope"
+          required: true
+      approvals:
+        min: 1
+        roles: [data-protection-officer]
+        timeout: 72h # GAP: prose says "3 business days"
+        on_timeout: fail
+
+  # Step 6: Parallel Deletion (best-effort — continue on individual failures)
+  # GAP: Schema parallel block on_failure only supports "fail" or "continue" for the whole block.
+  #      Cannot report per-task failure while still continuing — partial success not granularly expressible.
+  - step:
+      id: parallel_deletion
+      type: parallel
+      title: Delete customer data from all systems
+      branches:
+        - label: Production database
+          steps:
+            - step:
+                id: delete_from_db
+                type: cli
+                title: Delete from production database
+                command: psql
+                args:
+                  - "-h"
+                  - "prod-db"
+                  - "-c"
+                  - "DELETE FROM users WHERE email=current_setting('app.search_email');"
+                contract:
+                  effects: ["data.delete"]
+
+        - label: S3
+          steps:
+            - step:
+                id: delete_from_s3
+                type: extension
+                title: Delete customer objects from S3
+                extension:
+                  name: aws
+                  action: delete-s3-objects
+                  args:
+                    keys: "{{ .s3_keys }}"
+                contract:
+                  effects: ["data.delete"]
+
+        - label: Application logs
+          steps:
+            - step:
+                id: redact_from_logs
+                type: extension
+                title: Redact PII from application logs
+                # Note: redaction (not deletion) — logs cannot be deleted, only PII replaced
+                extension:
+                  name: elasticsearch
+                  action: redact-pii
+                  args:
+                    email: "{{ .customer_email }}"
+                    replace_with: "[DELETED]"
+                contract:
+                  effects: ["data.redact"]
+
+        - label: Analytics
+          steps:
+            - step:
+                id: delete_from_analytics
+                type: extension
+                title: Delete Mixpanel user profile
+                extension:
+                  name: mixpanel
+                  action: delete-user
+                  args:
+                    email: "{{ .customer_email }}"
+                contract:
+                  effects: ["data.delete"]
+
+        - label: CRM
+          steps:
+            - step:
+                id: delete_from_crm
+                type: extension
+                title: Delete Salesforce account record
+                extension:
+                  name: salesforce
+                  action: delete-account
+                  args:
+                    account_id: "{{ .crm_account_id }}"
+                contract:
+                  effects: ["data.delete"]
+
+        - label: Support tickets
+          steps:
+            - step:
+                id: redact_from_zendesk
+                type: extension
+                title: Redact PII from Zendesk tickets
+                extension:
+                  name: zendesk
+                  action: redact-tickets
+                  args:
+                    ticket_ids: "{{ .zendesk_ticket_ids }}"
+                    email: "{{ .customer_email }}"
+                contract:
+                  effects: ["data.redact"]
+      join:
+        wait_for: all
+        on_failure: continue # best-effort: continue even if some deletions fail
+
+  # Step 7: Delete from Backups (iterate over 30 daily backups)
+  # GAP: "iterate over date range" not expressible — workaround uses numeric counter.
+  # GAP: Cannot dynamically generate backup filenames from date range in iterate.
+  - iterate:
+      id: delete_from_backups
+      max: 30
+      over: null
+      steps:
+        - step:
+            id: process_backup
+            type: extension
+            title: "Process backup day {{ .iteration }} of 30"
+            extension:
+              name: backup-manager
+              action: redact-or-recreate
+              args:
+                backup_day_offset: "{{ .iteration }}"
+                customer_id: "{{ .db_user_id }}"
+
+  # Step 8: Verification Loop (5 attempts with 1-hour interval for replication lag)
+  - iterate:
+      id: verify_deletion
+      max: 5
+      over: null
+      steps:
+        - step:
+            id: verify_db_deletion
+            type: cli
+            title: "Verify database deletion (attempt {{ .iteration }}/5)"
+            command: psql
+            args:
+              - "-h"
+              - "prod-db"
+              - "-c"
+              - "SELECT count(*) FROM users WHERE email=current_setting('app.search_email');"
+            capture:
+              db_count: stdout
+
+        - step:
+            id: verify_analytics_deletion
+            type: extension
+            title: Verify analytics deletion
+            extension:
+              name: mixpanel
+              action: get-user-profile
+              args:
+                email: "{{ .customer_email }}"
+            capture:
+              analytics_still_exists: json.found
+
+        - step:
+            id: check_verification_pass
+            type: branch
+            title: Check if all verifications pass
+            branches:
+              - condition: 'db_count == "0" && !analytics_still_exists'
+                label: All deletions verified
+                steps:
+                  - step:
+                      id: mark_verified
+                      type: cli
+                      title: Mark deletion as verified
+                      command: echo
+                      args: ["All deletions verified"]
+                      continue_on_fail: false # exit iterate
+
+        - step:
+            id: wait_one_hour
+            type: cli
+            title: Wait 1 hour (replication lag)
+            command: sleep
+            args: ["3600"]
+
+  # Step 9: Generate Deletion Certificate
+  - step:
+      id: generate_deletion_certificate
+      type: extension
+      title: Generate deletion certificate PDF
+      extension:
+        name: certificate-generator
+        action: generate-gdpr-certificate
+        args:
+          request_id: "{{ .deletion_request_id }}"
+          customer_email: "{{ .customer_email }}"
+          # GAP: Cryptographic signing of PDF certificate not natively supported in schema
+      capture:
+        certificate_path: json.certificate_path
+
+  # Step 10: DPO Attestation
+  - step:
+      id: dpo_attestation
+      type: collector
+      title: DPO attestation of completed deletion
+      prompt: |
+        Deletion request {{ .deletion_request_id }} completed.
+        Certificate: {{ .certificate_path }}
+        
+        Attest that data deletion is complete and verified?
+      fields:
+        - name: dpo_attested
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [data-protection-officer]
+
+  # Step 11: Notify Customer
+  - step:
+      id: notify_customer
+      type: extension
+      title: Send deletion confirmation to customer
+      extension:
+        name: email-sender
+        action: send-with-attachment
+        args:
+          to: "{{ .customer_email }}"
+          subject: "Your data deletion request has been completed"
+          attachment: "{{ .certificate_path }}"
+
+  # Step 12: Update Compliance Log
+  - step:
+      id: update_compliance_log
+      type: extension
+      title: Update GDPR compliance log
+      extension:
+        name: compliance-db
+        action: record-completion
+        args:
+          request_id: "{{ .deletion_request_id }}"
+          request_timestamp: "{{ .request_timestamp }}"
+          # GAP: Schema cannot natively compute request duration and compare to 30-day SLA
+          # GAP: SLA violation flag (deletion took >30 days) requires runtime computation
+
+  # Step 13: Close Deletion Request
+  - step:
+      id: close_deletion_request
+      type: extension
+      title: Close deletion request and archive evidence
+      extension:
+        name: compliance-db
+        action: close-request
+        args:
+          request_id: "{{ .deletion_request_id }}"
+          status: completed
+
+  - step:
+      id: notify_privacy_team
+      type: extension
+      title: Notify privacy team of completion
+      extension:
+        name: slack
+        action: send-message
+        args:
+          channel: "#privacy-team"
+          message: "GDPR deletion request {{ .deletion_request_id }} completed for {{ .customer_email }}"
+
+  - step:
+      id: complete
+      type: end
+      title: GDPR data deletion complete
+      outcome:
+        category: resolved
+        code: gdpr_deletion_complete

@@ -1,0 +1,503 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: fda-medical-device-release
+name: Medical Device Software Release (FDA/Quality)
+kind: reference
+description: |
+  Releases software update for FDA-regulated Class II medical device.
+  Multi-party attestation across quality, risk, clinical, security, and
+  regulatory affairs. Supports Letter to File and Special 510(k) paths.
+
+inputs:
+  software_version:
+    type: string
+    required: true
+    description: Software version being released (e.g. 2.3.1)
+    from: prompt
+  affects_clinical_functionality:
+    type: string
+    required: true
+    description: Does this release affect clinical functionality? (yes/no)
+    from: prompt
+
+governance:
+  rules:
+    - effects: ["qms.read"]
+      action: allow
+    - effects: ["manufacturing.release", "fda.submit"]
+      action: require-approval
+      min_approvers: 2
+      roles: [quality-manager, ceo]
+  # GAP: No 21 CFR Part 11 signature metadata (certificate thumbprint, algorithm, timestamp)
+  #      schema's approvals only record role + timestamp, not cryptographic signature data
+
+flow:
+  # Step 1: Design Verification Review
+  - step:
+      id: design_verification_review
+      type: collector
+      title: QA attestation — design verification per IEC 62304
+      prompt: |
+        Attest that design verification testing is complete for software version {{ .software_version }}.
+      fields:
+        - name: unit_tests_passed
+          type: text
+          label: Unit tests passed (>95% coverage)? (yes/no)
+          required: true
+        - name: integration_tests_passed
+          type: text
+          label: Integration tests passed? (yes/no)
+          required: true
+        - name: system_tests_passed
+          type: text
+          label: System tests passed? (yes/no)
+          required: true
+        - name: traceability_updated
+          type: text
+          label: Traceability matrix updated? (yes/no)
+          required: true
+        - name: test_results_uploaded
+          type: text
+          label: Test results uploaded to QMS? (yes/no)
+          required: true
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [quality-assurance]
+        timeout_business_days: 5
+        timezone: "America/New_York"
+        on_timeout: escalate
+        escalate_to: [qa-manager]
+
+  # Step 2: Risk Analysis Verification
+  - step:
+      id: risk_analysis_verification
+      type: collector
+      title: Risk management attestation per ISO 14971
+      prompt: |
+        Attest that risk analysis is complete for software version {{ .software_version }}.
+      fields:
+        - name: hazard_analysis_complete
+          type: text
+          label: Hazard analysis completed? (yes/no)
+          required: true
+        - name: risk_controls_implemented
+          type: text
+          label: Risk control measures implemented? (yes/no)
+          required: true
+        - name: residual_risks_accepted
+          type: text
+          label: Residual risks evaluated and accepted? (yes/no)
+          required: true
+        - name: risk_file_updated
+          type: text
+          label: Risk management file updated? (yes/no)
+          required: true
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [risk-management]
+        timeout_business_days: 5
+        timezone: "America/New_York"
+        on_timeout: escalate
+        escalate_to: [risk-manager]
+
+  # Step 3: Clinical Validation (conditional)
+  - step:
+      id: clinical_validation
+      type: collector
+      title: Clinical validation attestation
+      when: 'affects_clinical_functionality == "yes"'
+      prompt: |
+        Attest that clinical validation demonstrates safety and efficacy for v{{ .software_version }}.
+      fields:
+        - name: clinical_study_complete
+          type: text
+          label: Clinical study completed (if required)? (yes/no)
+          required: true
+        - name: clinical_data_analyzed
+          type: text
+          label: Clinical data analyzed? (yes/no)
+          required: true
+        - name: no_adverse_events
+          type: text
+          label: No adverse events reported? (yes/no)
+          required: true
+        - name: clinical_report_uploaded
+          type: text
+          label: Clinical validation report uploaded to QMS? (yes/no)
+          required: true
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [clinical-affairs]
+        timeout_business_days: 10
+        timezone: "America/New_York"
+        on_timeout: escalate
+        escalate_to: [clinical-manager]
+
+  # Step 4: Cybersecurity Assessment
+  - step:
+      id: cybersecurity_assessment
+      type: collector
+      title: Cybersecurity attestation per FDA guidance
+      prompt: |
+        Attest that cybersecurity risks are mitigated for v{{ .software_version }}.
+      fields:
+        - name: threat_modeling_complete
+          type: text
+          label: Threat modeling completed? (yes/no)
+          required: true
+        - name: vuln_scan_passed
+          type: text
+          label: Vulnerability scanning passed? (yes/no)
+          required: true
+        - name: pentest_complete
+          type: text
+          label: Penetration testing completed? (yes/no)
+          required: true
+        - name: security_controls_implemented
+          type: text
+          label: Security controls implemented? (yes/no)
+          required: true
+        - name: cbom_generated
+          type: text
+          label: Cybersecurity bill of materials (CBOM) generated? (yes/no)
+          required: true
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [security-team]
+        timeout_business_days: 5
+        timezone: "America/New_York"
+        on_timeout: escalate
+        escalate_to: [security-manager]
+
+  # Step 5: Regulatory Affairs Review
+  - step:
+      id: regulatory_affairs_review
+      type: choice
+      title: Regulatory submission determination
+      prompt: |
+        Determine the regulatory submission requirement for software v{{ .software_version }}.
+        Review: design verification, risk analysis, clinical validation, cybersecurity.
+        
+        Select submission type:
+      options:
+        - label: "No submission — Minor change, exempt per FDA guidance"
+          value: no_submission
+        - label: "Letter to File — Moderate change, document in DHF"
+          value: letter_to_file
+        - label: "Special 510(k) — Significant change, submit to FDA"
+          value: special_510k
+      variable: submission_type
+      approvals:
+        min: 1
+        roles: [regulatory-affairs]
+        timeout_business_days: 5
+        timezone: "America/New_York"
+        on_timeout: fail
+
+  # Step 6: Branch by Submission Type
+  - step:
+      id: branch_submission_type
+      type: branch
+      title: Route by submission type
+      branches:
+        # Branch: No Submission (skip to manufacturing approval)
+        - condition: 'submission_type == "no_submission"'
+          label: No submission required
+          steps:
+            - step:
+                id: no_submission_note
+                type: cli
+                title: Record no-submission determination
+                command: echo
+                args:
+                  - "No FDA submission required for v{{ .software_version }}. Exempt per FDA guidance."
+
+        # Branch: Letter to File
+        - condition: 'submission_type == "letter_to_file"'
+          label: Letter to File
+          steps:
+            - step:
+                id: generate_letter_to_file
+                type: extension
+                title: Generate letter to file
+                extension:
+                  name: document-generator
+                  action: generate-ltf
+                  args:
+                    version: "{{ .software_version }}"
+                capture:
+                  ltf_document_path: json.document_path
+
+            - step:
+                id: upload_ltf_to_qms
+                type: collector
+                title: Upload letter to file to document control
+                prompt: |
+                  Upload the generated letter to file to the document control system.
+                  Document path: {{ .ltf_document_path }}
+                fields:
+                  - name: ltf_uploaded
+                    type: text
+                    label: Letter to file uploaded to QMS? (yes/no)
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [regulatory-affairs]
+
+            - step:
+                id: quality_manager_ltf_signature
+                type: collector
+                title: Quality manager signature on LTF
+                prompt: |
+                  Quality manager signature required on Letter to File for v{{ .software_version }}.
+                fields:
+                  - name: ltf_approved
+                    type: text
+                    label: "Type 'sign' to apply signature"
+                    required: true
+                  # GAP: No 21 CFR Part 11 signature metadata (certificate, timestamp, algorithm)
+                approvals:
+                  min: 1
+                  roles: [quality-manager]
+
+        # Branch: Special 510(k)
+        - condition: 'submission_type == "special_510k"'
+          label: Special 510(k) Submission
+          steps:
+            - step:
+                id: prepare_510k_package
+                type: collector
+                title: Prepare 510(k) submission package
+                prompt: |
+                  Compile 510(k) submission per FDA template for v{{ .software_version }}.
+                fields:
+                  - name: software_description
+                    type: file
+                    label: Software description document
+                    required: true
+                  - name: vv_report
+                    type: file
+                    label: Verification and validation report
+                    required: true
+                  - name: risk_analysis_doc
+                    type: file
+                    label: Risk analysis document
+                    required: true
+                  - name: cybersecurity_doc
+                    type: file
+                    label: Cybersecurity documentation
+                    required: true
+                  - name: labeling_doc
+                    type: file
+                    label: Labeling document
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [regulatory-affairs]
+                  timeout_business_days: 30
+                  timezone: "America/New_York"
+                  on_timeout: fail
+
+            - step:
+                id: quality_manager_510k_review
+                type: collector
+                title: Quality manager review of 510(k)
+                prompt: |
+                  Quality manager review of 510(k) submission package for v{{ .software_version }}.
+                fields:
+                  - name: qm_approved
+                    type: text
+                    label: "Type 'approve' to confirm"
+                    required: true
+                  # GAP: No 21 CFR Part 11 signature metadata
+                approvals:
+                  min: 1
+                  roles: [quality-manager]
+
+            - step:
+                id: ceo_signature_510k
+                type: collector
+                title: CEO signature as legally responsible party
+                prompt: |
+                  CEO signature required as legally responsible party for FDA 510(k) submission.
+                  Version: {{ .software_version }}
+                fields:
+                  - name: ceo_signed
+                    type: text
+                    label: "Type 'sign' as legally responsible party"
+                    required: true
+                  # GAP: No 21 CFR Part 11 signature metadata (certificate thumbprint, algorithm)
+                approvals:
+                  min: 1
+                  roles: [ceo]
+
+            - step:
+                id: submit_to_fda
+                type: extension
+                title: Submit 510(k) to FDA eSTAR portal
+                extension:
+                  name: fda-estar
+                  action: submit-510k
+                  args:
+                    version: "{{ .software_version }}"
+                capture:
+                  fda_submission_id: json.submission_id
+                contract:
+                  effects: ["fda.submit"]
+
+            # Step 8e: Wait for FDA Clearance
+            # GAP: FDA clearance (90+ days) requires external event trigger (webhook from FDA portal).
+            #      Schema has no "wait_for_event" or "pause_until_webhook" step type.
+            #      Workaround: manual step asking operator to check FDA status periodically.
+            - step:
+                id: wait_fda_clearance
+                type: collector
+                title: Monitor FDA review and await clearance
+                prompt: |
+                  FDA Submission ID: {{ .fda_submission_id }}
+                  
+                  Monitor FDA review status at: https://www.accessdata.fda.gov/
+                  
+                  This step may remain open for up to 90 days (FDA statutory review period).
+                  Update when FDA clearance is received.
+                  
+                  # GAP: Cannot pause runbook and resume on FDA webhook event.
+                  #      This is modeled as a human-acknowledged wait step.
+                fields:
+                  - name: fda_cleared
+                    type: text
+                    label: FDA clearance received? (yes/no)"
+                    required: true
+                  - name: fda_clearance_number
+                    type: text
+                    label: FDA clearance number (K-number)
+                    required: false
+                approvals:
+                  min: 1
+                  roles: [regulatory-affairs]
+                  timeout: 2160h # 90 days in hours
+                  on_timeout: fail
+
+  # Step 9: Document Control
+  - step:
+      id: document_control
+      type: extension
+      title: Update document control system
+      extension:
+        name: document-management
+        action: archive-dhf
+        args:
+          version: "{{ .software_version }}"
+          submission_type: "{{ .submission_type }}"
+
+  # Step 10: Manufacturing Release Approval (dual: QM + CEO)
+  - step:
+      id: manufacturing_release_approval
+      type: collector
+      title: Manufacturing release approval (Quality Manager + CEO)
+      prompt: |
+        All attestations complete for software v{{ .software_version }}.
+        Submission type: {{ .submission_type }}
+        
+        BOTH Quality Manager AND CEO must approve release to manufacturing.
+      fields:
+        - name: release_approved
+          type: text
+          label: "Type 'release' to approve"
+          required: true
+        # GAP: No 21 CFR Part 11 signature metadata
+      approvals:
+        min: 2
+        roles: [quality-manager, ceo]
+        timeout_business_days: 5
+        timezone: "America/New_York"
+        on_timeout: fail
+
+  # Step 11: Sign SBOM
+  - step:
+      id: sign_sbom
+      type: cli
+      title: Generate and sign SBOM (SPDX format)
+      command: bash
+      args:
+        - "-c"
+        - "syft packages . -o spdx-json > sbom.spdx.json && cosign sign-blob sbom.spdx.json --output-signature sbom.sig"
+      capture:
+        sbom_path: stdout
+      # GAP: Private key management for code signing not addressable in schema
+
+  # Step 12: Build Release Artifact
+  - step:
+      id: build_release
+      type: cli
+      title: Build signed release artifact
+      command: bash
+      args:
+        - "-c"
+        - "./build-release.sh {{ .software_version }}"
+      capture:
+        release_artifact_path: stdout
+        release_artifact_hash: stdout
+
+  # Step 13: Release to Manufacturing
+  - step:
+      id: release_to_manufacturing
+      type: extension
+      title: Notify manufacturing team
+      extension:
+        name: manufacturing-notify
+        action: release
+        args:
+          version: "{{ .software_version }}"
+          artifact_path: "{{ .release_artifact_path }}"
+          artifact_hash: "{{ .release_artifact_hash }}"
+      contract:
+        effects: ["manufacturing.release"]
+
+  # Step 14: Post-Market Surveillance Setup
+  - step:
+      id: post_market_surveillance
+      type: extension
+      title: Configure post-market surveillance
+      extension:
+        name: telemetry-config
+        action: configure-version-monitoring
+        args:
+          version: "{{ .software_version }}"
+
+  # Step 15: Close Release Record
+  - step:
+      id: close_release_record
+      type: extension
+      title: Record release in PLM system with 10-year archive
+      extension:
+        name: plm-system
+        action: close-release-record
+        args:
+          version: "{{ .software_version }}"
+          submission_id: "{{ .fda_submission_id }}"
+          # GAP: 10-year retention policy not expressible in schema; handled by PLM system externally
+
+  - step:
+      id: complete
+      type: end
+      title: Medical device software release complete
+      outcome:
+        category: resolved
+        code: release_complete

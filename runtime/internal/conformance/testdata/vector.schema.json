@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yawr.internal/conformance/yawr.vector-schema/v1",
+  "title": "YAWR Conformance Test Vector Schema",
+  "description": "Validates every file in design/yawr/conformance/tv-*.yaml. This schema IS the contract between the corpus author (Tess) and Phase 2 implementers (Go parser, C# parser). Any vector that does not validate against this schema MUST NOT be executed by a conformance harness. See spec/grammar/gxl.ebnf §6 for error code definitions.",
+  "type": "object",
+  "required": ["vectors"],
+  "additionalProperties": false,
+  "properties": {
+    "vectors": {
+      "type": "array",
+      "description": "Ordered list of test vectors. IDs must be globally unique and sequential within their file.",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/TestVector" }
+    }
+  },
+
+  "$defs": {
+    "TestVector": {
+      "type": "object",
+      "description": "A single, deterministic, self-contained test case. Every field is normative. 'note' is non-normative.",
+      "required": ["id", "category", "description", "input", "variables", "expected"],
+      "additionalProperties": false,
+      "properties": {
+
+        "id": {
+          "type": "string",
+          "description": "Globally unique test vector identifier. Pattern: TV-<LANG>-<GROUP>(-<SUBGROUP>)*-<NNN>. Examples: TV-GXL-PARSE-001, TV-GIS-INTERP-042, TV-GCP-RESOLVE-007. Numeric suffix is zero-padded to ≥3 digits and sequential within its file.",
+          "pattern": "^TV-(GXL|GIS|GCP|CONFORM)-[A-Z]+(-[A-Z0-9]+)*-\\d{3,4}$"
+        },
+
+        "category": {
+          "type": "string",
+          "description": "Coverage category from Barbara's Phase 1 plan §3 (barbara-gxl-phase1-plan.md). Each category maps to a distinct runtime concern. GXL-FUNC is a Tess proposal (see .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md) — Barbara must ratify before Phase 2.",
+          "enum": [
+            "GXL-PARSE",
+            "GXL-EVAL",
+            "GXL-PATH",
+            "GXL-ERROR",
+            "GXL-FUNC",
+            "GIS-INTERP",
+            "GIS-PATH",
+            "GIS-TYPE",
+            "GCP-PARSE",
+            "GCP-RESOLVE",
+            "GCP-DEFAULT",
+            "NAMESPACE",
+            "CONFORM-CROSSCUT"
+          ]
+        },
+
+        "description": {
+          "type": "string",
+          "description": "One sentence (≤200 chars) stating exactly what invariant this vector pins down. No vague phrases like 'tests parsing'. Be specific: 'Parser accepts a float literal with negative exponent (scientific notation).'",
+          "maxLength": 200
+        },
+
+        "input": {
+          "type": "string",
+          "description": "The raw expression, template, or path string under test — exactly as it would appear in the relevant YAML runbook field (after YAML decoding but before GXL/GIS/GCP parsing). Must be deterministic: no timestamps, env vars, randomness."
+        },
+
+        "variables": {
+          "type": "object",
+          "description": "The variable context map supplied to the evaluator. JSON value model only: null, boolean, number, string, array, object. No special types (no date, no binary). For parse-only vectors where evaluation is not performed, use {} (empty object). Keys must be valid GXL identifiers (ASCII, not a keyword).",
+          "additionalProperties": {
+            "description": "Any JSON-model value: null, boolean, number (IEEE 754 double, finite), string (UTF-8), array, or object. NaN and Infinity are forbidden.",
+            "$ref": "#/$defs/JsonValue"
+          }
+        },
+
+        "expected": {
+          "description": "The normative outcome of this vector. EITHER a success result (value) OR a failure result (error_class + error_code). These two shapes are mutually exclusive — a vector cannot be both a success and a failure.",
+          "oneOf": [
+            { "$ref": "#/$defs/SuccessExpected" },
+            { "$ref": "#/$defs/ErrorExpected" }
+          ]
+        },
+
+        "note": {
+          "type": "string",
+          "description": "Non-normative. Explanation for human readers (contributors, reviewers). Does NOT affect vector semantics. Use for: citing grammar section, explaining edge case rationale, referencing a related open issue."
+        },
+
+        "tags": {
+          "type": "array",
+          "description": "Machine-readable labels for coverage filtering. Examples: 'short-circuit', 'unicode', 'negative-zero', 'OQ1', 'OQ2'. Used by harness --filter flag.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+
+    "SuccessExpected": {
+      "type": "object",
+      "description": "The input must parse/evaluate successfully and produce the given value or satisfy a deterministic assertion. For TV-GXL-PARSE vectors, value MUST be the string 'parse_ok' (AST shape is implementation-defined). For non-deterministic results, type/assert/pattern pins the contract without requiring exact equality.",
+      "oneOf": [
+        { "required": ["value"] },
+        { "required": ["type", "assert", "pattern"] }
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "The expected result. 'parse_ok' for parse-only vectors. Any JSON value for evaluation vectors.",
+          "$ref": "#/$defs/JsonValue"
+        },
+        "type": {
+          "type": "string",
+          "description": "Expected PJVM type when the vector uses an assertion instead of exact equality.",
+          "enum": ["null", "boolean", "number", "string", "array", "object"]
+        },
+        "assert": {
+          "type": "string",
+          "description": "Assertion kind applied by the conformance harness to the produced value.",
+          "enum": ["regex"]
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression pattern used when assert is 'regex'."
+        }
+      }
+    },
+
+    "ErrorExpected": {
+      "type": "object",
+      "description": "The input must fail with exactly this error class and error code. error_class is the family prefix (e.g., 'GXL-PARSE'). error_code is the specific code (e.g., 'GXL-PARSE-007'). Both MUST match an error declared in the corresponding grammar file (gxl.ebnf §6, gis.ebnf §5, gcp.ebnf §5). If the grammar is silent, use error_code 'TBD' and set note: 'expected_status: undecided'.",
+      "required": ["error_class", "error_code"],
+      "additionalProperties": false,
+      "properties": {
+        "error_class": {
+          "type": "string",
+          "description": "Error family prefix. Must be one of: GXL-PARSE, GXL-TYPE, GXL-PATH, GXL-EVAL, GIS-PARSE, GIS-PATH, GIS-TYPE, GIS-EVAL, GCP-PARSE, GCP-RESOLVE, GCP-DEFAULT, GCP-TYPE, GCP-EVAL.",
+          "enum": [
+            "GXL-PARSE",
+            "GXL-TYPE",
+            "GXL-PATH",
+            "GXL-EVAL",
+            "GXL-DATE",
+            "GXL-ORDER",
+            "GIS-PARSE",
+            "GIS-PATH",
+            "GIS-TYPE",
+            "GIS-EVAL",
+            "GCP-PARSE",
+            "GCP-RESOLVE",
+            "GCP-DEFAULT",
+            "GCP-TYPE",
+            "GCP-EVAL"
+          ]
+        },
+        "error_code": {
+          "type": "string",
+          "description": "The precise error code from the grammar's error catalog (§6). Pattern: <CLASS>-<NNN>, special catalog symbols such as GIS-PATH-MISSING or GCP-DEFAULT-SUBTREE, or 'TBD' for undecided vectors requiring Barbara arbitration. Examples: 'GXL-PARSE-007', 'GXL-TYPE-001', 'GIS-PATH-MISSING', 'GCP-RESOLVE-004'.",
+          "pattern": "^(GXL|GIS)-(PARSE|TYPE|PATH|EVAL)-\\d{3}$|^GXL-(DATE|ORDER)-\\d{3}$|^GCP-(PARSE|RESOLVE|TYPE)-\\d{3}$|^GIS-PATH-MISSING$|^GCP-DEFAULT-SUBTREE$|^TBD$"
+        },
+        "timing": {
+          "type": "string",
+          "description": "Normative phase at which the error is raised when a vector needs parse/eval timing parity.",
+          "enum": ["parse-time", "eval-time"]
+        }
+      }
+    },
+
+    "JsonValue": {
+      "description": "Any value in the YAWR Portable JSON Value Model (OQ3 — see gis.ebnf §PJVM): null, boolean, number (finite IEEE 754 double), string (UTF-8), array of JSON values, or object with string keys and JSON values. NaN and Infinity are explicitly excluded.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JsonValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/JsonValue" }
+        }
+      ]
+    }
+  }
+}

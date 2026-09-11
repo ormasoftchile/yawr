@@ -1,0 +1,3 @@
+apiVersion: yawr.config/v1
+requires:
+  - {package: acme.structured-values, version: "^1.0.0", path: .}
