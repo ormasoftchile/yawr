@@ -10,6 +10,7 @@ if (!supported.has(mode)) {
 }
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const repositoryRoot = resolve(root, '..', '..');
 const disposableRoot = join(root, '.vscode-test', 'lifecycle');
 const vsixPath = mode === 'package'
   ? join(root, 'yawr-preview.vsix')
@@ -92,7 +93,8 @@ try {
 } finally {
   await restoreFiles(snapshot);
   try {
-    await run('git', ['add', '--refresh', '--', ...trackedGeneratedFiles]);
+    const repositoryPaths = trackedGeneratedFiles.map((path) => join('apps', 'vscode', path));
+    await run('git', ['-C', repositoryRoot, 'add', '--refresh', '--', ...repositoryPaths]);
   } catch {}
   await rm(join(root, 'out'), { recursive: true, force: true });
   await rm(join(root, '.vscode-test'), { recursive: true, force: true });
