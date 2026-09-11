@@ -18,6 +18,7 @@
         "quality": "Quality",
         "identity": "Identity",
         "sanitizer": "Sanitizer",
+        "modernizer": "Modernizer",
         "tester": "Tester",
         "scribe": "Scribe",
         "ralph": "Ralph",

@@ -14,6 +14,7 @@ How to decide who handles what for Lightweight workflow runtime.
 | Non-vacuous mutation tests, concurrency isolation, final rejected-test repairs | Quality | Test Integrity Engineer |
 | Semantic identity removal, protocol cleanup, isolated package validation | Identity | Identity Purge Engineer |
 | Compatibility-code removal, repository tracking, clean provenance | Sanitizer | Repository Sanitization Engineer |
+| Remove obsolete format fallbacks and approval bypasses | Modernizer | Legacy Format Purge Implementation Specialist |
 | Executable specifications, adversarial cases, non-vacuity | Tester | Conformance Tester |
 | Decisions, memory, and session records | Scribe | Session Logger |
 | Backlog and continuous work coordination | Ralph | Work Monitor |
@@ -30,7 +31,8 @@ How to decide who handles what for Lightweight workflow runtime.
 6. Quality owns non-vacuous mutation and concurrency-isolation repairs after reviewer rejection.
 7. Identity owns semantic legacy-identity removal and isolated package validation after purge rejection.
 8. Sanitizer owns removal of neutral-named compatibility code and clean repository provenance after final purge rejection.
-9. Scribe records decisions and propagates durable context without performing domain work.
-10. Ralph monitors work continuity and backlog state without inventing backlog items.
-11. Rai reviews safety and responsible-release concerns; Fact Checker verifies claims and assumptions.
-12. Apply the team principles: fail closed, minimize blast radius, prove real production paths, reject vacuous tests, and separate contracts from implementations.
+9. Modernizer owns deletion of executable old-format fallbacks and approval bypasses after final sanitization rejection.
+10. Scribe records decisions and propagates durable context without performing domain work.
+11. Ralph monitors work continuity and backlog state without inventing backlog items.
+12. Rai reviews safety and responsible-release concerns; Fact Checker verifies claims and assumptions.
+13. Apply the team principles: fail closed, minimize blast radius, prove real production paths, reject vacuous tests, and separate contracts from implementations.

@@ -20,6 +20,7 @@
 | 🧪 Quality | Test Integrity Engineer | Non-vacuous mutation tests, concurrency isolation, final rejected-test repairs | active |
 | ⚙️ Identity | Identity Purge Engineer | Semantic identity removal, protocol cleanup, isolated package validation | active |
 | ⚙️ Sanitizer | Repository Sanitization Engineer | Compatibility-code removal, repository tracking, clean provenance | active |
+| 🔧 Modernizer | Legacy Format Purge Implementation Specialist | Remove obsolete format fallbacks and approval bypasses | active |
 | 🧪 Tester | Conformance Tester | Executable specifications, adversarial cases, non-vacuity | active |
 | 📋 Scribe | Session Logger | Decisions, memory, and session records | active |
 | 🔄 Ralph | Work Monitor | Backlog and continuous work coordination | active |
