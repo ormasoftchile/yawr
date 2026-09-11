@@ -145,7 +145,7 @@ test('C2: editor/context menu has no runbook entry (yawr.runAuthenticated remove
 
 test('C3: bridge never logs or echoes invocation arguments (sentinel probe)', async (t) => {
   // Distinctive sentinel that must not leak out of the invocation path.
-  const SECRET_ARG_VALUE = 'CRISTIANO_SECRET_SENTINEL_xQ9zAb3K_DO_NOT_LEAK';
+  const SECRET_ARG_VALUE = 'PRIVATE_ARGUMENT_SENTINEL_xQ9zAb3K_DO_NOT_LEAK';
 
   const logLines = [];
   const output   = { appendLine: (s) => logLines.push(s) };

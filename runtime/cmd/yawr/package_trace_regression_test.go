@@ -8,7 +8,7 @@ import (
 )
 
 // TestRun_PackageMap_TraceRecordsConstraintSourcesAndOrigin is a regression
-// test for §3 items 1 and 9 of Barbara's gate review:
+// test for package binding and trace behavior:
 //
 //   - item 1: package/resolved's constraintSources field used to be
 //     unconditionally emitted as []string{} even though the project's own

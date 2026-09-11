@@ -4,8 +4,7 @@ import (
 	"testing"
 )
 
-// TestValidateRenderedRef covers every case from Tess's TV-DYN-REF-* catalogue
-// and Barbara's §1.2 rejection rules.
+// TestValidateRenderedRef covers the TV-DYN-REF cases and rejection rules.
 func TestValidateRenderedRef(t *testing.T) {
 	type tc struct {
 		name     string

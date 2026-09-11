@@ -496,7 +496,7 @@ func TestMCPHTTPTransport_ListTools(t *testing.T) {
 	}
 }
 
-// TestMCPHTTPTransport_InitializeError verifies Correction 4 from Ken's recon:
+// TestMCPHTTPTransport_InitializeError verifies initialization error handling:
 // when the server returns a JSON-RPC error on initialize, the transport must
 // fail loudly and NOT mark the session as initialized. This is the defect
 // present in the stdio MCPTransport (which does not inspect the init response)

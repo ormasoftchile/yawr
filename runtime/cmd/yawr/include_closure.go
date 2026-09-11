@@ -11,11 +11,11 @@ import (
 )
 
 // checkIncludeClosureLexicalScoping implements the fail-closed fallback
-// Barbara's gate review explicitly sanctions for §5 ("(b) Fail closed. ...
+// The include contract requires fail-closed behavior.
 // make an included runbook that declares requires: or toolRefs: a hard,
 // typed, diagnosable error, and document the single-file restriction.
 // Silently dynamic-scoped resolution is the one outcome I will not
-// accept"): design/yawr/sections/06-tool-runtime.tex §Includes, Lexical
+// accept"). Include resolution uses lexical
 // Scoping, and Global Package Set rejects dynamic scoping as "the
 // decisive call" because it makes a child runbook's meaning depend on who
 // included it. This runtime revision does not yet implement full

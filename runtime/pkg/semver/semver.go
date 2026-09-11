@@ -1,6 +1,6 @@
 // Package semver implements strict SemVer 2.0.0 parsing, ordering, and the
 // small conjunctive constraint grammar defined in
-// design/yawr/sections/06-tool-runtime.tex §Version Constraint Grammar.
+// The current version constraint grammar.
 //
 // This is deliberately not a general-purpose SemVer library: it implements
 // exactly the subset ratified for the YAWR Tool Packages MVP (AR-TP-4) —

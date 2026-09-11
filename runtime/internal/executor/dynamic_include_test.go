@@ -835,7 +835,7 @@ func TestDynamic_ChildChainExtended(t *testing.T) {
 	}
 }
 
-// --- sibling step depth (regression from Stream 2: dynamic sites must not push/pop exec depth) ---
+// --- Sibling step depth: dynamic sites must not push or pop execution depth. ---
 // This is covered at the planner level; at executor level we verify the static path still works.
 
 // --- helpers ---

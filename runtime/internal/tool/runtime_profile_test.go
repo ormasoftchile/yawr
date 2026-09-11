@@ -5,9 +5,7 @@ package tool
 // runtime behaviour and MUST FAIL if the production read of
 // override.Endpoint in DefaultToolRuntime.Invoke is removed.
 //
-// Convention: "TestCLI_<Feature>_Reachable" per Ken's convention; written
-// standalone (not yet using a shared helper) as agreed in David's decision
-// record.
+// The test is standalone so its fixture remains explicit.
 
 import (
 	"context"

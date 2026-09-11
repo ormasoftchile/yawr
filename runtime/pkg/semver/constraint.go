@@ -51,7 +51,7 @@ var unsupportedPatterns = []struct {
 }
 
 // ParseConstraint parses a version constraint per the MVP grammar
-// (design/yawr/sections/06-tool-runtime.tex §Version Constraint Grammar).
+// by the current version constraint grammar.
 // Returns a PKG-003 error for any malformed or unsupported form.
 func ParseConstraint(s string) (Constraint, error) {
 	trimmed := s
@@ -197,7 +197,7 @@ func tildeRange(ver Version) (Version, Version) {
 
 // Intersect returns a Constraint whose comparator list is the concatenation
 // of c and other's comparators (i.e. the AND of both), per
-// design/yawr/sections/06-tool-runtime.tex's rule that project- and
+// the rule that project and
 // runbook-level requires: constraints on the same package are intersected.
 // The caller is responsible for detecting an empty (unsatisfiable)
 // intersection by testing candidate versions against Satisfies.

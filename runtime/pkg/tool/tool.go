@@ -45,7 +45,7 @@ type ToolDef struct {
 	// SourcePath is the absolute path of the .tool.yaml this definition was
 	// parsed from. Empty for tier-0 (compiled-in builtin) definitions.
 	// Required to resolve a substituted action's execute.path
-	// (design/yawr/sections/06-tool-runtime.tex Table tab:tool-path-bases:
+	// Path base:
 	// KindExecutePath resolves relative to the declaring .tool.yaml).
 	SourcePath string
 	// PackageRoot is the absolute root directory execute.path is contained
@@ -58,7 +58,7 @@ type ToolDef struct {
 	// (pkg/pkgsubst.Frame) and trace provenance.
 	PackageName string
 	// Governance is this tool definition's own governance block
-	// (design/yawr/sections/06-tool-runtime.tex §Tool Definition Schema),
+	// Tool definition contract:
 	// the starting point for a substituted action's governance composition
 	// (pkg/pkgsubst.EffectiveGovernanceFromTool). Kept as the parsed schema
 	// type directly (rather than a mirrored runtime type) since pkgsubst's
@@ -79,7 +79,7 @@ type ToolAction struct {
 
 	// Execute mirrors schema.ToolAction.Execute: non-nil with
 	// Kind=="runbook" makes this a substituted action
-	// (design/yawr/sections/06-tool-runtime.tex §Action Substitution). Kept
+	// Action substitution metadata. Kept
 	// as the parsed schema type directly since pkgsubst.Plan consumes a
 	// *schema.ToolAction (Execute + Outputs together) as a unit.
 	Execute *schema.ExecuteSpec

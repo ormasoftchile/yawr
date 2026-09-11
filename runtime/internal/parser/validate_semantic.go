@@ -591,7 +591,7 @@ func validateIncludeStep(s *schema.Step, loc string) ValidationErrors {
 		}
 	}
 
-	// expand is rejected on dynamic sites (Barbara's B-14 ruling).
+	// expand is rejected on dynamic sites.
 	if hasDynamic && inc.Expand != "" {
 		errs = append(errs, verr("include/dynamic-expand-forbidden", loc+".include.expand",
 			"'expand' must not be set when 'runbook_ref' is present; dynamic includes are always resolved at execution time"))

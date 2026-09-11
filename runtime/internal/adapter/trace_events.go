@@ -11,7 +11,7 @@ import (
 
 // EmitPackageCatalogTraceEvents writes the package/resolved (one per
 // resolved tier-1 package) and catalog/frozen (once) trace events for a
-// just-built package catalog (design/yawr/sections/07-runtime-events.tex
+// just-built package catalog.
 // §Package and Substitution Events). Callers invoke this once per run,
 // immediately after pkgcatalog.Build/BuildPackageCatalog succeeds and
 // before the engine's own run/started event, using the same runID the
@@ -26,7 +26,7 @@ import (
 // the project/runbook requires: scopes that actually contributed a
 // version: constraint (§4.4, §7.4 of the ratified spec) -- this used to
 // be emitted unconditionally empty; that was a required fix (§3.1 of
-// Barbara's gate review), not an accepted gap.
+// the package contract), not an accepted gap.
 //
 // originByPackage optionally supplies each package's --package-map
 // override provenance ("project" or "package-map", keyed by package

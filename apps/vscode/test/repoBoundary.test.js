@@ -153,7 +153,10 @@ function extractTestGlobs() {
     while ((m = re.exec(cmd)) !== null) {
       globs.push(m[2].replace(/\\/g, '/'));
     }
-
+    const lifecycle = /extension-lifecycle\.mjs\s+unit\s+(['"]?)([^\s'"]+)\1/g;
+    while ((m = lifecycle.exec(cmd)) !== null) {
+      globs.push(m[2].replace(/\\/g, '/'));
+    }
   }
   return globs;
 }
@@ -530,7 +533,9 @@ test('repoBoundary/rule6: every retained product test runner is invoked by root 
   const combinedWorkflowCommands = workflowCommands.join('\n');
 
   const nodeTestScripts = Object.entries(componentPkg.scripts || {})
-    .filter(([, cmd]) => typeof cmd === 'string' && /node\s+--test/.test(cmd))
+    .filter(([, cmd]) => typeof cmd === 'string' && (
+      /node\s+--test/.test(cmd) || /extension-lifecycle\.mjs\s+unit/.test(cmd)
+    ))
     .map(([name]) => name);
   const retainedProductGates = [...new Set([
     ...nodeTestScripts,

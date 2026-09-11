@@ -24,7 +24,7 @@ type LockedPackage struct {
 // (apiVersion: yawr.package-lock/v1). This is a generated, committed, frozen
 // integrity record — not a solver output. See
 // spec/schema-candidates/yawr-private-1990a6c/package-lock.v1.schema.json and
-// design/yawr/sections/06-tool-runtime.tex §Package map / lock.
+// Package map and lock contract.
 type PackageLock struct {
 	Schema        string          `yaml:"$schema,omitempty" json:"$schema,omitempty"`
 	APIVersion    string          `yaml:"apiVersion"        json:"apiVersion"`

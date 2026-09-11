@@ -201,7 +201,7 @@ func (t *MCPHTTPTransport) initialize(ctx context.Context) error {
 	}
 
 	// Unlike stdio MCPTransport (which marks initialized before inspecting the
-	// response — see Ken's recon, defect noted but unfixed in stdio), we check
+	// response, we check
 	// the response for a protocol error before marking the session live.
 	initResp, err := t.doRequest(ctx, initReq, id)
 	if err != nil {

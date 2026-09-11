@@ -8,7 +8,7 @@ import (
 )
 
 // TestRun_Substitution_LiveSubstitutedAction is a live CLI integration test
-// for action substitution (design/yawr/sections/06-tool-runtime.tex
+// for action substitution.
 // §Action Substitution): a package-exported tool declares an action whose
 // execute.kind is "runbook"; the substitute runbook lives inside the
 // package, is planned via pkg/pkgsubst.Plan (input contract, governance
@@ -33,7 +33,7 @@ exports:
 
 	// The declaring tool file's execute.path resolves relative to its own
 	// directory (tools/), never the workspace or the calling runbook
-	// (design/yawr/sections/06-tool-runtime.tex Table tab:tool-path-bases).
+	// Path bases must remain stable.
 	writeFile(t, filepath.Join(pkgDir, "tools", "diagnostics.tool.yaml"), `apiVersion: yawr.tool/v1
 meta:
   name: diagnostics

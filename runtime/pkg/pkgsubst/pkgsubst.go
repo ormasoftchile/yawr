@@ -1,9 +1,9 @@
 // Package pkgsubst implements action-substitution planning
-// (design/yawr/sections/06-tool-runtime.tex §Action Substitution): given a
+// Given a
 // tool action whose execute.kind is "runbook", it resolves the substitute
 // runbook's file, validates the input/output contract, detects cycles and
 // excessive nesting depth, and composes the effective governance policy per
-// design/yawr/sections/12-governance-policy.tex §Substitution Governance
+// Substitution governance
 // Composition. It does not itself execute anything — planning is a pure,
 // static operation performed before any run starts, matching the corpus's
 // "checked statically at plan time" wording throughout tv-pkg-resolve.yaml.
@@ -21,7 +21,7 @@ import (
 )
 
 // MaxDepth is the maximum substitution nesting depth
-// (design/yawr/sections/06-tool-runtime.tex §Action Substitution: "nesting
+// Nesting
 // beyond 4 levels is PKG-028"). Depth 1 is the caller's own directly
 // substituted action; each substitute action that is itself substituted
 // adds one level.
@@ -40,7 +40,7 @@ func (f Frame) String() string {
 }
 
 // EffectiveGovernance is the composed policy for a single substitution
-// frame (design/yawr/sections/12-governance-policy.tex §Substitution
+// frame.
 // Governance Composition table).
 type EffectiveGovernance struct {
 	RequireApproval bool
@@ -180,7 +180,7 @@ func finishPlan(
 }
 
 // validateInputs enforces the exact input-signature contract
-// (design/yawr/sections/06-tool-runtime.tex §Action Substitution): the
+// The
 // substitute's inputs: key set must exactly match the action's args: key
 // set (no extras, no omissions), types must match exactly (no coercion),
 // an action-required arg implies a substitute-required input, and every
@@ -234,7 +234,7 @@ func validateInputs(action *schema.ToolAction, sub *schema.Runbook) []error {
 // validateOutputs enforces the exact output-signature contract: the
 // substitute's outputs: block must exactly match the action's outputs:
 // contract by name and type (PKG-013, no supersets/subsets), and every
-// declared output must be producible — approximated here (as in the Tess
+// declared output must be producible — approximated here (as in the
 // corpus's TV-PKG-SUBST-005 fixtures) by requiring a non-empty value:
 // expression; an output with an empty value: can never be produced on any
 // terminal path, which is PKG-027.
@@ -285,7 +285,7 @@ func validateOutputs(action *schema.ToolAction, sub *schema.Runbook) []error {
 }
 
 // composeGovernance implements the composition table
-// (design/yawr/sections/12-governance-policy.tex §Substitution Governance
+// Substitution governance
 // Composition): require_approval = OR, deny_commands/deny_env_vars/redact =
 // union, allow_commands = intersection. Any allow_commands entry the
 // substitute declares that is absent from the caller-effective set is a

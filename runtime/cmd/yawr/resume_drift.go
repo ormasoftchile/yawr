@@ -21,7 +21,7 @@ import (
 )
 
 // checkResumePackageDrift implements the Package Resumption Contract
-// (design/yawr/sections/13-evidence-tracing-resumption.tex §Package
+// Package
 // Resumption Contract) at the actual `yawr run --resume` boundary: it
 // recomputes the current package/catalog digests exactly the way a fresh
 // run would (same requires:/package-map/project-config resolution as the

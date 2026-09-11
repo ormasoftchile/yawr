@@ -1,7 +1,7 @@
 package tool
 
 // synthetic_contract_proof_test.go — ops-synthetic contract proof for the
-// mcp-http binding and design invariant assertions (Phase 1B Item 4).
+// MCP HTTP binding and design invariant assertions.
 //
 // This file lives in package tool so it can access:
 //   - imdsHTTPClient (unexported) to inject a mock IMDS server into
@@ -401,7 +401,7 @@ tools:
 // TokenGate's allowed-host check is ALWAYS enforced using the tool definition's
 // auth.allowed_hosts, never a profile-supplied substitute.
 //
-// Rule A (ratified in Phase 1B): a profile MAY substitute the auth Provider
+// A profile may substitute the auth provider
 // (WHO acquires the token). It MUST NOT supply or override Scope or
 // AllowedHosts. TokenGate is always constructed from the tool definition's
 // own Auth.Scope / Auth.AllowedHosts (runtime.go, line ~75).

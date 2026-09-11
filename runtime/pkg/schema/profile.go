@@ -184,7 +184,7 @@ func validateProfile(p *RuntimeProfile) error {
 			return fmt.Errorf("runtime profile %q: tool %q sets transport mode %q; profiles must not rewrite transport modes (PROF-001)", p.ID, toolName, override.Mode)
 		}
 	}
-	// Profile ID constraint (Barbara ratified 2026-08-17):
+	// Profile ID constraint:
 	//   pattern:  [a-z0-9][a-z0-9-]*
 	//   max length: 64 characters
 	// Profiles are stored as <id>.yaml so the ID is a filename stem; the
@@ -202,7 +202,7 @@ func validateProfile(p *RuntimeProfile) error {
 }
 
 // profileIDRegexp is the compiled pattern for profile ID validation.
-// Barbara-ratified 2026-08-17: [a-z0-9][a-z0-9-]*, max 64 chars.
+// Profile IDs use [a-z0-9][a-z0-9-]* and are at most 64 characters.
 var profileIDRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 const profileIDMaxLen = 64

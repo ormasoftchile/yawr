@@ -1,6 +1,5 @@
 // Package pkgdrift implements the resume/replay package-integrity decision
-// (design/yawr/sections/13-evidence-tracing-resumption.tex §Package
-// Resumption Contract; design/yawr/sections/07-runtime-events.tex §Package
+// Package resumption
 // and Substitution Events). It is a pure function of recorded vs current
 // digests plus mode/override, so it can be unit-tested independently of the
 // run manifest and trace-writer wiring described in the final report's
@@ -67,7 +66,7 @@ type ReplayDriftEvent struct {
 }
 
 // Evaluate applies the Package Resumption Contract
-// (design/yawr/sections/13-evidence-tracing-resumption.tex §Package
+// Package
 // Resumption Contract) to pairs for the given mode. operator identifies who
 // is running the resume (used only when a drift-accepted event is
 // produced); it is ignored for ModeReplay.

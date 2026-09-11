@@ -1,8 +1,7 @@
 package schema
 
 // Package-level support for the enum string-constraint MVP
-// (design/yawr/sections/03-schema-vnext.tex §Input/§Output Declarations,
-// design/yawr/sections/06-tool-runtime.tex §Tool Definition Schema,
+// Input, output, and tool declarations share
 // AR-ENUM-1..15 in .squad/decisions/inbox/barbara-enum-constraint-mvp-
 // architecture-ruling.md). `enum` is valid at exactly four declaration
 // sites: tool action args.<name> (S1), tool action outputs.<name> (S2),

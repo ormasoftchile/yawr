@@ -38,7 +38,7 @@ func (e notFoundErr) Error() string { return "not found: " + string(e) }
 func errNotFound(path string) error { return notFoundErr(path) }
 
 // baseAction/baseTool/baseSubstitute mirror TV-PKG-SUBST-001's kubectl
-// drain-node fixture (design/yawr/conformance/tv-pkg-resolve.yaml).
+// drain-node fixture.
 func baseAction() *schema.ToolAction {
 	return &schema.ToolAction{
 		Execute: &schema.ExecuteSpec{Kind: "runbook", Path: "../runbooks/drain-node.yaml"},

@@ -135,7 +135,7 @@ flow:
 		t.Fatalf("package/resolved name = %q, want %q", pkgPayload.Name, "acme.trace-tools")
 	}
 	// The package lives under a separate t.TempDir() tree from the
-	// workspace, so it resolves outside the workspace root (Barbara's
+	// workspace, so it resolves outside the workspace root (
 	// TV-PKG-PATH-002 ruling: PKG-W003/external, not a hard failure) --
 	// confirming external is threaded through from pkgpath.ResolveKind
 	// into the package/resolved trace event, not silently dropped.

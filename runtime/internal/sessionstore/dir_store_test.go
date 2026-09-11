@@ -1259,7 +1259,7 @@ func executionProjectionBlob(t *testing.T, runID string, checkpointSequence int6
 	return session.NewJSONBlob(encoded)
 }
 
-func TestDirStoreWriterEpochNeverResetsAfterLegacySidecarDeletion(t *testing.T) {
+func TestDirStoreWriterEpochNeverResetsAfterSidecarDeletion(t *testing.T) {
 	base := t.TempDir()
 	sessionID := uuid.NewString()
 	store := sessionstore.NewDirStore(base)

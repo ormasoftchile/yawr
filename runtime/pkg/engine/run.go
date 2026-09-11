@@ -638,7 +638,7 @@ type PlanMetadata struct {
 	RunbookName        string
 	Extensions         []*schema.ExtensionRef
 	// CatalogDigest is pkgcatalog.Catalog.CatalogDigest() computed for this
-	// plan's frozen package catalog at Phase C (design/yawr/sections/
+	// plan's frozen package catalog.
 	// 13-evidence-tracing-resumption.tex §Package Resumption Contract).
 	// Persisted as part of RunState.Plan (engine.RunStore.SaveState), so
 	// a resume/replay path can recompute the current catalog digest and
@@ -654,10 +654,9 @@ type PlanMetadata struct {
 	// without re-resolving, and by resume to detect drift.
 	DynamicIncludes []schema.LockedDynamicInclude
 	// Profile is the runtime profile loaded from --profile, if one was
-	// supplied. Nil when no profile was provided. Slice 5 (David, Tier 0
-	// static preflight) enforces AllowedEnvironments, attendance, and
-	// test-context transport rules during Plan(). Slice 4 (Ken) consumes
-	// this field at execution time for approval gate decisions.
+	// supplied. Nil when no profile was provided. Static preflight enforces
+	// AllowedEnvironments, attendance, and test-context transport rules during
+	// Plan(). Execution consumes this field for approval gate decisions.
 	// The profile is never used to re-resolve or override which package or
 	// tool definition was selected by --package-map.
 	Profile *schema.RuntimeProfile

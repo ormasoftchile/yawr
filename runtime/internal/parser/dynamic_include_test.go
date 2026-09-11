@@ -314,7 +314,7 @@ func TestIncludeSemantic_SemanticErrorContainsCode(t *testing.T) {
 	_ = strings.Join(errs, "; ")
 }
 
-// ─── B-14: expand rejected on dynamic arm (Barbara's ruling) ─────────────────
+// ─── Expand rejected on dynamic arm ──────────────────────────────────────────
 
 // TestB14_ExpandRejectedSchema verifies schema-level rejection of expand
 // on a dynamic include arm (additionalProperties: false excludes expand
@@ -355,7 +355,7 @@ func TestB14_ExpandAllowedOnStaticArm(t *testing.T) {
 // ─── DINC-013 sentinel smoke test ─────────────────────────────────────────────
 
 // TestDINC013SentinelRegistered is a smoke test that DINC-013 is properly
-// registered in errkit. The sentinel is emitted by Stream 3 (executor/resolver)
+// registered in errkit. The sentinel is emitted by the executor/resolver
 // when a catalog entry is found but the exported file is missing from disk.
 func TestDINC013SentinelRegistered(t *testing.T) {
 	// Importing errkit would create a cross-package test. Instead we verify

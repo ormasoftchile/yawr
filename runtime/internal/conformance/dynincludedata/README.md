@@ -2,7 +2,7 @@
 
 Source: `.squad/decisions/inbox/tess-dynamic-include-vectors.md` as of 2026-08-15.
 
-This directory vendors the **dynamic runbook include** conformance vectors authored by Tess alongside the minimal JSON Schema that validates them.
+This directory contains dynamic runbook include conformance vectors and the minimal JSON Schema that validates them.
 
 ## Status
 

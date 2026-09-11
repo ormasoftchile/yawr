@@ -11,7 +11,7 @@ import (
 // profileEvaluator wraps a base PolicyEvaluator and applies the
 // counterparty-ratified classification matrix from a RuntimeProfile.
 //
-// Resolution contract (matches Slice 4 negotiated rules):
+// Resolution contract:
 //
 //   - nil profile → the base runbook governance evaluator remains authoritative.
 //   - ToolApprovalTriState == &false → denied as an unsupported opt-out.

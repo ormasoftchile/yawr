@@ -8,7 +8,7 @@ import (
 
 func TestEventKindConstants_DynamicInclude(t *testing.T) {
 	// Verify the three dynamic-include event kinds are defined with the
-	// exact wire-format strings (Barbara §7, ruling B-11).
+	// exact wire-format strings.
 	cases := []struct {
 		kind     trace.EventKind
 		expected string

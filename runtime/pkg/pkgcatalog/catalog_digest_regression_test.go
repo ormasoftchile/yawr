@@ -8,8 +8,8 @@ import (
 )
 
 // TestBuild_DigestClosure_SubstituteRunbookByteChange_ChangesPackageDigest
-// is a B2 regression test (Barbara's gate review): the package digest
-// closure (design/yawr/sections/06-tool-runtime.tex §7.2) MUST include
+// verifies the package digest
+// closure MUST include
 // every substitute runbook an exported tool's execute.kind: runbook
 // action points at -- a byte-for-byte change to that substitute file,
 // with every other package byte held constant, MUST change both the

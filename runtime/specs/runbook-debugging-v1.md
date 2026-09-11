@@ -205,7 +205,7 @@ overrides remain available.
 
 ## HTTP Start Contract
 
-`POST /runs` remains backward compatible. Optional debug data is additive:
+`POST /runs` accepts optional debug data:
 
 ```json
 {

@@ -464,7 +464,7 @@ const (
 	planOutcomeDenied           planApprovalOutcome = "denied"
 )
 
-// computeActionApprovalOutcome applies the Slice 4 classification matrix
+// computeActionApprovalOutcome applies the approval classification matrix.
 // purely statically — no runtime, no evaluator interface, no side effects.
 //
 // Mirrors internal/governance/profile_evaluator.go's matrix exactly:
@@ -662,7 +662,7 @@ func runShowProfiles(
 	}
 
 	if len(compatIDs) == 0 {
-		// Barbara's ruling: exit 0, empty stdout, single-line stderr.
+		// Exit 0, empty stdout, single-line stderr.
 		searchDesc := strings.Join(searchDirs, ", ")
 		fmt.Fprintf(os.Stderr, "no profile in %s provides a complete binding for all toolRefs in %s\n",
 			searchDesc, runbookPath)

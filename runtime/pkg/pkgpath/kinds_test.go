@@ -43,7 +43,7 @@ func TestResolveKind_RequiresProject_InsideWorkspace(t *testing.T) {
 // requires[].path at project/runbook scope is workspace-level: escaping the
 // workspace root is permitted (not PKG-007), only reported as external for
 // the caller to decide whether to emit PKG-W003
-// (design/yawr/sections/06-tool-runtime.tex §Resolution base per path kind:
+// Resolution base per path kind:
 // "workspace-level kinds ... MAY legitimately resolve outside it --- they
 // are never rejected merely for escaping the workspace").
 func TestResolveKind_RequiresProject_EscapeIsExternalNotError(t *testing.T) {
@@ -145,7 +145,7 @@ func TestResolveKind_ExecutePath_GenuineEscape_PKG007(t *testing.T) {
 // toolRefs[].path (tier 4) is workspace-level for an ordinary top-level
 // runbook, but package-internal (containment = package root) when the
 // declaring runbook file is itself only reachable via a package
-// (design/yawr/sections/06-tool-runtime.tex §Resolution base per path kind,
+// Resolution base per path kind:
 // the toolRefs[].path package-rule override bullet).
 func TestResolveKind_ToolRefsPath_PackageInternalOverride(t *testing.T) {
 	ws := t.TempDir()
@@ -200,7 +200,7 @@ func TestResolveKind_ToolRefsPath_WorkspaceLevel_NotPackageInternal(t *testing.T
 }
 
 // AllowsAbsolute: workspace-level kinds may use a leading '/'; package-
-// internal kinds may not (design/yawr/sections/06-tool-runtime.tex §Syntax
+// internal kinds may not.
 // rules, rule 2).
 func TestKind_AllowsAbsolute(t *testing.T) {
 	cases := []struct {

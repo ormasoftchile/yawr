@@ -41,6 +41,6 @@ func TestPresentationDeclaration(t *testing.T) {
 	yaml.Unmarshal([]byte("type: string"), &a)
 	data, _ := json.Marshal(a)
 	if strings.Contains(string(data), "presentation") {
-		t.Fatal("legacy serialization changed")
+		t.Fatal("absent presentation metadata was serialized")
 	}
 }

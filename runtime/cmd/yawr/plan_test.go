@@ -544,7 +544,7 @@ func TestPlan_ShowProfiles_FindsCompatible(t *testing.T) {
 	}
 }
 
-// TestPlan_ShowProfiles_ZeroMatches verifies Barbara's ruling: exit 0, empty
+// TestPlan_ShowProfiles_ZeroMatches verifies exit 0 with empty
 // stdout, single-line stderr when no profile provides a complete binding.
 func TestPlan_ShowProfiles_ZeroMatches(t *testing.T) {
 	workDir := planWorkDir(t)
@@ -560,7 +560,7 @@ func TestPlan_ShowProfiles_ZeroMatches(t *testing.T) {
 
 	code, out := captureRunPlan(t, []string{runYAML, "--show-profiles", profDir})
 	if code != exitSuccess {
-		// Barbara's ruling: zero matches is not a failure.
+		// Zero matches is not a failure.
 		t.Fatalf("expected exitSuccess (zero matches is not failure); got %d", code)
 	}
 	// Empty stdout on zero matches.

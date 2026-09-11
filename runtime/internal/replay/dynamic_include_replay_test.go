@@ -986,7 +986,7 @@ func writeDynamicIncludeTrace(t *testing.T, dir, runbookPath string) string {
 
 // makeDynamicIncludePlan returns an execution plan that contains a CLI step
 // and a dynamic include step. The dynamic include step uses the IncludeSpec
-// format that Don's planner emits (RunbookRef set, LazyRunbookPath empty).
+// format emitted by the planner (RunbookRef set, LazyRunbookPath empty).
 func makeDynamicIncludePlan() *engine.ExecutionPlan {
 	return &engine.ExecutionPlan{
 		RunID:       "run-dinc",

@@ -3,8 +3,6 @@
 **Phase:** Phase 10 — Adapters  
 **Purpose:** Integration test for standalone `yawr run` CLI execution  
 **Created:** 2026-04-20  
-**Author:** Barbara (Integrations Specialist)
-
 ---
 
 ## Overview

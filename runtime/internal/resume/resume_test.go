@@ -76,7 +76,7 @@ func TestResume_ContinuesFromCheckpoint(t *testing.T) {
 	}
 }
 
-func TestRebuildRunUsesCursorBeforeLegacyCurrentStep(t *testing.T) {
+func TestRebuildRunUsesCursorBeforeCurrentStepProjection(t *testing.T) {
 	plan := makePlan()
 	state := engine.RunState{
 		RunID:            "run-1",

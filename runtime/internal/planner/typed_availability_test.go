@@ -13,8 +13,8 @@ func TestTypedResultsDefaultAndExplicitTitles(t *testing.T) {
 	if displayName(&schema.Step{ID: "publish", Title: "publish", Type: schema.StepTypeResults}) != "publish" {
 		t.Fatal("explicit title rewritten")
 	}
-	if displayName(&schema.Step{ID: "legacy", Type: schema.StepTypeNoop}) != "legacy" {
-		t.Fatal("legacy default changed")
+	if displayName(&schema.Step{ID: "check", Type: schema.StepTypeNoop}) != "check" {
+		t.Fatal("step ID default changed")
 	}
 }
 
@@ -29,6 +29,6 @@ func TestTypedRuntimeAdmitsValidScopeWithoutCapabilityAdvertisement(t *testing.T
 		}
 	}
 	if err := typedRuntimeAvailability(&schema.Runbook{Flow: []schema.FlowNode{{Step: &schema.Step{Type: schema.StepTypeNoop}}}}); err != nil {
-		t.Fatalf("legacy execution blocked: %v", err)
+		t.Fatalf("untyped execution blocked: %v", err)
 	}
 }

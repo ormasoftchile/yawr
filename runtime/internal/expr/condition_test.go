@@ -89,7 +89,7 @@ func TestSimpleConditionEvaluator(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "field syntax (backward compat)",
+			name:      "direct field syntax",
 			condition: `all_passed == "dns_fail"`,
 			vars:      map[string]any{"all_passed": "dns_fail"},
 			want:      true,

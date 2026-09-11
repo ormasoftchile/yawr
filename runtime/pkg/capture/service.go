@@ -173,7 +173,7 @@ func (s *Service) resolve(path *gdp.Path, current *engine.StepResult) (pjvm.Valu
 }
 
 // resolveOutputs resolves outputs.<name> against the CURRENT step's own
-// Output map only (design/yawr/sections/06-tool-runtime.tex §Caller-visible
+// Output map only.
 // capture namespace: no step.{id}.outputs.{name} cross-step form exists).
 // current.Output[name] is populated by ToolExecutor.executeSubstitution
 // exactly for a substituted (execute.kind: runbook) action's declared

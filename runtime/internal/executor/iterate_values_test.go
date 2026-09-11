@@ -23,7 +23,7 @@ func TestIterateTypedCollections(t *testing.T) {
 			}
 			executor := NewIterateExecutor(&internalexpr.TemplateEvaluator{}, nil, runner)
 			spec := &schema.IterateNode{
-				Over: "items", Concurrency: concurrency, Collect: map[string]string{"legacy": "${item}"},
+				Over: "items", Concurrency: concurrency, Collect: map[string]string{"value": "${item}"},
 				CollectValues: map[string]any{
 					"records": map[string]any{
 						"item": "${item}", "rows": "${rows}", "active": true,
@@ -46,9 +46,9 @@ func TestIterateTypedCollections(t *testing.T) {
 			if !reflect.DeepEqual(result.Vars["records"], want) {
 				t.Fatalf("typed associations = %#v, want %#v", result.Vars["records"], want)
 			}
-			for _, value := range result.Vars["legacy"].([]any) {
+			for _, value := range result.Vars["value"].([]any) {
 				if _, ok := value.(string); !ok {
-					t.Fatalf("legacy collect changed type: %T", value)
+					t.Fatalf("collected value changed type: %T", value)
 				}
 			}
 		})

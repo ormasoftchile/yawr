@@ -42,7 +42,7 @@ flow:
 `
 
 // TestCLI_Run_Profileless_NonInteractive_FailFast_StillHolds verifies that
-// the Phase 1B acceptance criterion has not regressed: profileless
+// Profileless
 // non-interactive "yawr run" must still fail immediately with the prescribed
 // error and fix hint.
 func TestCLI_Run_Profileless_NonInteractive_FailFast_StillHolds(t *testing.T) {

@@ -467,7 +467,7 @@ func TestSnapshot_IsIndependent(t *testing.T) {
 	}
 }
 
-func TestGetForNode_PrefersQualifiedAndFallsBackToRaw(t *testing.T) {
+func TestGetForNode_PrefersQualifiedAndSupportsRawStepIdentity(t *testing.T) {
 	state := runstate.New()
 	state.Apply(ev("step/completed", 1, "", map[string]any{
 		"step_id": "child", "node_id": "include/child",
@@ -476,10 +476,10 @@ func TestGetForNode_PrefersQualifiedAndFallsBackToRaw(t *testing.T) {
 		t.Fatalf("qualified lookup = %#v", got)
 	}
 
-	legacy := runstate.New()
-	legacy.Apply(ev("step/completed", 1, "", map[string]any{"step_id": "child"}))
-	if got := legacy.GetForNode("include/child", "child"); got.Status != runstate.StatusCompleted || got.ID != "child" {
-		t.Fatalf("legacy fallback = %#v", got)
+	raw := runstate.New()
+	raw.Apply(ev("step/completed", 1, "", map[string]any{"step_id": "child"}))
+	if got := raw.GetForNode("include/child", "child"); got.Status != runstate.StatusCompleted || got.ID != "child" {
+		t.Fatalf("raw step lookup = %#v", got)
 	}
 }
 

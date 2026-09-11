@@ -1,7 +1,7 @@
 package main
 
 // synthetic_contract_integration_test.go — CLI integration proof for the
-// ops-synthetic contract (Phase 1B Item 4).
+// Synthetic tool contract.
 //
 // Scope of this file:
 //

@@ -7,11 +7,11 @@ import (
 )
 
 // TestRun_IncludeClosure_ChildRequires_FailClosed_PKG017 is a §5
-// regression test (Barbara's gate review, fallback (b)): an included
+// regression test: an included
 // runbook that declares its own requires: is not lexically merged into
 // the frozen global package set by this runtime revision. Rather than
 // silently resolving it against the root's dynamically-scoped registry
-// (the exact failure mode design/yawr/sections/06-tool-runtime.tex
+// This covers the fail-closed include resolution mode.
 // §Includes, Lexical Scoping, and Global Package Set rejects), the run
 // MUST fail closed with a typed, diagnosable PKG-017.
 func TestRun_IncludeClosure_ChildRequires_FailClosed_PKG017(t *testing.T) {

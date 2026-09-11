@@ -8,7 +8,7 @@ import (
 )
 
 // TestResolveLinks_HopLimitExceeded_PKG008 is a regression test for §3.7 of
-// Barbara's gate review: maxLinkHops = 8 was declared but never enforced --
+// maxLinkHops = 8 must be enforced;
 // link-chain bounding relied entirely on the host OS's own ELOOP ceiling,
 // which is unspecified and typically much larger than 8. Build a chain of
 // maxLinkHops+2 symlinks, each pointing at the next, and confirm resolution

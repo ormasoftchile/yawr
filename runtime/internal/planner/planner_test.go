@@ -391,7 +391,7 @@ func TestPlanner_TopoSort(t *testing.T) {
 	}
 }
 
-// --- Ken's original skeleton tests (t.Skip removed) ---
+// --- Planner validation tests ---
 
 func TestPlanner_DiamondDependency(t *testing.T) {
 	ctx := context.Background()

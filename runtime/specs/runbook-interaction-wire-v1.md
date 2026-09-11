@@ -136,8 +136,6 @@ post the answer.
 
 ### Typed host action
 
-> Go API migration: see [Generic host-action migration](../docs/host-action-generic-migration.md).
-
 `host_action` is a deliberately narrow interaction rather than a generic
 command bridge. Runbooks supply a logical capability name and structured data,
 never a host command ID. The connected host owns a static capability registry

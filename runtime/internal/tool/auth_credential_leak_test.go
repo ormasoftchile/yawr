@@ -2,7 +2,7 @@ package tool
 
 // auth_credential_leak_test.go
 //
-// Phase 1B Item 6 — credential non-leakage assertions.
+// Credential non-leakage assertions.
 //
 // This file proves that the managed-identity bearer token NEVER appears on any
 // observable output surface. It covers:
@@ -785,7 +785,7 @@ func TestCredentialLeak_Invalidate_DoesNotExposeToken(t *testing.T) {
 
 // TestCredentialLeak_SyntheticContract_MCPHTTPWithManagedIdentity is the
 // credential-non-leakage assertion for the ops-synthetic contract's mcp-http
-// binding with a managed-identity auth provider (Phase 1B Item 4, Invariant 4).
+// binding with a managed-identity auth provider.
 //
 // It exercises the exact same path as the production managed-identity +
 // mcp-http combination: mock IMDS → token acquisition → TokenGate attachment

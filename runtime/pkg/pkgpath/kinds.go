@@ -3,7 +3,7 @@ package pkgpath
 import "path/filepath"
 
 // Kind enumerates the exact path kinds of
-// design/yawr/sections/06-tool-runtime.tex Table tab:tool-path-bases
+// Current path base rules.
 // (§Resolution base per path kind). Each kind has its own referencing-file
 // (resolution base) and containment-root rule; the two are not always the
 // same, which is why Kind exists as a distinct concept from Class.

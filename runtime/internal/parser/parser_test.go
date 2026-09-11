@@ -756,7 +756,7 @@ func TestParser_FixtureR13_DecisionRouting(t *testing.T) {
 	}
 }
 
-func TestParser_BranchElseMarkerMatchesLegacyBoolean(t *testing.T) {
+func TestParser_BranchElseMarker(t *testing.T) {
 	p, err := parser.New(platform.NewFakePlatform())
 	if err != nil {
 		t.Fatalf("parser.New: %v", err)
@@ -776,22 +776,17 @@ flow:
                 id: fallback
                 type: noop
 `
-	legacy := strings.Replace(marker, "else:\n", "else: true\n", 1)
-	for name, source := range map[string]string{"marker": marker, "legacy": legacy} {
-		t.Run(name, func(t *testing.T) {
-			parsed, err := p.ParseBytes(context.Background(), []byte(source))
-			if err != nil {
-				t.Fatalf("ParseBytes: %v", err)
-			}
-			branch := findStep(parsed.Runbook.Flow, "choose")
-			if branch == nil || branch.BranchSpec == nil || len(branch.BranchSpec.Branches) != 1 {
-				t.Fatalf("branch arm missing: %#v", branch)
-			}
-			arm := branch.BranchSpec.Branches[0]
-			if !arm.Else || arm.Label != "Otherwise" || len(arm.Steps) != 1 || arm.Steps[0].Step.ID != "fallback" {
-				t.Fatalf("fallback arm decoded incorrectly: %#v", arm)
-			}
-		})
+	parsed, err := p.ParseBytes(context.Background(), []byte(marker))
+	if err != nil {
+		t.Fatalf("ParseBytes: %v", err)
+	}
+	branch := findStep(parsed.Runbook.Flow, "choose")
+	if branch == nil || branch.BranchSpec == nil || len(branch.BranchSpec.Branches) != 1 {
+		t.Fatalf("branch arm missing: %#v", branch)
+	}
+	arm := branch.BranchSpec.Branches[0]
+	if !arm.Else || arm.Label != "Otherwise" || len(arm.Steps) != 1 || arm.Steps[0].Step.ID != "fallback" {
+		t.Fatalf("fallback arm decoded incorrectly: %#v", arm)
 	}
 }
 

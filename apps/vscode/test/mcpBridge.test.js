@@ -1339,7 +1339,7 @@ test('redaction non-vacuity: scanner detects injected secret in a constructed re
 
 // ─── Deliverable F: provider_unavailable classification ───────────────────────
 // Tests for the new provider_unavailable category and extractProviderHint.
-// Fixtures use the EXACT live strings captured from Cristiano's diagnostic probe.
+// Fixtures use representative provider-unavailable diagnostics.
 
 const { extractProviderHint } = require('../out/mcpBridge');
 

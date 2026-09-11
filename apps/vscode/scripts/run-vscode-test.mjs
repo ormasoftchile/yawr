@@ -35,13 +35,16 @@ const run = (command, args, shell = false) => new Promise((resolve, reject) => {
 try {
   await mkdir(join(runRoot, 'workspace'), { recursive: true });
   if (label === 'production-surface') {
-    const vscodeExecutable = await downloadAndUnzipVSCode('1.137.0');
+    const vscodeExecutable = await downloadAndUnzipVSCode({
+      version: '1.137.0',
+      cachePath: join(runRoot, 'cache'),
+    });
     const cli = resolveCliPathFromVSCodeExecutablePath(vscodeExecutable);
     await run(cli, [
       `--user-data-dir=${join(runRoot, 'profile')}`,
       `--extensions-dir=${join(runRoot, 'extensions')}`,
       '--install-extension',
-      join(root, 'yawr-preview.vsix'),
+      process.env.YAWR_VSIX_PATH || join(root, 'yawr-preview.vsix'),
     ], process.platform === 'win32');
   }
   await run(process.execPath, [executable, '--label', label]);
@@ -50,6 +53,12 @@ try {
   console.error(error);
 } finally {
   await rm(runRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 20,
+    retryDelay: 500,
+  });
+  await rm(join(root, '.vscode-test'), {
     recursive: true,
     force: true,
     maxRetries: 20,

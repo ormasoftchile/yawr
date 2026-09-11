@@ -1,6 +1,6 @@
 # Highlighting implementation interface freeze
 
-**Barbara · 2026-09-06 · Interface freeze for current implementation, not supported until built.**
+**Interface notes for the current implementation.**
 Production implementation is authorized; this is not another feasibility gate.
 Basis: accepted `highlighting-feasibility\round2\decision.md`, refined `core\contract.md`, and `surfaces\report.md`.
 Only this session artifact is changed. Runtime, extension, design, existing binary and inherited changes remain untouched.
@@ -85,7 +85,7 @@ Do **not** add the earlier hypothetical `yawr.tool-presentation/v1` manifest as 
 
 `range` is **zero-based absolute UTF-16 code-unit offsets**, `[start,end)`, in the exact request text, including CRLF unchanged. It covers the full YAML scalar token (quotes/block header included), not its decoded string.
 Go must convert byte/rune positions explicitly; `yaml.Node.Column` is not a JS offset. Reject invalid boundaries/split surrogate pairs. `yaml_path` is RFC6901 over authored YAML, e.g. `/flow/0/step/tool/args/text`.
-Leslie resolves that exact CST node/path/range, decodes/maps it with `yaml`, and paints content spans only: no key, quote, header, structural indentation or physical EOL. Folded/generated whitespace has no paint span.
+The extension resolves that exact CST node/path/range, decodes/maps it with `yaml`, and paints content spans only: no key, quote, header, structural indentation or physical EOL. Folded/generated whitespace has no paint span.
 Go publishes only verified string argument nodes selected by core binding; it never returns query values. JS validates decoded-map equality; aliases, overlaps, duplicate keys, endpoint parse errors and mismatches fail closed with visible reason.
 Bindings/actions/descriptors are available independently of `regions`: valid `toolRefs` and tool metadata still return when an unrelated flow step is incomplete. No full-runbook schema success required.
 A core tolerant source pass may retain independently verified nodes before an unrelated error; it must not guess identity or recover through duplicate/invalid binding blocks. Broken tool identity invalidates that binding, never silently uses disk metadata.
@@ -181,12 +181,12 @@ Tool/provenance/plan digests can change with metadata; dispatched arguments, per
 
 | Owner | Exclusive writes / delivery |
 |---|---|
-| Don | Runtime Go/schema/runtime models, shared resolver/IO, CLI, graph projections, snapshot preflight, trace/result safety, docs/specs and Go tests. Owns `internal\serve\preview.go`, `static.go`, `server.go` and embed/routes. |
-| Leslie | Extension package/dependencies/helper packaging, TS resolver client, worker, YAML mappings/decorations, graph/session inspector; runtime `internal\serve\static\` assets only; JS/native/browser tests. No Go edits. |
-| Both | Same JSON fence consumed in producer/consumer tests; actual Go-produced replies/graphs/frames must enter Leslie's real parser/rendering tests. Neither substitutes model-only fixtures for delivery. |
+| Runtime | Go/schema/runtime models, shared resolver/IO, CLI, graph projections, snapshot preflight, trace/result safety, docs/specs and Go tests. |
+| Extension | Package/dependencies/helper packaging, TS resolver client, worker, YAML mappings/decorations, graph/session inspector, and JS/native/browser tests. |
+| Shared | The same JSON fence is consumed in producer/consumer tests; actual Go-produced replies, graphs, and frames enter real parser/rendering tests. |
 
-Leslie supplies offline `static\highlighting\highlighter.js` and `worker.js` (self-contained ESM with grammars/themes), plus preview HTML integration; Don serves `/preview/assets/highlighting/{highlighter.js,worker.js}` from embedded files with explicit JS MIME and fixed allowlist.
-One tokenizer implementation across editor/browser; no CDN/dynamic remote imports. Leslie bundles existing served preview frontend dependencies into `static\vendor\preview.js`; Don also allowlists `/preview/assets/vendor/preview.js`. Extension build owns all JS packaging; no parallel Go-side frontend toolchain.
+The extension supplies offline `static\highlighting\highlighter.js` and `worker.js` plus preview HTML integration. The runtime serves the embedded assets with explicit JS MIME and fixed allowlists.
+One tokenizer implementation is shared across editor and browser with no CDN or dynamic remote imports. The extension build owns all JS packaging; there is no parallel Go-side frontend toolchain.
 Acceptance: actual resolver binding parity (package/path/bare ambiguity, lexical scopes, external roots, unsaved definitions/new buffers), no provider/auth/network/tool startup; invalid descriptor and missing dependencies explicit.
 Acceptance: real Go UTF-16 ranges consumed by editor for emoji/CRLF/literal/folded/quoted/escaped scalars; stale/cancel/limit fallbacks; YAML completions/diagnostics and rival semantic provider preserved; no feature-owned semantic provider.
 Acceptance: actual native/substituted/nested/dynamic runs publish descriptor fields through direct inspector, session stdio/replay and standalone preview; restart with source deleted/catalog language changed retains frozen colors and safe output.

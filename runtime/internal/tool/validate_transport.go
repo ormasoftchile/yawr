@@ -82,7 +82,7 @@ func ValidateTransportConfig(cfg schema.TransportConfig) []error {
 				// (e.g. icm.evil.com matching icm.com). Match is
 				// case-insensitive on the hostname; no port is stripped from
 				// allowed_hosts entries — authors list bare hostnames.
-				// David's runtime check must use the same semantics.
+				// Runtime validation must use the same semantics.
 				if u, err := url.Parse(cfg.URL); err == nil {
 					urlHost := strings.ToLower(u.Hostname())
 					if !hostInList(urlHost, cfg.Auth.AllowedHosts) {

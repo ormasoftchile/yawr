@@ -369,7 +369,7 @@ func TestValidateResumeSafetyRejectsNestedUnpinnedInclude(t *testing.T) {
 		t.Fatalf("ValidateResumeSafety error = %v, want ErrUnpinnedInclude", err)
 	}
 	if err := plansnapshot.ValidateResumeSafetyForState(plan, engine.RunState{}); !errors.Is(err, plansnapshot.ErrUnpinnedInclude) {
-		t.Fatalf("legacy state-aware validation error = %v, want ErrUnpinnedInclude", err)
+		t.Fatalf("state-aware validation error = %v, want ErrUnpinnedInclude", err)
 	}
 	if err := plansnapshot.ValidateResumeSafetyForState(plan, engine.RunState{WriterEpoch: 1}); err != nil {
 		t.Fatalf("writer-epoch state validation: %v", err)

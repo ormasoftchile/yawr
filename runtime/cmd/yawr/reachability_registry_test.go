@@ -2,10 +2,9 @@ package main
 
 // reachability_registry_test.go — the enforcement mechanism for the reachability gate.
 //
-// Every schema field, CLI flag, or config key that has production behavior must
-// appear here as either:
+// Every governed schema field, CLI flag, or config key appears here as:
 //   - statusReachable with a non-nil TestFunc that fails if the production read is removed, or
-//   - statusKnownDead with a non-empty DeadReason citing the item that will wire it.
+//   - statusKnownDead with a non-empty reason.
 //
 // There is no silent option. See specs/reachability-gate.md for the full convention.
 
@@ -33,19 +32,12 @@ type reachabilityEntry struct {
 	// It must FAIL if the production read of the field is removed.
 	TestFunc func(t *testing.T)
 
-	// DeadReason is required when Status == statusKnownDead. It must name the
-	// Phase/Item that will wire the field and convert the entry to statusReachable.
+	// DeadReason is required when Status == statusKnownDead.
 	DeadReason string
 }
 
 // reachabilityRegistry is the authoritative list of schema fields and CLI features
 // that require reachability proof.
-//
-// Four known-dead regressions are recorded here as the founding entries:
-//   - AllowedEnvironments       now reachable via PLAN-010; probe below.
-//   - RequiresCapabilities      DEAD; no active item covers it.
-//   - ProfileToolOverride.Endpoint DEAD; David's Phase 1B Item 2 will wire it.
-//   - Contract.Idempotent       DEAD; only read in tests, never in production logic.
 var reachabilityRegistry = []reachabilityEntry{
 	{
 		// AllowedEnvironments is read by the Tier 0 PLAN-010 preflight check in
@@ -58,12 +50,11 @@ var reachabilityRegistry = []reachabilityEntry{
 	{
 		Feature:    "RequiresCapabilities",
 		Status:     statusKnownDead,
-		DeadReason: "KNOWN-DEAD: tool.Governance.RequiresCapabilities is parsed and schema-validated but no production code branch reads it. No Phase 1B item covers activation. Must be wired before Phase 2 tooling work that depends on capability-gating.",
+		DeadReason: "tool.Governance.RequiresCapabilities is parsed and schema-validated but no production branch reads it",
 	},
 	{
-		// ProfileToolOverride.Endpoint is now execution-wired (Phase 1B Item 2,
-		// commit 85bfa4a). Wiring path: cmd/yawr/run.go → adapter.WireOptions.Profile
-		// → internal/adapter/wire.go SetProfile → internal/tool/runtime.go effectiveURL
+		// Wiring path: cmd/yawr/run.go → adapter.WireOptions.Profile →
+		// internal/adapter/wire.go SetProfile → internal/tool/runtime.go effectiveURL
 		// in the mcp-http Invoke branch. PLAN-013 fires at plan time if the resolved
 		// endpoint host is not in def.Auth.AllowedHosts — this is the observable
 		// behavior the probe uses to confirm the field is read.
@@ -79,7 +70,7 @@ var reachabilityRegistry = []reachabilityEntry{
 	{
 		Feature:    "Contract.Idempotent",
 		Status:     statusKnownDead,
-		DeadReason: "KNOWN-DEAD: schema.Contract.Idempotent is declared in pkg/schema/step.go and is referenced in unit tests (approval_enforcement_test.go:380) but no production code path branches on its value. Activation requires retry/idempotency enforcement in the engine. Planned for Phase 2.",
+		DeadReason: "schema.Contract.Idempotent is declared but no production branch reads it",
 	},
 	{
 		// ToolAction.Outputs (non-substituted enforcement) is read by the

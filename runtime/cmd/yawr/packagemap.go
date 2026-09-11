@@ -147,8 +147,8 @@ func schemaToolDefFromRuntime(def toolpkg.ToolDef) *schema.ToolDef {
 			Argv:        a.Argv,
 			Args:        args,
 			Returns:     a.Returns,
-			// Execute and Outputs must be carried through: B1/B5 (Barbara's
-			// gate review) both depend on the planner's own tool registry
+			// Execute and Outputs must be carried through.
+			// Both depend on the planner's own tool registry
 			// exposing whether a catalog/toolRefs-resolved action is a
 			// substitution (execute.kind: runbook) -- without this, every
 			// such action silently reads as a plain, non-substituted one

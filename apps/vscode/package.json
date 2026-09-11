@@ -180,18 +180,17 @@
     "compile:extension": "tsc -p ./",
     "compile:webview": "tsc -p tsconfig.webview.json --noEmit && esbuild webview/graph.tsx --bundle --format=iife --platform=browser --target=es2022 --outfile=media/graph.js",
     "compile:test": "tsc -p tsconfig.test.json",
-    "pretest": "npm run compile",
-    "test": "node --test --test-timeout=5000 test/*.test.js",
+    "test": "node scripts/extension-lifecycle.mjs unit test/*.test.js",
     "test:cross-repo": "npm run compile:extension && node --test test/crossRepoHostActionWire.js",
     "test:authoring:core": "npm run compile:extension && node --test --test-concurrency=1 test/authoring-production.cjs test/authoring-pairs-production.cjs test/authoring-include-production.cjs",
     "test:authoring:native": "npm run compile:extension && node scripts/test-authoring-native.cjs",
-    "test:e2e": "npm run compile && npm run compile:test && node scripts/run-vscode-test.mjs source",
+    "test:e2e": "node scripts/extension-lifecycle.mjs source",
     "test:e2e:only": "vscode-test",
-    "test:e2e:vsix": "node scripts/run-vscode-test.mjs production-surface",
+    "test:e2e:vsix": "node scripts/extension-lifecycle.mjs installed",
     "watch": "tsc -w -p ./",
     "vscode:prepublish": "npm run compile && node scripts/verify-packaged-helper.mjs",
-    "package": "vsce package --no-dependencies -o yawr-preview.vsix && node scripts/normalize-vsix.mjs yawr-preview.vsix",
-    "package:clean": "rm -rf out && npm run compile && npm run package"
+    "package": "node scripts/extension-lifecycle.mjs package yawr-preview.vsix",
+    "package:clean": "node scripts/extension-lifecycle.mjs package yawr-preview.vsix"
   },
   "devDependencies": {
     "@dagrejs/dagre": "1.1.4",

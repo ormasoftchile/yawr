@@ -12,7 +12,7 @@ import (
 const maxRefLength = 256
 
 // ValidateRenderedRef checks that a rendered runbook_ref value is a syntactically
-// valid runbook identity before any catalog lookup is attempted. Per Barbara's
+// valid runbook identity before any catalog lookup is attempted. The
 // dynamic-include contract §1.2, a valid identity is either:
 //
 //   - a bare id matching ^[A-Za-z0-9_-]+$, or
@@ -112,7 +112,7 @@ func ValidateRenderedRef(ref string) (reason string, kind RefValidationKind) {
 		return "reference is not valid UTF-8", RefValidationInvalid
 	}
 	if norm.NFC.String(ref) != ref {
-		// Non-NFC input (e.g. NFD combining characters). Per Barbara's B-2
+		// Non-NFC input (e.g. NFD combining characters).
 		// ruling (adopted: NFC normalisation at lookup; reject non-NFC at
 		// syntax validation so callers get a clear error rather than a
 		// confusing miss).

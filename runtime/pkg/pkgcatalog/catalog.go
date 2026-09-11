@@ -1,6 +1,6 @@
 // Package pkgcatalog implements the YAWR Tool Packages MVP catalog freeze
 // and five-tier resolution algorithm defined in
-// design/yawr/sections/06-tool-runtime.tex §Tool Discovery and Catalog
+// Tool discovery and catalog
 // Construction, §Tool Packages, and §Digest, Evidence, Trace, Resume.
 //
 // The package exposes two phases mirroring the ratified architecture
@@ -33,7 +33,7 @@ import (
 )
 
 // Tier enumerates the five catalog source tiers
-// (design/yawr/sections/06-tool-runtime.tex §Tiers). Higher wins.
+// Higher tiers win.
 type Tier int
 
 const (
@@ -57,7 +57,7 @@ type Entry struct {
 }
 
 // LockedPackageInfo captures the resolved package identity used to emit a
-// yawr.package-lock/v1 record (design/yawr/sections/06-tool-runtime.tex §Package
+// yawr.package-lock/v1 record.
 // map / lock). Populated for every tier-1 package resolved into the catalog.
 type LockedPackageInfo struct {
 	Name    string
@@ -68,7 +68,7 @@ type LockedPackageInfo struct {
 	// RunbookExports mirrors Exports for exports.runbooks[] entries.
 	RunbookExports []schema.LockedExport
 	// External mirrors the requires[].path resolution's own external bool
-	// (Barbara's TV-PKG-PATH-002 ruling): true when this package's root
+	// True when this package's root
 	// resolved outside the workspace root. Carried here so callers can
 	// emit the package/resolved trace event's external field without
 	// re-deriving it from Root's "external:" string-prefix encoding.
@@ -200,7 +200,7 @@ type BuildOptions struct {
 // inputs and the workspace filesystem, and never mutates any file. Returns
 // the frozen catalog plus every PKG-* error found; callers MUST separate
 // fatal errors from PKG-W-class advisories (errkit.SplitWarnings) before
-// deciding to abort -- per Barbara's binding ruling (TV-PKG-PATH-002), a
+// deciding to abort; a
 // workspace-level requires[].path resolving outside the workspace root is
 // reported via PKG-W003 and MUST NOT itself be treated as a hard failure.
 func Build(opts BuildOptions) (*Catalog, []error) {
@@ -278,7 +278,7 @@ func (c *Catalog) add(e *Entry) {
 
 func (c *Catalog) detectSameTierCollisions() []error {
 	var errs []error
-	// Deterministic ordering (§3.4 of the gate review): range over
+	// Deterministic ordering: range over
 	// c.byBare/byTier are unsorted Go maps, and their iteration order
 	// leaking into the returned error slice made a governance-bearing
 	// plan report vary run to run even though the catalog/digest
@@ -524,7 +524,7 @@ func (c *Catalog) loadPackage(req *schema.PackageRequirement, kind pkgpath.Kind,
 		}
 	}
 	if external {
-		// Barbara's binding ruling (TV-PKG-PATH-002): a workspace-level
+		// A workspace-level
 		// path (requires[].path at either scope) resolving outside the
 		// workspace root is operator configuration, never rejected for
 		// that reason alone. It MUST be recorded as an external root
@@ -1068,7 +1068,7 @@ func sha256Sum(b []byte) []byte {
 }
 
 // CatalogDigest computes the order-independent catalog digest per
-// design/yawr/sections/06-tool-runtime.tex §Catalog digest: lines of
+// Catalog digest lines use
 // "qualifiedName  digest  tierNumber", sorted ascending, concatenated and
 // hashed.
 func (c *Catalog) CatalogDigest() string {

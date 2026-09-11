@@ -118,7 +118,7 @@ func TestBuild_PKG002_VersionConstraintUnsatisfied(t *testing.T) {
 	}
 }
 
-// TestBuild_ExternalRequiresPath_PKGW003NotPKG007 exercises Barbara's
+// TestBuild_ExternalRequiresPath_PKGW003NotPKG007 exercises the
 // binding ruling (TV-PKG-PATH-002): a project-scope requires[].path that
 // resolves outside the workspace root is operator configuration -- it MUST
 // succeed (external:sha256:... lock root) and be reported as PKG-W003, and
@@ -667,7 +667,7 @@ func TestBindFile_ByPath_Tier4(t *testing.T) {
 	}
 }
 
-// TestBindFile_ExternalToolRefsPath_PKGW003NotPKG007 exercises Barbara's
+// TestBindFile_ExternalToolRefsPath_PKGW003NotPKG007 exercises the
 // binding ruling for the tier-4 toolRefs[].path case (TV-PKG-PATH-008's
 // defect class): an ordinary top-level runbook's toolRefs[].path resolving
 // outside the workspace root MUST still bind successfully and be reported

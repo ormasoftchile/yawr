@@ -1,6 +1,6 @@
 package planner_test
 
-// Preflight acceptance tests for Slice 5: Tier 0 static preflight.
+// Preflight acceptance tests for static validation.
 //
 // These tests validate the three profile-aware checks introduced in
 // internal/planner/preflight.go, called from Plan() and resolveTool():

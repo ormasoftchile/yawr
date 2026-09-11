@@ -286,8 +286,6 @@ assert(emptyEdge.routeKind === 'empty-arm', 'empty arm must not be mislabeled as
 assert(emptyEdge.runtimeArmIndex === 0, 'empty arm must carry stable declaration index');
 assert(edgeRuntimeState(emptyEdge, { branch: { status: 'completed', output: { matched_arm_index: 0 } } }).status === 'completed', 'selected empty arm must highlight');
 assert(edgeRuntimeState(emptyEdge, { branch: { status: 'completed', output: { matched_arm_index: 1 } } }) === null, 'unselected empty arm must remain neutral');
-assert(edgeRuntimeState(emptyEdge, { branch: { status: 'completed', output: { matched_arm: 'Empty matched arm' } } }).status === 'completed', 'legacy unique matched_arm label must identify empty route');
-assert(edgeRuntimeState(emptyEdge, { branch: { status: 'completed', output: { matched_arm: 'Different arm' } } }) === null, 'legacy nonmatching label must stay neutral');
 
 const skippedChild = withBranchMerges({
 	nodes: [

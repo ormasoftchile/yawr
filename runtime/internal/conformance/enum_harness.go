@@ -55,7 +55,7 @@ func NewEnumHarness(t *testing.T) *EnumHarness {
 	}
 	// Resolve the unattended-test profile path once. The profile tells the CLI
 	// that this is a non-interactive test invocation, which is
-	// required after David's Item 5 fail-fast change: profileless non-interactive
+	// required because profileless non-interactive
 	// execution is now rejected at startup. Test context permits deterministic
 	// fixture tools without weakening current unattended production policy.
 	moduleRoot, mrErr := findModuleRoot()
@@ -204,7 +204,7 @@ func (h *EnumHarness) runCLI(workDir, entry string) (cliResult, error) {
 }
 
 // enumRuntimeGapSkips lists the vectors with no reachable runtime site in
-// this revision, per Barbara's rejection review and Don's ratified
+// this revision, per the current conformance decision
 // findings: `from: env/prompt/<provider>.<field>` input sourcing
 // (Input.From) is never read anywhere in the runtime, and root-level
 // (S4) runbook output production/validation is a pre-existing, separately
@@ -213,14 +213,14 @@ func (h *EnumHarness) runCLI(workDir, entry string) (cliResult, error) {
 // pre-existing limitation"). Each entry cites the ticket covering the gap
 // so the skip is a named, tracked disposition rather than a silent drop.
 var enumRuntimeGapSkips = map[string]string{
-	"TV-ENUM-RUNTIME-001": "no runtime site: Input.From ('from: env') is never read by any parser/planner/engine/executor path (Don's finding, ratified by Barbara) -- ticket T-ENUM-FROM-SOURCING",
-	"TV-ENUM-RUNTIME-002": "no runtime site: Input.From ('from: prompt') is never read by any parser/planner/engine/executor path (Don's finding, ratified by Barbara) -- ticket T-ENUM-FROM-SOURCING",
-	"TV-ENUM-RUNTIME-003": "no runtime site: Input.From ('from: <provider>.<field>') is never read by any parser/planner/engine/executor path (Don's finding, ratified by Barbara) -- ticket T-ENUM-FROM-SOURCING",
+	"TV-ENUM-RUNTIME-001": "no runtime site reads Input.From ('from: env')",
+	"TV-ENUM-RUNTIME-002": "no runtime site reads Input.From ('from: prompt')",
+	"TV-ENUM-RUNTIME-003": "no runtime site reads Input.From ('from: <provider>.<field>')",
 	"TV-ENUM-RUNTIME-006": "root-output (S4) production/validation is a pre-existing, separately ticketed limitation explicitly out of scope for this revision -- ticket T-ENUM-ROOT-OUTPUTS",
 	"TV-ENUM-MOCK-005":    "no runtime site: exercises 'from: prompt' answered via a replay scenario's inputs: map; Input.From is never read (same gap as RUNTIME-001..003) so there is no prompt-binding moment for replay to intercept -- ticket T-ENUM-FROM-SOURCING",
 
 	// Below: five vectors whose corpus fixture (frozen, not editable by
-	// this task -- only Tess may amend TV-ENUM-DECL-006 per the gate)
+	// this task)
 	// conflicts with the ratified architecture ruling itself, diagnosed
 	// and confirmed against barbara-enum-constraint-mvp-architecture-ruling.md
 	// this session. Each is a corpus authoring inconsistency, not a
@@ -236,7 +236,7 @@ var enumRuntimeGapSkips = map[string]string{
 
 	"TV-ENUM-RUNTIME-007": "root-output (S4) production/validation is the same pre-existing, separately ticketed limitation as TV-ENUM-RUNTIME-006 (a non-substituted root runbook never evaluates its own top-level outputs: block, so neither the expected GCP-TYPE-001 nor any other S4 check is ever reached) -- ticket T-ENUM-ROOT-OUTPUTS",
 
-	// Slice 7 governance vectors: skip entries for vectors that are valid
+	// Governance vectors: skip entries for vectors that are valid
 	// schema contracts but cannot be executed by the CLI harness today.
 }
 

@@ -11,9 +11,9 @@ import (
 	toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 )
 
-// validateSubstitutionsPlanTime implements Barbara's B1 blocker fix
-// (design/yawr/sections/06-tool-runtime.tex §Action Substitution: "checked
-// statically at plan time", quoted in the gate review): every statically
+// validateSubstitutionsPlanTime enforces substitution contracts
+// and checks
+// statically at plan time: every statically
 // reachable step.tool node -- including branch arms, iterate/parallel
 // bodies, and compensate bodies that may be unreachable given runtime
 // conditions or dry-run mode -- whose bound action is execute.kind:

@@ -4,14 +4,8 @@ package main
 // --profile flag actually activates Tier 0 preflight checks (PLAN-010/011/012)
 // through the real cmd/yawr/run.go wiring path.
 //
-// Why this file exists: David's preflight_test.go constructs the planner
-// config directly and therefore cannot catch a wiring gap where cmd/yawr/run.go
-// builds the planner WITHOUT passing the loaded profile. That gap existed:
-// --profile loaded and validated fine, but the planner's Profile field was
-// nil and all Tier 0 checks were silently dead in production.
-//
-// These tests go through runRun() — the exact same code path the binary
-// uses — so the wiring is real, not simulated.
+// These tests use runRun(), so they fail if profile data stops reaching the
+// production planner path.
 
 import (
 	"os"

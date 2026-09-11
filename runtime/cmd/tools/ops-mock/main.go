@@ -1,5 +1,5 @@
 // Package main is the deterministic native mock binary for the ops-synthetic
-// contract proof (Phase 1B Item 4). It implements two logical tool actions:
+// contract proof. It implements two logical tool actions:
 //
 //   - status-query: returns a 5-field typed output (Action A, mirrors a
 //     5-field payload without copying any real service contract)

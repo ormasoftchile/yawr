@@ -29,7 +29,7 @@ type Status string
 
 const (
 	// Generic yawr.host-action/v1 bridge acknowledgement statuses.
-	// These are the five status values defined in Barbara's yawr.host-action/v1 spec
+	// These are the five status values in the yawr.host-action/v1 contract.
 	// (§3.4) and are the only values a conforming bridge may emit in an ack.
 	StatusCompleted           Status = "completed"
 	StatusFailed              Status = "failed"

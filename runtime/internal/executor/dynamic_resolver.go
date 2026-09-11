@@ -63,7 +63,7 @@ func MaterializeLazyIncludes(ctx context.Context, registry engine.ExecutorRegist
 }
 
 // DynamicIncludePin records one resolved dynamic include site for
-// replay/resume determinism. David (Stream 4) maps this to
+// replay/resume determinism. The replay layer maps this to
 // schema.LockedDynamicInclude in PlanMetadata.DynamicIncludes.
 type DynamicIncludePin struct {
 	StepID             string
@@ -94,7 +94,7 @@ type PinRecorder func(DynamicIncludePin)
 
 // includeChainKey is the context key for the runtime include chain (ordered
 // list of qualified IDs on the current call stack, used for cycle + depth
-// detection per Barbara §3).
+// detection).
 type includeChainKey struct{}
 
 func withIncludeChain(ctx context.Context, chain []string) context.Context {
@@ -107,7 +107,7 @@ func includeChainFromCtx(ctx context.Context) []string {
 }
 
 // dynGovKey is the context key for the composed effective governance
-// accumulated along the dynamic include call stack (Barbara §6).
+// accumulated along the dynamic include call stack.
 type dynGovKey struct{}
 
 func withDynGov(ctx context.Context, gov *tracepkg.EffectiveGovernancePayload) context.Context {
@@ -151,7 +151,7 @@ func effectiveGovToSchemaConfig(eg *tracepkg.EffectiveGovernancePayload) *schema
 }
 
 // ComposeGovernance returns the effective governance for a dynamic include
-// child, applying monotonic restriction against the parent (Barbara §6,
+// child, applying monotonic restriction against the parent,
 // rulings B-8 and B-9). The result is the governance that actually applies
 // inside the child runbook's execution scope.
 //

@@ -19,13 +19,13 @@ func TestPreviewClient_NoRecommendationTerminalBoundsReadTraffic(t *testing.T) {
 		t.Fatalf("fixed no-recommendation terminal polling: document=%d interactions=%d, want <=1 each", fixedDoc, fixedInteractions)
 	}
 
-	legacyDoc, legacyInteractions := runNoRecommendationPreviewClient(t, true, 200*time.Millisecond)
-	if legacyDoc <= 2 || legacyInteractions <= 2 {
-		t.Fatalf("test harness is not sensitive to the reported flood: legacy document=%d interactions=%d, want both >2", legacyDoc, legacyInteractions)
+	unboundedDoc, unboundedInteractions := runNoRecommendationPreviewClient(t, true, 200*time.Millisecond)
+	if unboundedDoc <= 2 || unboundedInteractions <= 2 {
+		t.Fatalf("test harness is not sensitive to repeated polling: document=%d interactions=%d, want both >2", unboundedDoc, unboundedInteractions)
 	}
 }
 
-func runNoRecommendationPreviewClient(t *testing.T, legacy bool, window time.Duration) (int64, int64) {
+func runNoRecommendationPreviewClient(t *testing.T, unbounded bool, window time.Duration) (int64, int64) {
 	t.Helper()
 	srv := newPreviewTestServer(t)
 	runID := "run-no-recommendation"
@@ -51,10 +51,10 @@ func runNoRecommendationPreviewClient(t *testing.T, legacy bool, window time.Dur
 	defer ts.Close()
 
 	client := &deterministicPreviewClient{
-		baseURL: ts.URL,
-		runID:   runID,
-		client:  &http.Client{Timeout: 500 * time.Millisecond},
-		legacy:  legacy,
+		baseURL:   ts.URL,
+		runID:     runID,
+		client:    &http.Client{Timeout: 500 * time.Millisecond},
+		unbounded: unbounded,
 	}
 	client.loadDoc(t, true)
 	// Count only the post-terminal observation window requested by the report.
@@ -73,19 +73,19 @@ func runNoRecommendationPreviewClient(t *testing.T, legacy bool, window time.Dur
 }
 
 type deterministicPreviewClient struct {
-	baseURL  string
-	runID    string
-	client   *http.Client
-	legacy   bool
-	terminal bool
-	etag     string
-	knownIDs map[string]bool
-	missing  string
+	baseURL   string
+	runID     string
+	client    *http.Client
+	unbounded bool
+	terminal  bool
+	etag      string
+	knownIDs  map[string]bool
+	missing   string
 }
 
 func (c *deterministicPreviewClient) loadDoc(t *testing.T, manual bool) {
 	t.Helper()
-	if !manual && c.terminal && !c.legacy {
+	if !manual && c.terminal && !c.unbounded {
 		return
 	}
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/runs/"+c.runID+"/document", nil)
@@ -104,7 +104,7 @@ func (c *deterministicPreviewClient) loadDoc(t *testing.T, manual bool) {
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		if c.legacy {
+		if c.unbounded {
 			return
 		}
 		body, _ := io.ReadAll(resp.Body)
@@ -135,7 +135,7 @@ func (c *deterministicPreviewClient) frontierEffect(t *testing.T) {
 	if c.missing == "" || c.knownIDs[c.missing] {
 		return
 	}
-	if c.terminal && !c.legacy {
+	if c.terminal && !c.unbounded {
 		return
 	}
 	c.loadDoc(t, false)
@@ -143,7 +143,7 @@ func (c *deterministicPreviewClient) frontierEffect(t *testing.T) {
 
 func (c *deterministicPreviewClient) pollTick(t *testing.T) {
 	t.Helper()
-	if c.terminal && !c.legacy {
+	if c.terminal && !c.unbounded {
 		return
 	}
 	c.loadDoc(t, false)
@@ -151,7 +151,7 @@ func (c *deterministicPreviewClient) pollTick(t *testing.T) {
 
 func (c *deterministicPreviewClient) interactionsEffect(t *testing.T) {
 	t.Helper()
-	if c.terminal && !c.legacy {
+	if c.terminal && !c.unbounded {
 		return
 	}
 	resp, err := c.client.Get(c.baseURL + "/runs/" + c.runID + "/interactions")

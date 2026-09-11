@@ -1,7 +1,7 @@
 package engine
 
 // approval_enforcement_test.go — verifies the four counterparty acceptance
-// criteria for Slice 2 (approval enforcement).
+// criteria for approval enforcement.
 //
 // Criterion mapping:
 //   1. GovernanceEvaluator is wired in production.

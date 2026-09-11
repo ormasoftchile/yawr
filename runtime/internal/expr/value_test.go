@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestTemplateEvaluatorTypedValuesPreserveLegacyInterpolation(t *testing.T) {
+func TestTemplateEvaluatorTypedValuesPreserveStringInterpolation(t *testing.T) {
 	evaluator := &TemplateEvaluator{}
 	vars := map[string]any{
 		"rows": []any{map[string]any{"count": 3, "active": true, "note": nil}},
@@ -18,9 +18,9 @@ func TestTemplateEvaluatorTypedValuesPreserveLegacyInterpolation(t *testing.T) {
 	if vars["rows"].([]any)[0].(map[string]any)["count"] != 3 {
 		t.Fatal("typed evaluation aliased the input")
 	}
-	legacy, err := evaluator.Eval("${rows[0].count}", vars)
-	if err != nil || legacy != "3" {
-		t.Fatalf("legacy interpolation = %q, %v", legacy, err)
+	interpolated, err := evaluator.Eval("${rows[0].count}", vars)
+	if err != nil || interpolated != "3" {
+		t.Fatalf("string interpolation = %q, %v", interpolated, err)
 	}
 	for _, expression := range []string{"rows[0].count + 2", "rows[0].active", "rows[0].note"} {
 		if _, err := evaluator.EvalValue(expression, vars); err != nil {

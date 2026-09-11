@@ -79,7 +79,7 @@ func TestToolExecutor_Enum008_AllowsMemberArg(t *testing.T) {
 }
 
 // TestToolExecutor_Enum008_UnconstrainedArgUnaffected confirms an arg with
-// no enum: declaration is never checked (backward compatibility).
+// Without an enum declaration there is no enum constraint.
 func TestToolExecutor_Enum008_UnconstrainedArgUnaffected(t *testing.T) {
 	runtime := testutil.NewFakeToolRuntime()
 	runtime.RegisterDef("kubectl", &tool.ToolDef{

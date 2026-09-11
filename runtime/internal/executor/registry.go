@@ -98,7 +98,7 @@ type RegistryConfig struct {
 	// defaultMaxIncludeDepth (10) when zero.
 	MaxIncludeDepth int
 	// PinRecorder is called after each successful dynamic include resolution
-	// so the engine can record the pin for replay/resume (David, Stream 4).
+	// so the engine can record the pin for replay/resume.
 	// Nil is safe: pinning is skipped.
 	PinRecorder PinRecorder
 	// SubstitutionParser, when non-nil, enables the tool executor to run

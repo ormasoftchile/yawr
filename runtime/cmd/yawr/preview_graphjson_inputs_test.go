@@ -1,6 +1,6 @@
 package main
 
-// F-2 (Barbara's re-gate: barbara-client-enum-parity-gate-review.md, B-1)
+// GraphJSON input parity regression coverage.
 // regression test: `yawr preview --format graphjson` must emit the
 // declared inputs[] DTO (AR-CE-2) on the real CLI path, not merely on the
 // graphdoc.Document Go type. This exercises cmd/yawr/preview.go's actual

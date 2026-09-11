@@ -66,8 +66,7 @@ const (
 	EventKindIterateIterationStarted   EventKind = "iterate/iteration_started"
 	EventKindIterateIterationCompleted EventKind = "iterate/iteration_completed"
 
-	// Package and Substitution events (design/yawr/sections/07-runtime-events.tex
-	// §Package and Substitution Events; design/yawr/sections/06-tool-runtime.tex
+	// Package and substitution events.
 	// §Tool Packages / §Action Substitution). Payload shapes are documented on
 	// the corresponding Package*Payload / Substituted*Payload types below.
 	EventKindPackageResolved                EventKind = "package/resolved"
@@ -76,21 +75,20 @@ const (
 	EventKindGovernancePackageDriftAccepted EventKind = "governance/packageDriftAccepted"
 	EventKindReplayPackageDrift             EventKind = "replay/packageDrift"
 
-	// Dynamic include events (Barbara §7, confirmed by ruling B-11).
+	// Dynamic include events.
 	// include/resolved  — emitted once per execution of a dynamic include site
 	//                     that successfully resolves a child runbook.
 	// include/notFound  — emitted when resolution fails (catalog miss or error).
 	// replay/dynamicIncludeDrift — emitted by the replay layer when a dynamic
 	//                     include pin digest mismatches the current filesystem.
-	//                     Owned by David (Stream 4); defined here so it exists.
 	EventKindIncludeResolved           EventKind = "include/resolved"
 	EventKindIncludeNotFound           EventKind = "include/notFound"
 	EventKindReplayDynamicIncludeDrift EventKind = "replay/dynamicIncludeDrift"
 
-	// MCP HTTP auth events (B-27/B-32 — Stream C, David).
+	// MCP HTTP auth events.
 	// mcp/authAttached — emitted once per authenticated HTTP request, immediately
 	//                    before the request is sent. Payload: url_host and scope
-	//                    only — never the token value (B-24).
+	//                    only — never the token value.
 	// Host-not-in-allowed_hosts is a hard error (MCP-012), not an event.
 	EventKindMCPAuthAttached EventKind = "mcp/authAttached"
 )
@@ -112,7 +110,7 @@ type PackageResolvedPayload struct {
 	// not go through the --package-map merge path at all. §7.4 makes
 	// package provenance part of the evidence record; an override of
 	// where a package came from is exactly the fact an auditor needs
-	// (§3.9 of the gate review) -- this used to be stderr-only.
+	// so drift remains part of the evidence record.
 	Origin string `json:"origin,omitempty"`
 }
 
@@ -139,7 +137,7 @@ type EffectiveGovernancePayload struct {
 }
 
 // ToolSubstitutedPayload is the payload of tool/substituted, emitted for
-// every substitution frame entered (design/yawr/sections/06-tool-runtime.tex
+// every substitution frame entered.
 // §Action Substitution).
 type ToolSubstitutedPayload struct {
 	Tool                string                     `json:"tool"`
@@ -169,7 +167,7 @@ type ReplayPackageDriftPayload struct {
 	ActualDigest   string `json:"actualDigest"`
 }
 
-// IncludeResolvedPayload is the payload of include/resolved (Barbara §7.2),
+// IncludeResolvedPayload is the payload of include/resolved,
 // emitted once per execution of a dynamic include site that resolves
 // successfully. An iterate body that resolves different targets per
 // iteration emits one event per iteration.
@@ -198,7 +196,6 @@ type IncludeNotFoundPayload struct {
 // ReplayDynamicIncludeDriftPayload is the payload of
 // replay/dynamicIncludeDrift, emitted by the replay layer when a resolved
 // dynamic include's recorded digest does not match the current filesystem.
-// Owned by David (Stream 4); struct defined here for event-kind completeness.
 type ReplayDynamicIncludeDriftPayload struct {
 	StepID         string `json:"step_id"`
 	QualifiedID    string `json:"qualified_id"`

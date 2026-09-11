@@ -16,7 +16,7 @@ import (
 )
 
 // catalogIncludeResolver implements executor.DynamicIncludeResolver using
-// the frozen pkgcatalog.Catalog as the sole resolution source (Barbara §5).
+// the frozen pkgcatalog.Catalog as the sole resolution source.
 type catalogIncludeResolver struct {
 	catalog *pkgcatalog.Catalog
 	parser  parserpkg.Parser
@@ -29,7 +29,7 @@ func NewCatalogIncludeResolver(catalog *pkgcatalog.Catalog, p parserpkg.Parser) 
 }
 
 func (r *catalogIncludeResolver) Resolve(ctx context.Context, renderedRef string) (*internalexecutor.DynamicIncludeResult, error) {
-	// Syntactic validation via Ken's validator (B-1/B-2).
+	// Syntactic validation uses the package reference validator.
 	reason, kind := pkgcatalog.ValidateRenderedRef(renderedRef)
 	switch kind {
 	case pkgcatalog.RefValidationEmpty:

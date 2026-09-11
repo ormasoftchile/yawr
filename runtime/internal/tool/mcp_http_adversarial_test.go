@@ -1,6 +1,4 @@
-// Package tool — MCP HTTP Adversarial Test Suite (Tess — Stream D + Stream C extension)
-//
-// STATUS: 27/27 passing, 0 skipped (Stream D). 4 added in Stream C extension.
+// Package tool contains adversarial MCP HTTP transport tests.
 //
 // All historical defects resolved:
 //   DEF-007 (RESOLVED): import cycle auth_gate.go -> internal/executor.
@@ -151,7 +149,7 @@ func newMinimalServer(t *testing.T, toolCallHandler func(w http.ResponseWriter, 
 // ─── Group A: Initialization ─────────────────────────────────────────────────
 
 // TV-MCP-INIT-001: Server rejects initialize → transport must return an error
-// and NOT mark itself as initialized. This verifies that Don did not replicate
+// and NOT mark itself as initialized. This verifies the transport does not replicate
 // the stdio defect (B-30): stdio sets initialized=true before checking the
 // response; HTTP must not.
 func TestMCPHTTPTransport_InitRejected_NotMarkedInitialized(t *testing.T) {
@@ -516,7 +514,7 @@ func TestMCPHTTPTransport_RuntimeHostMismatch_Fatal_MCP012(t *testing.T) {
 
 // TV-MCP-SSE-001: Notification interleaved before response — notification
 // must be skipped; the response with matching id must be returned.
-// This is the key vector Ken called out: stdio has no id correlation at all.
+// Stdio has no ID correlation.
 // The SSE parser DOES skip nil-id messages (notifications) — this test passes.
 func TestMCPHTTPTransport_SSE_NotificationBeforeResponse(t *testing.T) {
 	ts := newMinimalServer(t, func(w http.ResponseWriter, r *http.Request, msg map[string]any) {
@@ -818,7 +816,7 @@ func TestMCPHTTPTransport_JSONRPCError_MCP009(t *testing.T) {
 }
 
 // TV-MCP-FAIL-006: Unexpected content-type → MCP-005.
-// (Also tested in Don's TestMCPHTTPTransport_UnexpectedContentType;
+// (Also tested in TestMCPHTTPTransport_UnexpectedContentType;
 // included here for completeness and to verify the error code string.)
 func TestMCPHTTPTransport_UnexpectedContentType_MCP005(t *testing.T) {
 	ts := newMinimalServer(t, func(w http.ResponseWriter, r *http.Request, msg map[string]any) {
@@ -976,22 +974,17 @@ func TestMCPHTTPTransport_SSEResult_SameShapeAsJSON(t *testing.T) {
 	}
 }
 
-// ─── Group G: Token redaction sweep (B-24 / independent of David's tests) ───
+// ─── Group G: Token redaction sweep ──────────────────────────────────────────
 
 // TV-MCP-REDACT-001: The bearer token acquired by the auth provider must
 // NEVER appear in trace events, error messages, or ToolResult fields.
-// This is Tess's independent redaction proof (B-24), separate from David's
-// auth_azurecli_test.go which only covers az error messages.
-//
 // This test covers the HTTP transport layer: the token exists in-memory
 // and is placed in the Authorization header only. It must not propagate
 // into any other surface that the test can observe.
 func TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput(t *testing.T) {
-	// DEF-007/DEF-008 resolved. Full end-to-end redaction sweep.
-	//
 	// Drives the sentinel through a real authenticated Invoke call and checks
 	// every observable surface: error messages, result fields, and trace event
-	// payloads. B-24/B-27 contract: token appears only in the Authorization
+	// payloads. The token appears only in the Authorization
 	// header sent to the server, never in any yawr-owned output.
 
 	type emittedEvent struct {
@@ -1147,7 +1140,7 @@ func TestMCPHTTPTransport_B30_NotReplicatedFromStdio(t *testing.T) {
 		t.Fatal("B-30 check: expected error when server returns error on initialize; stdio silently ignores this — HTTP must not")
 	}
 	if transport.initialized {
-		t.Error("B-30 check: initialized=true after server rejected initialize — this is the stdio defect Don must NOT replicate")
+		t.Error("initialized=true after server rejected initialize")
 	}
 	// The error message must surface the server's rejection reason.
 	if !strings.Contains(err.Error(), "maintenance mode") && !strings.Contains(err.Error(), "server error") {
@@ -1193,19 +1186,12 @@ func TestMCPHTTPTransport_ProtocolVersionHeader_2025(t *testing.T) {
 	}
 }
 
-// ─── Group I: AzureCLIAuthProvider adversarial (Stream C — David) ────────────
+// ─── Group I: AzureCLIAuthProvider adversarial ───────────────────────────────
 //
-// David's auth_azurecli_test.go covers the four failure-message classifications
-// and caching lifecycle. This group adds:
-//   1. The independent sentinel sweep (B-24) using TESS_SENTINEL_TOKEN_D42E9B1C
-//      rather than David's knownToken ("******") — a high-entropy unique value
-//      that cannot collide with asterisk patterns in error messages.
-//   2. No-retry-loop verification on repeated provider failures.
-//   3. 401-driven Invalidate/re-acquire through the transport layer.
+// Covers sentinel redaction, repeated provider failures, and 401-driven
+// invalidation and reacquisition through the transport layer.
 
-// TV-MCP-REDACT-003: Independent sentinel sweep against AzureCLIAuthProvider.
-// David's knownToken = "******" (asterisks) could collide with log truncation
-// markers. This test uses a unique sentinel to close that gap.
+// TV-MCP-REDACT-003: Sentinel sweep against AzureCLIAuthProvider.
 func TestAzureCLIProvider_SentinelNeverInAnyErrorOutput(t *testing.T) {
 	type tc struct {
 		name   string
@@ -1345,7 +1331,7 @@ func TestAzureCLIProvider_InvalidateCalledOnTransport401(t *testing.T) {
 	}
 }
 
-// helpers local to Group I — mirror David's helpers to avoid naming collision
+// Helpers local to Group I.
 
 func makeAzFailRunner(stderr string) azRunner {
 	return func(_ context.Context, _ []string) ([]byte, string, error) {

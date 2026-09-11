@@ -104,18 +104,13 @@ type GovernanceConfig struct {
 	Redact          []RedactRule     `yaml:"redact,omitempty"           json:"redact,omitempty"`
 }
 
-// UnmarshalYAML accepts both the pre-existing snake_case field spellings
-// (allow_commands, deny_commands, deny_env_vars, require_approval — used by
-// existing runtime fixtures such as examples/multi-region-rollout) and the
-// hyphenated spellings used by Tess's package-substitution conformance
-// corpus (design/yawr/conformance/tv-pkg-resolve.yaml TV-PKG-SUBST-010/011,
-// e.g. a substitute runbook's own `governance: { allow-commands: [...] }`
-// block). The snake_case value wins if both are present in the same
-// document (defensive; the corpus never sets both).
+// UnmarshalYAML accepts current snake_case spellings and the hyphenated
+// spellings used by package-substitution documents. Snake_case wins if both
+// are present.
 func (g *GovernanceConfig) UnmarshalYAML(node *yaml.Node) error {
-	type legacy GovernanceConfig
-	var l legacy
-	if err := node.Decode(&l); err != nil {
+	type plain GovernanceConfig
+	var current plain
+	if err := node.Decode(&current); err != nil {
 		return err
 	}
 	var alt struct {
@@ -127,7 +122,7 @@ func (g *GovernanceConfig) UnmarshalYAML(node *yaml.Node) error {
 	if err := node.Decode(&alt); err != nil {
 		return err
 	}
-	*g = GovernanceConfig(l)
+	*g = GovernanceConfig(current)
 	if !g.RequireApproval && alt.RequireApproval {
 		g.RequireApproval = alt.RequireApproval
 	}

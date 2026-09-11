@@ -75,7 +75,7 @@ type IncludeExecutor struct {
 }
 
 // WithApprovalGate sets the approval gate used when effective governance
-// requires approval at a dynamic include boundary (Barbara §6.2).
+// requires approval at a dynamic include boundary.
 func (e *IncludeExecutor) WithApprovalGate(gate govpkg.ApprovalGate) *IncludeExecutor {
 	e.approvalGate = gate
 	return e
@@ -479,7 +479,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 			fmt.Sprintf("dynamic include: step %s: failed to render runbook_ref template %q: %v", step.ID, inc.RunbookRef, err), err)
 	}
 
-	// Validate the rendered ref before catalog lookup (Barbara §1.2).
+	// Validate the rendered ref before catalog lookup.
 	// Catches runtime-rendered empty/invalid refs (e.g. variable that resolves
 	// to ""). DINC-002 (empty) is routed through handleResolveError so
 	// on_not_found: continue applies.
@@ -546,7 +546,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 		return nil, err
 	}
 
-	// Compose effective governance (Barbara §6, rulings B-8/B-9).
+	// Compose effective governance.
 	parentGov := dynGovFromCtx(ctx)
 	effectiveGov := ComposeGovernance(parentGov, resolved.ChildGovernance)
 	protectedChildCtx := withChildDebugProtection(
@@ -607,7 +607,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 		return nil, err
 	}
 
-	// Emit include/resolved trace event (Barbara §7, ruling B-11).
+	// Emit include/resolved trace event.
 	emitter := EmitterFromContext(ctx)
 	if emitter != nil {
 		emitter(string(tracepkg.EventKindIncludeResolved), map[string]any{
@@ -624,7 +624,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 		})
 	}
 
-	// Record the resolution pin for David's replay/resume layer (Barbara §8).
+	// Record the resolution pin for replay and resume.
 	pinRecorder := pinRecorderFromCtx(ctx)
 	if pinRecorder == nil {
 		pinRecorder = e.pinRecorder
@@ -743,7 +743,7 @@ func withChildDebugProtection(
 }
 
 // enforceApprovalPolicy checks whether the composed governance mandates
-// approval before the child runbook may execute (Barbara §6.2). If the
+// approval before the child runbook may execute. If the
 // approval gate is nil and approval is required, the include fails with
 // DYN-015.
 func (e *IncludeExecutor) enforceApprovalPolicy(ctx context.Context, stepID string, gov *tracepkg.EffectiveGovernancePayload) error {

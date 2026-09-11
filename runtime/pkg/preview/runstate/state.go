@@ -548,8 +548,8 @@ func upsertIterationRecord(records []IterationRecord, rec IterationRecord) []Ite
 	return append(records, rec)
 }
 
-// stepID extracts the qualified runtime node identity when available, falling
-// back to the legacy raw step ID for top-level and older traces.
+// stepID extracts the qualified runtime node identity when available and uses
+// the raw step ID for top-level events.
 func stepID(ev engine.Event) string {
 	if v, ok := ev.Payload["node_id"]; ok {
 		if id, ok := v.(string); ok {

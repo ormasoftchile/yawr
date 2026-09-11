@@ -1,7 +1,6 @@
 package tool
 
-// contractparity_proof_test.go — Tess's parity proof for the ops-synthetic
-// contract (Phase 1B Item 4, Tess's contribution).
+// contractparity_proof_test.go verifies the synthetic tool contract.
 //
 // This file uses the exported pkg/contractparity API to assert that the
 // native binding and the mcp-http binding of ops-synthetic are

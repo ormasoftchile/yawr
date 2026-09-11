@@ -23,7 +23,7 @@ func chdirForTest(t *testing.T, dir string) string {
 }
 
 // TestRun_Substitution_PlanTimeContractViolation_DryRun is a B1 regression
-// test (Barbara's gate review): a substitution whose input contract is
+// test: a substitution whose input contract is
 // broken (the substitute runbook's inputs: don't match the action's args:
 // contract, PKG-013) must fail before the run ever starts -- including via
 // the `yawr dry-run` subcommand, which never itself reaches
@@ -140,7 +140,7 @@ flow:
 // regression test: an action-substitution contract violation reached only
 // through a branch arm whose when: condition is false at plan time (and
 // therefore never executes) must still be caught statically -- "validity
-// is not conditional on execution path" per the gate review.
+// is not conditional on execution path.
 func TestRun_Substitution_PlanTimeContractViolation_UnreachableStep(t *testing.T) {
 	pkgsRoot := t.TempDir()
 	pkgDir := filepath.Join(pkgsRoot, "bad-pkg2")

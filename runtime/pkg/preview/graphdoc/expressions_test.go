@@ -126,7 +126,7 @@ func TestExpressionMetadataHasNoHashException(t *testing.T) {
 	}
 }
 
-func TestExpressionDetailBudgetsAndLegacyBytes(t *testing.T) {
+func TestExpressionDetailBudgetsAndPlainBytes(t *testing.T) {
 	plain := detailsForStep(&schema.Step{Type: schema.StepTypeNoop, Capture: map[string]string{"x": "literal"}})
 	data, _ := json.Marshal(plain)
 	if strings.Contains(string(data), "expression_presentation") {

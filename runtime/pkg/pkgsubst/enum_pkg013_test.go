@@ -11,7 +11,7 @@ import (
 // enum: set must exactly match the action arg's enum: set (order-
 // insensitive, NFC-normalized) -- a narrower or wider substitute set is
 // PKG-013, the same code as any other signature mismatch (not a new
-// ENUM-0xx code, per Barbara's ruling).
+// ENUM-0xx code).
 func TestPlan_InputEnumMismatch_PKG013(t *testing.T) {
 	action := baseAction()
 	action.Args["node"].Enum = schema.EnumConstraint{"node-a", "node-b"}

@@ -12,7 +12,7 @@ import (
 
 // TestRun_PackageMap_RealVsMockBinding is a CLI integration test modeled on
 // the r23-tool-package conformance fixture
-// (design/yawr/testdata/runbooks/r23-tool-package/schema.yaml): a runbook
+// A runbook
 // pins a package name (acme.incident-tools) and bare tool name (kubectl)
 // via toolRefs. Run unchanged with no flag, the project's real
 // .yawr/config.yaml requires: binding is used; run with --package-map
@@ -44,7 +44,7 @@ func TestRun_PackageMap_RealVsMockBinding(t *testing.T) {
 		t.Fatalf("Abs: %v", err)
 	}
 
-	// requires[].path is workspace-level (design/yawr/sections/06-tool-
+	// requires[].path is workspace-level.
 	// runtime.tex §Secure Path Resolution): relative "../" segments
 	// resolving outside the workspace are permitted (only reported, never
 	// rejected — PKG-W003), so a relative path up to the external pkgsRoot

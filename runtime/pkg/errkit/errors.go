@@ -120,7 +120,7 @@ func ClassSentinel(class string) *Error { return classSentinels[class] }
 // fatal error. Warning classes end with "-W" (e.g. "PKG-W", "DINC-W").
 // Callers that accumulate []error from pkgcatalog.Build/BindFile MUST
 // use this (or equivalent Class()=="PKG-W" filtering) to separate warnings
-// from fatal errors before deciding whether to abort: per Barbara's binding
+// from fatal errors before deciding whether to abort: the binding
 // ruling (TV-PKG-PATH-002), a workspace-level path escaping the workspace
 // root is reported via PKG-W003 and MUST NOT cause the operation to fail.
 func IsWarning(err error) bool {

@@ -306,22 +306,22 @@ func TestReplayFromTraceStrictRejectsEmptyGraphAndCatalogDependencies(t *testing
 	}
 }
 
-func TestReplayFromTraceLegacyRequiresExplicitCompatibility(t *testing.T) {
+func TestReplayFromTraceScenarioRequiresExplicitPatternMode(t *testing.T) {
 	directory := makeReplayDir(t)
-	tracePath := filepath.Join(directory, "legacy-trace.jsonl")
+	tracePath := filepath.Join(directory, "trace.jsonl")
 	writeTrace(t, tracePath, "runbook.yaml")
-	scenarioPath := filepath.Join(directory, "legacy-scenario.yaml")
+	scenarioPath := filepath.Join(directory, "scenario.yaml")
 	if err := os.WriteFile(scenarioPath, []byte(overrideScenarioYAML()), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	_, err := NewReplayEngine(engine.EngineConfig{
 		Executors: internalexecutor.NewMapRegistry(), Dispatcher: internaleventbus.NewDispatcher(),
 		TraceWriter: &captureTraceWriter{}, Platform: platform.NewFakePlatform(),
-	}, &fakeParser{result: &parser.ParsedRunbook{Source: "legacy"}}, &fakePlanner{plan: makePlan()}).ReplayFromTrace(
+	}, &fakeParser{result: &parser.ParsedRunbook{Source: "current"}}, &fakePlanner{plan: makePlan()}).ReplayFromTrace(
 		context.Background(), tracePath, scenarioPath, engine.RunOptions{},
 	)
 	if !engine.IsReplayBoundaryError(err) {
-		t.Fatalf("ReplayFromTrace error = %v, want explicit compatibility boundary", err)
+		t.Fatalf("ReplayFromTrace error = %v, want explicit pattern-mode boundary", err)
 	}
 }
 

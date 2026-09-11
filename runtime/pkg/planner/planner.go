@@ -95,9 +95,8 @@ var (
 	ErrMaxDepthExceeded = errors.New("planner: max include depth exceeded")
 
 	// ErrContextMismatch (PLAN-010) indicates a tool's AllowedEnvironments
-	// does not include the active profile's context. This is the portability
-	// gap Cristiano reported: the tool exists and is correctly authored, but
-	// it has not been configured to run in the requested runtime context.
+	// does not include the active profile's context. The tool exists and is
+	// correctly authored, but is not configured for the requested context.
 	ErrContextMismatch = errors.New("planner: tool not allowed in this context")
 
 	// ErrAttendanceMismatch (PLAN-011) indicates the profile declares

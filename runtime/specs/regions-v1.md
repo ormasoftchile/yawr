@@ -1,7 +1,6 @@
 # Region Manifest v1
 
-Status: draft (May 2026)
-Replaces: nothing (first version)
+Status: current contract
 Scope: a structural overlay on a yawr runbook that lets renderers group
 yawr nodes into domain-shaped units without changing engine semantics.
 

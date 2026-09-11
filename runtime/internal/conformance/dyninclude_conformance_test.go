@@ -94,19 +94,18 @@ const (
 )
 
 var dynIncludeDefectSkips = map[string]string{
-	// DEF-001 (CLI preflight) FIXED by Don. All 12 CLI-preflight vectors removed.
-	// DEF-005 (REF-011 empty literal → DINC-002) FIXED by Ken. TV-DYN-REF-011 removed.
-	// DEF-006 (entry governance never seeded) FIXED by Don. TV-DYN-GOV-005 removed.
+	// CLI preflight vectors are covered by production-path tests.
+	// REF-011 empty literals are covered by DINC-002.
+	// Entry governance seeding is covered by production-path tests.
 
 	// ── Permanent skip: B-16 (intentional defensive dead code) ──────────────
 	// DINC-009 is retained as intentional dead code. expr.Evaluator.Eval() always
 	// returns a string; non-string refs cannot occur in practice. B-16 closes this
 	// as "not a defect" — the evaluator's string-normalizing contract is correct and
 	// is not changing. The non-string path cannot fire by design.
-	"TV-DYN-TMPL-005": "PERMANENT SKIP (B-16) — DINC-009 is intentional defensive dead code per Barbara ruling B-16. expr.Evaluator.Eval() always returns string; non-string refs cannot occur. The DINC-009 code path is unreachable by design and will not be made reachable.",
+	"TV-DYN-TMPL-005": "PERMANENT SKIP — expr.Evaluator.Eval() always returns string, so non-string refs are unreachable by design.",
 
-	// ── Production defect DEF-006: FIXED by Don ─────────────────────────────
-	// Don's WithEntryGovernance call before eng.Start now seeds the entry runbook's
+	// WithEntryGovernance before eng.Start seeds the entry runbook's
 	// static governance: block as the initial dynGov in context. ComposeGovernance
 	// now receives the real parent policy instead of nil. TV-DYN-GOV-005 removed.
 
@@ -116,14 +115,14 @@ var dynIncludeDefectSkips = map[string]string{
 	// harness always runs with TTYOutput=false so always gets NoOpApprovalGate.
 	// require_approval IS enforceable in real interactive deployments; this is a
 	// harness/subprocess limitation only, not a governance gap.
-	// Ken's dynamic_include_test.go covers nil-gate and denied-gate DYN-015 paths directly.
-	"TV-DYN-GOV-001": "HARNESS LIMITATION — TTYOutput=true installs TerminalApprovalGate (can deny, fires DYN-015); CLI subprocess harness always runs without TTY so gets NoOpApprovalGate which silently approves. require_approval enforcement is correct in interactive mode; harness cannot exercise it. Covered by Ken's unit tests.",
+	// dynamic_include_test.go covers nil-gate and denied-gate DYN-015 paths directly.
+	"TV-DYN-GOV-001": "HARNESS LIMITATION — the subprocess harness has no TTY; interactive approval enforcement is covered by unit tests.",
 
 	// ── Permanent skip: B-17 (capabilities out of scope) ────────────────────
 	// schema.GovernanceConfig has no Capabilities field; capability narrowing cannot
 	// be expressed or enforced. B-17 marks capabilities as a forward-reference and
 	// amends §6 of the contract accordingly. GOV-015 tests capabilities specifically.
-	"TV-DYN-GOV-015": "PERMANENT SKIP (B-17) — schema.GovernanceConfig has no Capabilities field; capability narrowing is out of scope for this feature per Barbara ruling B-17 (§6 amended). Vector tests capabilities-specific DYN-015; cannot run until capabilities are added to the schema.",
+	"TV-DYN-GOV-015": "PERMANENT SKIP — schema.GovernanceConfig has no Capabilities field, so this vector is outside the current contract.",
 
 	// ── Production defect DEF-004 (closed by B-19) ──────────────────────────
 	// when: conditions are stored in ResolvedStep.When and validated at plan time

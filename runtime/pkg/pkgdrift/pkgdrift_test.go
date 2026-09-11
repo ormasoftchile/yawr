@@ -19,7 +19,7 @@ func TestEvaluate_NoMismatch_AlwaysAllowed(t *testing.T) {
 	}
 }
 
-// design/yawr/sections/13-evidence-tracing-resumption.tex §Package
+// Package resumption
 // Resumption Contract: mismatch on resume without override is a hard
 // refusal, PKG-009.
 func TestEvaluate_Resume_Mismatch_HardFail_PKG009(t *testing.T) {

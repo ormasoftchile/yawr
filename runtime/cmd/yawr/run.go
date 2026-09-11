@@ -353,7 +353,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 			AcknowledgeIndeterminate: *acknowledgeIndeterminate,
 		})
 		if err == nil {
-			// Package Resumption Contract (design/yawr/sections/
+			// Package resumption contract:
 			// 13-evidence-tracing-resumption.tex §Package Resumption
 			// Contract): recompute the current package/catalog digests
 			// the same way a fresh run would and compare them against
@@ -406,7 +406,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 			return exitValidation
 		}
 
-		// §5 (Barbara's gate review): the include closure's global package
+		// The include closure's global package
 		// set and per-file lexical tool binding is not implemented in
 		// this revision; fail closed (PKG-017) rather than silently
 		// dynamic-scope an included file's own requires:/toolRefs:
@@ -512,7 +512,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 					// ResolveToolRefsViaCatalog already separates fatal
 					// errors from PKG-W* advisories: a non-nil defs return
 					// alongside a non-empty errs means errs is
-					// warnings-only (Barbara's TV-PKG-PATH-002 ruling:
+					// warnings-only:
 					// PKG-W003 workspace-escape reports MUST NOT abort
 					// binding). A nil defs return with non-empty errs is
 					// the fatal case.
@@ -562,7 +562,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 			}
 		}
 
-		// B1 (Barbara's gate review): substitution contracts MUST be
+		// Substitution contracts MUST be
 		// validated statically at plan time, for every reachable action
 		// (dry-run and unreachable-by-condition steps included), not
 		// lazily the first time a substituted step executes. Runs
@@ -645,9 +645,8 @@ func runWithMode(args []string, mode engine.RunMode) int {
 		if parsed != nil && parsed.Runbook != nil {
 			ctx = internalexecutor.WithEntryGovernance(ctx, parsed.Runbook.Governance)
 		}
-		// Carry the runtime profile onto the plan so later slices (Ken's
-		// ProfileApprovalGate, David's preflight checks) can consume it
-		// from plan.Metadata.Profile without needing a separate lookup.
+		// Carry the runtime profile onto the plan so approval and preflight
+		// checks can consume it without a separate lookup.
 		// The profile MUST be consumed from plan.Tools (post-catalog,
 		// post-package-map), never used to re-resolve toolRefs.
 		if runtimeProfile != nil {

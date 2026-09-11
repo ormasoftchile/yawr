@@ -29,7 +29,7 @@ type ReplayEngine struct {
 	frozenPlan    *engine.ExecutionPlan
 	patternReplay bool
 	// pins are the dynamic include records from the original run, used to
-	// re-bind without re-resolving during replay (Barbara §8.3).
+	// re-bind without re-resolving during replay.
 	// Set via WithPins, typically loaded from the run store by the caller.
 	pins []schema.LockedDynamicInclude
 }
@@ -91,14 +91,14 @@ func (r *ReplayEngine) ReplayFromTrace(ctx context.Context, tracePath string, sc
 			return nil, err
 		}
 	}
-	legacy := scenario != nil && scenario.PatternFixtures
-	if legacy && !r.patternReplay {
+	patternFixtures := scenario != nil && scenario.PatternFixtures
+	if patternFixtures && !r.patternReplay {
 		return nil, engine.NewReplayBoundaryError(errors.New("replay: pattern-fixture replay must be explicitly enabled"))
 	}
-	if !legacy && r.patternReplay {
+	if !patternFixtures && r.patternReplay {
 		return nil, engine.NewReplayBoundaryError(errors.New("replay: pattern-fixture replay cannot execute an exact replay"))
 	}
-	if !legacy {
+	if !patternFixtures {
 		if r.frozenPlan == nil {
 			return nil, engine.NewReplayBoundaryError(errors.New("replay: strict replay requires a frozen plan"))
 		}
@@ -122,7 +122,7 @@ func (r *ReplayEngine) ReplayFromTrace(ctx context.Context, tracePath string, sc
 		if err != nil {
 			return nil, fmt.Errorf("replay: restore frozen plan: %w", err)
 		}
-		if !legacy {
+		if !patternFixtures {
 			for index, pin := range plan.Metadata.DynamicIncludes {
 				if len(pin.ExecutableClosure) == 0 {
 					return nil, engine.NewReplayBoundaryError(fmt.Errorf(

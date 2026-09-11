@@ -14,7 +14,7 @@ import (
 // Binding is the resolved, file-local name -> tool-definition mapping
 // produced by Phase B for one runbook file. Tool-name binding is lexically
 // scoped to the declaring file and is never inherited by an included child
-// (design/yawr/sections/06-tool-runtime.tex §Includes, Lexical Scoping, and
+// Includes use lexical scoping and
 // Global Package Set).
 type Binding struct {
 	Name string
@@ -114,7 +114,7 @@ func (source *Source) bindByPath(runbookDir string, ref *schema.ToolRef, workspa
 	}
 	var warnings []error
 	if external {
-		// Barbara's binding ruling (TV-PKG-PATH-002): kind is
+		// The path kind is
 		// KindToolRefsPath (workspace-level) here -- packageRoot=="" was
 		// the precondition for choosing it over
 		// KindToolRefsPathPackageInternal above -- so an out-of-workspace
@@ -221,7 +221,7 @@ func bindByBareName(base *Catalog, fileBare map[string][]*Entry, ref *schema.Too
 
 // checkVersionConstraint parses ref's version constraint and validates it
 // against the resolved tool's own declared meta.version. Per
-// design/yawr/sections/06-tool-runtime.tex, toolRefs[].version is checked
+// toolRefs[].version is checked
 // against the resolved tool definition's declared version when a package
 // pin makes the resolved tool unambiguous. If the resolved tool declares no
 // version (declaredVersion == ""), the constraint cannot be evaluated and

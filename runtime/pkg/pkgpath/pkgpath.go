@@ -1,5 +1,5 @@
 // Package pkgpath implements the secure path resolution rules of
-// design/yawr/sections/06-tool-runtime.tex §Secure Path Resolution, applied
+// Secure path resolution is applied
 // uniformly to requires[].path, exports.tools[].path, execute.path,
 // toolRefs[].path, tool-paths[], and package-internal include/import paths.
 package pkgpath

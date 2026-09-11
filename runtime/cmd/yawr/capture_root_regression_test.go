@@ -8,7 +8,7 @@ import (
 )
 
 // TestRun_Substitution_OutputsCaptureRoot is a B5 regression test
-// (Barbara's gate review): the ratified `outputs.<name>` GCP capture root
+// The `outputs.<name>` GCP capture root
 // (gcp.ebnf §3.4a) resolves against the current step's own declared
 // substitution outputs and can be captured into a variable via the step's
 // own capture: block, distinct from the pre-existing runtime-materialized

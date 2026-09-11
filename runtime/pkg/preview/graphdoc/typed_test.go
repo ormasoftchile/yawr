@@ -10,7 +10,7 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/preview/graphdoc"
 )
 
-func TestTypedGraphMetadataAndLegacyIdentity(t *testing.T) {
+func TestTypedGraphMetadataAndMinimalIdentity(t *testing.T) {
 	p, err := parser.New(platform.Real())
 	if err != nil {
 		t.Fatal(err)
@@ -54,19 +54,19 @@ flow:
 	if err != nil || doc2.Hash != first {
 		t.Fatal("unstable authored graph hash")
 	}
-	legacy, err := p.ParseBytes(context.Background(), []byte("apiVersion: yawr.runbook/v1\nid: old\nname: Old\nflow:\n  - step: {id: n, type: noop}\n"))
+	minimal, err := p.ParseBytes(context.Background(), []byte("apiVersion: yawr.runbook/v1\nid: minimal\nname: Minimal\nflow:\n  - step: {id: n, type: noop}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	old, err := (&graphdoc.Builder{}).Build(context.Background(), legacy)
+	minimalDoc, err := (&graphdoc.Builder{}).Build(context.Background(), minimal)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if old.SchemaVersion != "1" || old.Frames[0].Invocation != nil {
-		t.Fatal("historical graph gained new metadata")
+	if minimalDoc.SchemaVersion != "1" || minimalDoc.Frames[0].Invocation != nil {
+		t.Fatal("minimal graph gained typed metadata")
 	}
-	body, _ := json.Marshal(old)
+	body, _ := json.Marshal(minimalDoc)
 	if len(body) == 0 {
-		t.Fatal("legacy graph failed serialization")
+		t.Fatal("minimal graph failed serialization")
 	}
 }

@@ -44,7 +44,7 @@ func ResolveToolRefs(runbookPath string, refs []*schema.ToolRef) ([]toolpkg.Tool
 // eventual pkg/run wiring) construct this once from .yawr/config.yaml and
 // pass it into ResolveToolRefsViaCatalog for every runbook file that needs
 // binding, so the catalog freeze happens exactly once per run
-// (design/yawr/sections/06-tool-runtime.tex §Tool Discovery: "A runtime
+// A runtime
 // MUST NOT mutate the catalog after Phase C completes.").
 type PackageCatalogOptions struct {
 	WorkspaceRoot    string

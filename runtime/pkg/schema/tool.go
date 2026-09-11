@@ -36,9 +36,9 @@ func (r *ToolRef) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // ToolMeta is the canonical, nested `meta:` identity block of a .tool.yaml
-// document (design/yawr/sections/06-tool-runtime.tex §Tool Definition
+// document.
 // Schema). This is the shape used by every package-exported tool file in
-// the Tess conformance corpus (design/yawr/conformance/tv-pkg-resolve.yaml).
+// package-substitution conformance documents.
 type ToolMeta struct {
 	Name        string `yaml:"name"                  json:"name"`
 	Version     string `yaml:"version,omitempty"     json:"version,omitempty"`
@@ -47,9 +47,9 @@ type ToolMeta struct {
 }
 
 // ToolGovernance is a tool definition's own governance block
-// (design/yawr/sections/06-tool-runtime.tex §Tool Definition Schema). It
+// The tool definition contract
 // continues to gate an action whether the action is process-backed or
-// substituted (design/yawr/sections/12-governance-policy.tex §Substitution
+// substituted.
 // Governance Composition).
 type ToolGovernance struct {
 	RequiresCapabilities []string `yaml:"requires-capabilities,omitempty" json:"requires-capabilities,omitempty"`
@@ -59,7 +59,7 @@ type ToolGovernance struct {
 	RequiresApproval *bool `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
 	// AllowCommands is the tool-level command allowlist that composes with
 	// a substituted action's own governance per §Substitution Governance
-	// Composition (design/yawr/sections/12-governance-policy.tex): the
+	// Composition:
 	// substitute's allow_commands is INTERSECTED with this set, never
 	// unioned (a substitute may only narrow, never widen, PKG-014).
 	AllowCommands []string `yaml:"allow-commands,omitempty" json:"allow-commands,omitempty"`
@@ -172,14 +172,14 @@ type PlatformImpl struct {
 }
 
 // ExecuteSpec is the per-action substitution declaration
-// (design/yawr/sections/06-tool-runtime.tex §Action Substitution). The
+// Action substitution.
 // per-action key is execute: (not the tool-level impl: block, which is an
 // unrelated, per-platform mobile-dispatch concept).
 type ExecuteSpec struct {
 	// Kind is "process" (default) or "runbook".
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
 	// Path resolves relative to the DECLARING .tool.yaml's own directory
-	// (design/yawr/sections/06-tool-runtime.tex Table tab:tool-path-bases),
+	// Path base,
 	// never the calling runbook, workspace root, or process cwd.
 	Path string `yaml:"path,omitempty" json:"path,omitempty"`
 }
@@ -223,7 +223,7 @@ type ToolAction struct {
 
 	// Execute declares this action's implementation kind. Absent or
 	// kind: process is a normal process-backed action; kind: runbook makes
-	// this a substituted action (design/yawr/sections/06-tool-runtime.tex
+	// this a substituted action.
 	// §Action Substitution).
 	Execute *ExecuteSpec `yaml:"execute,omitempty" json:"execute,omitempty"`
 

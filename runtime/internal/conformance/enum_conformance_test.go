@@ -17,9 +17,9 @@ func enumDataDir(t *testing.T) string {
 }
 
 // TestLoadEnumSuite pins the frozen corpus size
-// (barbara-enum-spec-final-gate-approval.md: 58 vectors + 13 Slice 7
+// (58 declaration vectors plus 13 governance vectors
 // tool-governance vectors + 1 GOV-014 classification-validation vector
-// = 72 total; only Tess may amend TV-ENUM-DECL-006)
+// = 72 total)
 // and that the schema-validated decode succeeds.
 func TestLoadEnumSuite(t *testing.T) {
 	vectors, err := LoadEnumSuite(context.Background(), enumDataDir(t))

@@ -25,8 +25,16 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(config, /label:\s*['"]production-surface['"]/);
   assert.equal((config.match(/version:\s*['"]1\.137\.0['"]/g) || []).length, 2);
   assert.equal(manifest.engines.vscode, '^1.137.0');
-  assert.match(manifest.scripts['test:e2e'], /run-vscode-test\.mjs source/);
-  assert.match(manifest.scripts['test:e2e:vsix'], /run-vscode-test\.mjs production-surface/);
+  assert.match(manifest.scripts.test, /extension-lifecycle\.mjs unit test\/\*\.test\.js/);
+  assert.match(manifest.scripts['test:e2e'], /extension-lifecycle\.mjs source/);
+  assert.match(manifest.scripts['test:e2e:vsix'], /extension-lifecycle\.mjs installed/);
+  assert.match(manifest.scripts.package, /extension-lifecycle\.mjs package/);
+  const lifecycle = fs.readFileSync(path.join(root, 'scripts', 'extension-lifecycle.mjs'), 'utf8');
+  assert.match(lifecycle, /finally\s*\{/);
+  assert.match(lifecycle, /media\/graph\.css/);
+  assert.match(lifecycle, /restoreFiles\(snapshot\)/);
+  assert.match(lifecycle, /rm\(join\(root, 'out'\)/);
+  assert.match(lifecycle, /rm\(join\(root, '\.vscode-test'\)/);
 });
 
 test('component wiring uses the monorepo runtime without a second checkout', () => {

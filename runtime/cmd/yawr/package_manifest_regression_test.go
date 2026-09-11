@@ -12,7 +12,7 @@ import (
 )
 
 // TestCheckResumePackageDrift_RemovedPackage_PKG001 is a B4 regression test
-// (Barbara's gate review): a package recorded in the manifest
+// A package recorded in the manifest
 // (plan.Metadata.PackageDigests) but absent from the current resolution
 // (e.g. its requires: entry was deleted from .yawr/config.yaml between
 // plan-time and resume) MUST raise PKG-001 naming the missing package --

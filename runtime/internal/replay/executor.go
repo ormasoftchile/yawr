@@ -311,7 +311,7 @@ type ReplayExecutorRegistry struct {
 	evidenceHookBound bool
 	// dynamicIncludeExec, when non-nil, is returned for "include" lookups
 	// instead of a plain ReplayExecutor. Used for pin-based dynamic include
-	// re-binding during replay (Barbara §8.3).
+	// re-binding during replay.
 	dynamicIncludeExec engine.StepExecutor
 }
 
