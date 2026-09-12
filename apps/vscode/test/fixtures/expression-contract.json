@@ -1,0 +1,28 @@
+[
+  {
+    "text": "count >= 2",
+    "expected": {
+      "mode": "gxl",
+      "text_length": 10,
+      "text_digest": "sha256:704d388d4c610cedd54772e1361b8066356dad95b3a827dde99241a782f77cb5",
+      "tokens": [
+        {"start":0,"end":5,"class":"variable"},
+        {"start":6,"end":8,"class":"operator"},
+        {"start":9,"end":10,"class":"number"}
+      ]
+    }
+  },
+  {
+    "text": "Hi ${name}!",
+    "expected": {
+      "mode": "gis",
+      "text_length": 11,
+      "text_digest": "sha256:9d5600fcec51fa7fd4f0c18f13c36080e63b8e975a13214fbf7f735f0cb927f8",
+      "tokens": [
+        {"start":3,"end":5,"class":"interpolation"},
+        {"start":5,"end":9,"class":"variable"},
+        {"start":9,"end":10,"class":"interpolation"}
+      ]
+    }
+  }
+]

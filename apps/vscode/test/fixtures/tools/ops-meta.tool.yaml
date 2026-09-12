@@ -1,0 +1,7 @@
+# Fixture: canonical tool identity.
+meta:
+  name: ops-meta
+transport:
+  mode: vscode-mcp
+actions:
+  - name: act

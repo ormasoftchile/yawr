@@ -1,0 +1,62 @@
+[
+  {
+    "name": "namespace-original",
+    "source_template": "        name: db\n        action: inspect\n      when: st|CURSOR|r.contains('x', 'y') # keep\n",
+    "expected_source_template": "        name: db\n        action: inspect\n      when: str.contains('x', 'y') # keep\n",
+    "item": "str", "kind": "namespace", "native": true
+  },
+  {
+    "name": "namespace-before-dot",
+    "source_template": "        name: db\n        action: inspect\n      when: str|CURSOR|.contains('x', 'y')\n",
+    "expected_source_template": "        name: db\n        action: inspect\n      when: str.contains('x', 'y')\n",
+    "item": "str", "kind": "namespace"
+  },
+  {
+    "name": "namespace-suffix",
+    "source_template": "        name: db\n        action: inspect\n      when: st|CURSOR|Wrong.contains('x', 'y') # keep\n",
+    "expected_source_template": "        name: db\n        action: inspect\n      when: str.contains('x', 'y') # keep\n",
+    "item": "str", "kind": "namespace", "native": true
+  },
+  {
+    "name": "namespace-encoded-comparator",
+    "source_template": "        name: db\n        action: inspect\n      when: \"list.order(rows, 's\\\\u0074|CURSOR|Wrong.co')\"\n",
+    "expected_source_template": "        name: db\n        action: inspect\n      when: \"list.order(rows, 'str.co')\"\n",
+    "item": "str", "kind": "namespace"
+  },
+  {
+    "name": "namespace-yaml-escape",
+    "source_template": "        name: db\n        action: inspect\n      when: \"s\\u0074|CURSOR|Wrong.contains('x', 'y')\"\n",
+    "expected_source_template": "        name: db\n        action: inspect\n      when: \"str.contains('x', 'y')\"\n",
+    "item": "str", "kind": "namespace"
+  },
+  {
+    "name": "method-mid-token",
+    "source_template": "        name: db\n        action: inspect\n      when: str.co|CURSOR|Wrong('x', 'y')\n",
+    "expected_source_template": "        name: db\n        action: inspect\n      when: str.contains('x', 'y')\n",
+    "item": "str.contains", "kind": "function"
+  },
+  {
+    "name": "quoted-key-original",
+    "source_template": "        name: db\n        action: inspect\n        args:\n          \"te|CURSOR|\" : 5 # keep\n          limit: 9 # sibling\n",
+    "expected_source_template": "        name: db\n        action: inspect\n        args:\n          \"text\" : 5 # keep\n          limit: 9 # sibling\n",
+    "item": "text", "kind": "argument", "native": true
+  },
+  {
+    "name": "single-quoted-key",
+    "source_template": "        name: db\n        action: inspect\n        args:\n          'te|CURSOR|'  : 5 # keep\n          limit: 9 # sibling\n",
+    "expected_source_template": "        name: db\n        action: inspect\n        args:\n          'text'  : 5 # keep\n          limit: 9 # sibling\n",
+    "item": "text", "kind": "argument", "native": true
+  },
+  {
+    "name": "escaped-key",
+    "source_template": "        name: db\n        action: inspect\n        args:\n          \"t\\u0065|CURSOR|Wrong\"\t:\t5 # keep\n          limit: 9 # sibling\n",
+    "expected_source_template": "        name: db\n        action: inspect\n        args:\n          \"text\"\t:\t5 # keep\n          limit: 9 # sibling\n",
+    "item": "text", "kind": "argument"
+  },
+  {
+    "name": "plain-spaced-key",
+    "source_template": "        name: db\n        action: inspect\n        args:\n          te|CURSOR|   : 5 # keep\n          limit: 9 # sibling\n",
+    "expected_source_template": "        name: db\n        action: inspect\n        args:\n          text   : 5 # keep\n          limit: 9 # sibling\n",
+    "item": "text", "kind": "argument"
+  }
+]

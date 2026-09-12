@@ -1,0 +1,54 @@
+# Child runbook: DNS lookup + ping check for a single host.
+# Called by collect-health.runbook.yaml via include.
+apiVersion: yawr.runbook/v1
+
+id: check-service
+name: check-service
+kind: reference
+description: DNS lookup and ping check for a single host — both always run
+
+toolRefs:
+  - name: nslookup
+    path: ../../tools/nslookup.tool.yaml
+  - name: ping
+    path: ../../tools/ping.tool.yaml
+
+flow:
+  - step:
+      id: dns_lookup
+      type: tool
+      title: "DNS lookup {{ .service_host }}"
+      on_error: continue
+      tool:
+        name: nslookup
+        action: lookup
+        args:
+          name: "{{ .service_host }}"
+      capture:
+        dns_out: stdout
+        dns_exit: exit_code
+
+  - step:
+      id: ping_host
+      type: tool
+      title: "Ping {{ .service_host }}"
+      on_error: continue
+      tool:
+        name: ping
+        action: check
+        args:
+          host: "{{ .service_host }}"
+          count: "3"
+      capture:
+        ping_out: stdout
+        ping_exit: exit_code
+
+  - step:
+      id: summarize
+      type: noop
+      title: "Summarize {{ .service_host }}"
+      capture:
+        checked_host: "{{ .service_host }}"
+        host_ok: '{{ if and (eq .dns_exit 0) (eq .ping_exit 0) }}true{{ else }}false{{ end }}'
+        host_errors: '{{ if ne .dns_exit 0 }}DNS failed for {{ .service_host }}; {{ end }}{{ if ne .ping_exit 0 }}Ping failed for {{ .service_host }}; {{ end }}'
+        host_summary: "DNS={{ if eq .dns_exit 0 }}ok{{ else }}FAIL{{ end }} Ping={{ if eq .ping_exit 0 }}ok{{ else }}FAIL{{ end }}"

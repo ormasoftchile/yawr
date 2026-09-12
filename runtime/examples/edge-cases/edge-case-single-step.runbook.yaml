@@ -1,0 +1,20 @@
+apiVersion: yawr.runbook/v1
+
+id: edge-case-single-step
+name: edge-case-single-step
+kind: reference
+description: Edge case runbook with exactly 1 step
+
+flow:
+  - step:
+      id: single_step
+      type: collector
+      title: Single Manual Step
+      prompt: |
+        This is the only step in this runbook.
+        Confirm that this step executes successfully.
+      fields:
+        - name: confirmation
+          type: text
+          label: Confirmation
+          required: false

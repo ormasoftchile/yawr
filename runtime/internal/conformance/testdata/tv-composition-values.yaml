@@ -1,0 +1,64 @@
+vectors:
+  - id: TV-GXL-EVAL-901
+    category: GXL-EVAL
+    description: Equivalent offsets compare as the same instant.
+    input: 'date.compare("2026-01-15T10:00:00Z", "2026-01-15T11:00:00+01:00")'
+    variables: {}
+    expected: {value: 0}
+    tags: [composition, date]
+  - id: TV-GXL-EVAL-902
+    category: GXL-EVAL
+    description: Signed positive inclusive thirty-minute boundary in seconds.
+    input: 'date.diffSeconds("2026-01-15T10:30:00Z", "2026-01-15T10:00:00Z")'
+    variables: {}
+    expected: {value: 1800}
+    tags: [composition, date]
+  - id: TV-GXL-EVAL-903
+    category: GXL-EVAL
+    description: Signed negative inclusive thirty-minute boundary in seconds.
+    input: 'date.diffSeconds("2026-01-15T10:00:00Z", "2026-01-15T10:30:00Z")'
+    variables: {}
+    expected: {value: -1800}
+    tags: [composition, date]
+  - id: TV-GXL-EVAL-904
+    category: GXL-EVAL
+    description: Ordering preserves equal evidence as ambiguous.
+    input: 'list.order(items, "left < right")'
+    variables: {items: [2, 2, 1]}
+    expected: {value: {status: ambiguous, items: [2, 2, 1]}}
+    tags: [composition, ordering]
+  - id: TV-GXL-EVAL-905
+    category: GXL-EVAL
+    description: Directed cycle takes precedence even when other pairs are ambiguous.
+    input: 'list.order(items, "(left == 1 and right == 2) or (left == 2 and right == 3) or (left == 3 and right == 1)")'
+    variables: {items: [1, 2, 3, 4]}
+    expected: {value: {status: inconsistent, items: [1, 2, 3, 4]}}
+    tags: [composition, ordering]
+  - id: TV-GXL-PARSE-901
+    category: GXL-PARSE
+    description: Comparator syntax is validated even on a short-circuited expression.
+    input: 'false and list.order(items, "left +")'
+    variables: {}
+    expected: {error_class: GXL-PARSE, error_code: GXL-PARSE-001}
+    tags: [composition, ordering]
+  - id: TV-GXL-PARSE-902
+    category: GXL-PARSE
+    description: Date remains an ordinary variable and object field outside calls.
+    input: 'date.timestamp == record.date'
+    variables: {}
+    expected: {value: parse_ok}
+    tags: [composition, compatibility]
+  - id: TV-GXL-EVAL-906
+    category: GXL-EVAL
+    description: Impossible calendar dates fail explicitly.
+    input: 'date.compare("2026-02-30T00:00:00Z", "2026-01-01T00:00:00Z")'
+    variables: {}
+    expected: {error_class: GXL-DATE, error_code: GXL-DATE-001}
+    tags: [composition, date]
+  - id: TV-GXL-PARSE-903
+    category: GXL-PARSE
+    description: Dynamic comparator source is forbidden before dispatch.
+    input: 'list.order(items, comparator)'
+    variables: {}
+    expected: {error_class: GXL-ORDER, error_code: GXL-ORDER-001}
+    tags: [composition, ordering]

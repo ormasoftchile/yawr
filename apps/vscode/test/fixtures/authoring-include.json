@@ -1,0 +1,83 @@
+{
+  "prefix": "apiVersion: yawr.runbook/v1\nid: example\nname: Example 😀\nflow:\n  - step:\n      id: child\n      type: include\n      include:",
+  "cases": [
+    {
+      "name": "include-blank-colon",
+      "source": "|CURSOR| # keep\n",
+      "item": "runbook",
+      "kind": "include-mapping",
+      "expected": " {runbook: \"\"} # keep\n",
+      "native": true
+    },
+    {
+      "name": "include-blank-newline",
+      "source": "\n        ru|CURSOR|\n",
+      "item": "runbook",
+      "kind": "include-key",
+      "expected": "\n        runbook: \n",
+      "native": true
+    },
+    {
+      "name": "include-truly-empty-newline",
+      "source": "\n        |CURSOR|\n",
+      "item": "expand",
+      "kind": "include-key",
+      "expected": "\n        expand: \n",
+      "native": true
+    },
+    {
+      "name": "include-catalog-enum",
+      "source": "\n        runbook_ref: child\n        resolve_from:|CURSOR| # keep\n",
+      "item": "catalog",
+      "kind": "include-value",
+      "expected": "\n        runbook_ref: child\n        resolve_from: catalog # keep\n",
+      "native": true
+    },
+    {
+      "name": "include-quoted-key",
+      "source": "\n        'ru|CURSOR|n': child.yaml # keep\n",
+      "item": "runbook",
+      "kind": "include-key",
+      "expected": "\n        'runbook': child.yaml # keep\n",
+      "native": true
+    },
+    {
+      "name": "include-flow-key",
+      "source": " {\"ru|CURSOR|n\": child.yaml, with: {value: hi}}\n",
+      "item": "runbook",
+      "kind": "include-key",
+      "expected": " {\"runbook\": child.yaml, with: {value: hi}}\n",
+      "native": true
+    },
+    {
+      "name": "include-explicit-key",
+      "source": "\n        ? ru|CURSOR|n # key\n        : child.yaml # value\n",
+      "item": "runbook",
+      "kind": "include-key",
+      "expected": "\n        ? runbook # key\n        : child.yaml # value\n",
+      "native": true
+    },
+    {
+      "name": "include-gate-mapping",
+      "source": "\n        runbook: child.yaml\n        gate:|CURSOR| # keep\n",
+      "item": "stop_if",
+      "kind": "include-mapping",
+      "expected": "\n        runbook: child.yaml\n        gate: {stop_if: []} # keep\n",
+      "native": true
+    },
+    {
+      "name": "include-dynamic-scaffold",
+      "source": "|CURSOR|\n",
+      "item": "runbook_ref",
+      "kind": "include-mapping",
+      "expected": " {runbook_ref: \"\", resolve_from: catalog}\n"
+    },
+    {
+      "name": "include-flow-enum",
+      "source": " {runbook_ref: child, resolve_from: 'ca|CURSOR|t'}\n",
+      "item": "catalog",
+      "kind": "include-value",
+      "expected": " {runbook_ref: child, resolve_from: 'catalog'}\n"
+    }
+  ]
+}

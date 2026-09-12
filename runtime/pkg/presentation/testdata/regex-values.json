@@ -1,0 +1,727 @@
+[
+  {
+    "text": "^ab+$",
+    "expected": {
+      "mode": "regex",
+      "text_length": 5,
+      "text_digest": "sha256:ef8a568bab5daaea030820a7b860ffa3a8bf6283ade9cc9f9743e22fc6b26ff9",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 1,
+          "class": "keyword"
+        },
+        {
+          "start": 1,
+          "end": 3,
+          "class": "string"
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "class": "operator"
+        },
+        {
+          "start": 4,
+          "end": 5,
+          "class": "keyword"
+        }
+      ]
+    }
+  },
+  {
+    "text": "^[A-Za-z0-9][A-Za-z0-9-]{0,62}$",
+    "expected": {
+      "mode": "regex",
+      "text_length": 31,
+      "text_digest": "sha256:2a355a3cd11e94d7dd296051db2f11a9ac59a45c0e6b772874d08330b7532ef6",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 1,
+          "class": "keyword"
+        },
+        {
+          "start": 1,
+          "end": 2,
+          "class": "delimiter"
+        },
+        {
+          "start": 2,
+          "end": 3,
+          "class": "string"
+        },
+        {
+          "start": 3,
+          "end": 4,
+          "class": "operator"
+        },
+        {
+          "start": 4,
+          "end": 5,
+          "class": "string"
+        },
+        {
+          "start": 5,
+          "end": 6,
+          "class": "string"
+        },
+        {
+          "start": 6,
+          "end": 7,
+          "class": "operator"
+        },
+        {
+          "start": 7,
+          "end": 8,
+          "class": "string"
+        },
+        {
+          "start": 8,
+          "end": 9,
+          "class": "string"
+        },
+        {
+          "start": 9,
+          "end": 10,
+          "class": "operator"
+        },
+        {
+          "start": 10,
+          "end": 11,
+          "class": "string"
+        },
+        {
+          "start": 11,
+          "end": 12,
+          "class": "delimiter"
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "class": "delimiter"
+        },
+        {
+          "start": 13,
+          "end": 14,
+          "class": "string"
+        },
+        {
+          "start": 14,
+          "end": 15,
+          "class": "operator"
+        },
+        {
+          "start": 15,
+          "end": 16,
+          "class": "string"
+        },
+        {
+          "start": 16,
+          "end": 17,
+          "class": "string"
+        },
+        {
+          "start": 17,
+          "end": 18,
+          "class": "operator"
+        },
+        {
+          "start": 18,
+          "end": 19,
+          "class": "string"
+        },
+        {
+          "start": 19,
+          "end": 20,
+          "class": "string"
+        },
+        {
+          "start": 20,
+          "end": 21,
+          "class": "operator"
+        },
+        {
+          "start": 21,
+          "end": 22,
+          "class": "string"
+        },
+        {
+          "start": 22,
+          "end": 23,
+          "class": "string"
+        },
+        {
+          "start": 23,
+          "end": 24,
+          "class": "delimiter"
+        },
+        {
+          "start": 24,
+          "end": 25,
+          "class": "operator"
+        },
+        {
+          "start": 25,
+          "end": 26,
+          "class": "number"
+        },
+        {
+          "start": 26,
+          "end": 27,
+          "class": "operator"
+        },
+        {
+          "start": 27,
+          "end": 29,
+          "class": "number"
+        },
+        {
+          "start": 29,
+          "end": 30,
+          "class": "operator"
+        },
+        {
+          "start": 30,
+          "end": 31,
+          "class": "keyword"
+        }
+      ]
+    }
+  },
+  {
+    "text": "^(?P\u003clabel\u003e\\p{Greek}+)\\Q[🚀]\\E\\d{2,4}?$",
+    "expected": {
+      "mode": "regex",
+      "text_length": 39,
+      "text_digest": "sha256:7d972a6fca9f78bff4d9247d075931c2d8d2f62d37aac39aa1928bef85ee2f63",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 1,
+          "class": "keyword"
+        },
+        {
+          "start": 1,
+          "end": 5,
+          "class": "delimiter"
+        },
+        {
+          "start": 5,
+          "end": 10,
+          "class": "property"
+        },
+        {
+          "start": 10,
+          "end": 11,
+          "class": "delimiter"
+        },
+        {
+          "start": 11,
+          "end": 20,
+          "class": "keyword"
+        },
+        {
+          "start": 20,
+          "end": 21,
+          "class": "operator"
+        },
+        {
+          "start": 21,
+          "end": 22,
+          "class": "delimiter"
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "class": "string"
+        },
+        {
+          "start": 24,
+          "end": 28,
+          "class": "string"
+        },
+        {
+          "start": 28,
+          "end": 30,
+          "class": "string"
+        },
+        {
+          "start": 30,
+          "end": 32,
+          "class": "keyword"
+        },
+        {
+          "start": 32,
+          "end": 33,
+          "class": "operator"
+        },
+        {
+          "start": 33,
+          "end": 34,
+          "class": "number"
+        },
+        {
+          "start": 34,
+          "end": 35,
+          "class": "operator"
+        },
+        {
+          "start": 35,
+          "end": 36,
+          "class": "number"
+        },
+        {
+          "start": 36,
+          "end": 38,
+          "class": "operator"
+        },
+        {
+          "start": 38,
+          "end": 39,
+          "class": "keyword"
+        }
+      ]
+    }
+  },
+  {
+    "text": "^\\${literal}\\\\${suffix}$",
+    "expected": {
+      "mode": "regex",
+      "text_length": 24,
+      "text_digest": "sha256:3bb35200935dcf3caa64cefd037167ad2d2e4dcfcb95b99cce523f0363692c38",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 1,
+          "class": "keyword"
+        },
+        {
+          "start": 1,
+          "end": 4,
+          "class": "string"
+        },
+        {
+          "start": 4,
+          "end": 12,
+          "class": "string"
+        },
+        {
+          "start": 12,
+          "end": 14,
+          "class": "string"
+        },
+        {
+          "start": 14,
+          "end": 16,
+          "class": "interpolation"
+        },
+        {
+          "start": 16,
+          "end": 22,
+          "class": "variable"
+        },
+        {
+          "start": 22,
+          "end": 23,
+          "class": "interpolation"
+        },
+        {
+          "start": 23,
+          "end": 24,
+          "class": "keyword"
+        }
+      ]
+    }
+  },
+  {
+    "text": "regex.match(name, \"^ab+$\")",
+    "expected": {
+      "mode": "gxl",
+      "text_length": 26,
+      "text_digest": "sha256:921b03ac9bfb7ffe8f147a7d10c7f10813ae51c70b6d6a977f81670b06c43ecf",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 5,
+          "class": "namespace"
+        },
+        {
+          "start": 5,
+          "end": 6,
+          "class": "delimiter"
+        },
+        {
+          "start": 6,
+          "end": 11,
+          "class": "function"
+        },
+        {
+          "start": 11,
+          "end": 12,
+          "class": "delimiter"
+        },
+        {
+          "start": 12,
+          "end": 16,
+          "class": "variable"
+        },
+        {
+          "start": 16,
+          "end": 17,
+          "class": "delimiter"
+        },
+        {
+          "start": 18,
+          "end": 19,
+          "class": "string"
+        },
+        {
+          "start": 19,
+          "end": 20,
+          "class": "keyword"
+        },
+        {
+          "start": 20,
+          "end": 22,
+          "class": "string"
+        },
+        {
+          "start": 22,
+          "end": 23,
+          "class": "operator"
+        },
+        {
+          "start": 23,
+          "end": 24,
+          "class": "keyword"
+        },
+        {
+          "start": 24,
+          "end": 25,
+          "class": "string"
+        },
+        {
+          "start": 25,
+          "end": 26,
+          "class": "delimiter"
+        }
+      ]
+    }
+  },
+  {
+    "text": "${regex.match(name, \"^ab+$\")}",
+    "expected": {
+      "mode": "gis",
+      "text_length": 29,
+      "text_digest": "sha256:66cbd4a3d7529c69a4a96a925afe50dffd7f804eba8067591c48da3de40e1472",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 2,
+          "class": "interpolation"
+        },
+        {
+          "start": 2,
+          "end": 7,
+          "class": "namespace"
+        },
+        {
+          "start": 7,
+          "end": 8,
+          "class": "delimiter"
+        },
+        {
+          "start": 8,
+          "end": 13,
+          "class": "function"
+        },
+        {
+          "start": 13,
+          "end": 14,
+          "class": "delimiter"
+        },
+        {
+          "start": 14,
+          "end": 18,
+          "class": "variable"
+        },
+        {
+          "start": 18,
+          "end": 19,
+          "class": "delimiter"
+        },
+        {
+          "start": 20,
+          "end": 21,
+          "class": "string"
+        },
+        {
+          "start": 21,
+          "end": 22,
+          "class": "keyword"
+        },
+        {
+          "start": 22,
+          "end": 24,
+          "class": "string"
+        },
+        {
+          "start": 24,
+          "end": 25,
+          "class": "operator"
+        },
+        {
+          "start": 25,
+          "end": 26,
+          "class": "keyword"
+        },
+        {
+          "start": 26,
+          "end": 27,
+          "class": "string"
+        },
+        {
+          "start": 27,
+          "end": 28,
+          "class": "delimiter"
+        },
+        {
+          "start": 28,
+          "end": 29,
+          "class": "interpolation"
+        }
+      ]
+    }
+  },
+  {
+    "text": "${list.order(items, 'regex.match(left.name, \"^\\\\\\\\d+🚀$\")')}",
+    "expected": {
+      "mode": "gis",
+      "text_length": 60,
+      "text_digest": "sha256:b03fc6a785173189518f62ad72ca6a2161941db23343685ece286b2809b90a48",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 2,
+          "class": "interpolation"
+        },
+        {
+          "start": 2,
+          "end": 6,
+          "class": "namespace"
+        },
+        {
+          "start": 6,
+          "end": 7,
+          "class": "delimiter"
+        },
+        {
+          "start": 7,
+          "end": 12,
+          "class": "function"
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "class": "delimiter"
+        },
+        {
+          "start": 13,
+          "end": 18,
+          "class": "variable"
+        },
+        {
+          "start": 18,
+          "end": 19,
+          "class": "delimiter"
+        },
+        {
+          "start": 20,
+          "end": 21,
+          "class": "string"
+        },
+        {
+          "start": 21,
+          "end": 26,
+          "class": "namespace"
+        },
+        {
+          "start": 26,
+          "end": 27,
+          "class": "delimiter"
+        },
+        {
+          "start": 27,
+          "end": 32,
+          "class": "function"
+        },
+        {
+          "start": 32,
+          "end": 33,
+          "class": "delimiter"
+        },
+        {
+          "start": 33,
+          "end": 37,
+          "class": "variable"
+        },
+        {
+          "start": 37,
+          "end": 38,
+          "class": "delimiter"
+        },
+        {
+          "start": 38,
+          "end": 42,
+          "class": "property"
+        },
+        {
+          "start": 42,
+          "end": 43,
+          "class": "delimiter"
+        },
+        {
+          "start": 43,
+          "end": 44,
+          "class": "string"
+        },
+        {
+          "start": 44,
+          "end": 45,
+          "class": "string"
+        },
+        {
+          "start": 45,
+          "end": 46,
+          "class": "keyword"
+        },
+        {
+          "start": 46,
+          "end": 51,
+          "class": "keyword"
+        },
+        {
+          "start": 51,
+          "end": 52,
+          "class": "operator"
+        },
+        {
+          "start": 52,
+          "end": 54,
+          "class": "string"
+        },
+        {
+          "start": 54,
+          "end": 55,
+          "class": "keyword"
+        },
+        {
+          "start": 55,
+          "end": 56,
+          "class": "string"
+        },
+        {
+          "start": 56,
+          "end": 57,
+          "class": "delimiter"
+        },
+        {
+          "start": 57,
+          "end": 58,
+          "class": "string"
+        },
+        {
+          "start": 58,
+          "end": 59,
+          "class": "delimiter"
+        },
+        {
+          "start": 59,
+          "end": 60,
+          "class": "interpolation"
+        }
+      ]
+    }
+  },
+  {
+    "text": "regex.match(x, \"^${notGIS}$\")",
+    "expected": {
+      "mode": "gxl",
+      "text_length": 29,
+      "text_digest": "sha256:f6872939455e8fbf09e43b6f5303930e3f739acc51af51e890d0f8003977725c",
+      "tokens": [
+        {
+          "start": 0,
+          "end": 5,
+          "class": "namespace"
+        },
+        {
+          "start": 5,
+          "end": 6,
+          "class": "delimiter"
+        },
+        {
+          "start": 6,
+          "end": 11,
+          "class": "function"
+        },
+        {
+          "start": 11,
+          "end": 12,
+          "class": "delimiter"
+        },
+        {
+          "start": 12,
+          "end": 13,
+          "class": "variable"
+        },
+        {
+          "start": 13,
+          "end": 14,
+          "class": "delimiter"
+        },
+        {
+          "start": 15,
+          "end": 16,
+          "class": "string"
+        },
+        {
+          "start": 16,
+          "end": 17,
+          "class": "keyword"
+        },
+        {
+          "start": 17,
+          "end": 18,
+          "class": "keyword"
+        },
+        {
+          "start": 18,
+          "end": 19,
+          "class": "string"
+        },
+        {
+          "start": 19,
+          "end": 26,
+          "class": "string"
+        },
+        {
+          "start": 26,
+          "end": 27,
+          "class": "keyword"
+        },
+        {
+          "start": 27,
+          "end": 28,
+          "class": "string"
+        },
+        {
+          "start": 28,
+          "end": 29,
+          "class": "delimiter"
+        }
+      ]
+    }
+  }
+]

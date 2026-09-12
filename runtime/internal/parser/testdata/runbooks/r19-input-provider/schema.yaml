@@ -1,0 +1,189 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r19-input-provider
+name: r19 Input Provider Framework Test Fixture
+description: |
+  Validates Phase 8 Input Provider Framework: resolves inputs from env vars,
+  files, workspace config, and interactive prompts. Tests provider chaining,
+  fallback strategies, and value flow through subsequent steps.
+
+# NOTE: Parser currently accepts this schema, but resolution will fail until
+# Phase 8 implements the provider registry and resolution pipeline.
+# Expected parser changes needed:
+#   1. Pre-flight input resolution phase in run engine (before step 0)
+#   2. Provider registry for prefix matching (env.*, file.*, workspace.*)
+#   3. Built-in provider implementations (env, file, workspace, prompt)
+#   4. Fallback handling when providers fail to resolve
+#   5. Trace events: input.resolved, input.provider_started, input.fallback
+
+# Test Coverage:
+#   - env provider: API_KEY from environment variable
+#   - file provider: SSH key from filesystem (simulated)
+#   - workspace provider: default region from .yawr/config.yaml
+#   - prompt provider: operator name via interactive input
+#   - chained providers: database_host tries env first, then prompt
+#   - value flow: resolved inputs used in shell commands
+
+inputs:
+  # Test 1: env provider
+  api_key:
+    type: string
+    description: API key for external service
+    from: env.YAWR_TEST_API_KEY
+    # If YAWR_TEST_API_KEY is not set, run should abort immediately
+
+  # Test 2: file provider (JSON Pointer extraction)
+  database_host:
+    type: string
+    description: Database hostname from config file
+    from: file.testdata/config.json#/database/host
+    default: "localhost"
+    # Reads testdata/config.json and extracts json.database.host
+    # Falls back to "localhost" if file doesn't exist
+
+  # Test 3: workspace provider
+  default_region:
+    type: string
+    description: Default AWS region from workspace config
+    from: workspace.defaults.region
+    # Reads .yawr/config.yaml field: defaults.region
+    # If not found, prompts operator interactively
+
+  # Test 4: prompt provider with default
+  operator_name:
+    type: string
+    description: Name of the operator running this runbook
+    from: prompt
+    default: "anonymous"
+    # Always prompts operator for input
+    # Falls back to "anonymous" in dry-run/CI mode
+
+  # Test 5: chained providers (priority-ordered fallback)
+  # NOTE: Schema may need update to support array syntax
+  # deployment_target:
+  #   type: string
+  #   description: Deployment target environment
+  #   from:
+  #     - env.DEPLOY_TARGET
+  #     - workspace.deployment.target
+  #     - prompt
+  #   # Try env var first, then workspace config, then prompt operator
+
+metadata:
+  phase: "8"
+  test_category: "input-provider-framework"
+  author: "barbara-id"
+  created: "2026-04-20"
+
+governance:
+  rules:
+    - effects: ["fs.read"]
+      action: allow
+    - effects: ["network"]
+      action: deny
+
+flow:
+  # Step 1: Echo resolved env var to prove provider worked
+  - step:
+      id: verify_env_provider
+      type: cli
+      title: Verify env provider resolved API key
+      run: |
+        echo "API Key resolved: {{ .api_key }}"
+        if [ -z "{{ .api_key }}" ]; then
+          echo "ERROR: api_key was not resolved from env.YAWR_TEST_API_KEY"
+          exit 1
+        fi
+      contract:
+        effects: []
+        reads: [api_key]
+        writes: []
+
+  # Step 2: Echo resolved file value
+  - step:
+      id: verify_file_provider
+      type: cli
+      title: Verify file provider resolved database host
+      run: |
+        echo "Database host: {{ .database_host }}"
+        # Should be value from testdata/config.json or "localhost"
+      contract:
+        effects: []
+        reads: [database_host]
+        writes: []
+
+  # Step 3: Echo resolved workspace value
+  - step:
+      id: verify_workspace_provider
+      type: cli
+      title: Verify workspace provider resolved default region
+      run: |
+        echo "Default region: {{ .default_region }}"
+      contract:
+        effects: []
+        reads: [default_region]
+        writes: []
+
+  # Step 4: Greet operator by resolved name
+  - step:
+      id: greet_operator
+      type: cli
+      title: Greet operator using prompt-resolved name
+      run: |
+        echo "Hello, {{ .operator_name }}! Welcome to r19."
+        echo "You are running the Input Provider Framework test fixture."
+      contract:
+        effects: []
+        reads: [operator_name]
+        writes: []
+
+  # Step 5: Collector step that uses dynamic options (future)
+  # NOTE: Commented until inputProvider/getOptions is implemented
+  # - step:
+  #     id: collect_deployment_details
+  #     type: collector
+  #     title: Collect deployment details with dynamic options
+  #     prompt: |
+  #       Provide deployment configuration for {{ .default_region }}
+  #     fields:
+  #       - name: instance_type
+  #         type: select
+  #         label: EC2 instance type
+  #         required: true
+  #         options_from:
+  #           provider: aws-ec2
+  #           field: instance_types
+  #           # Provider filters available types by region from .default_region
+  #       - name: deployment_notes
+  #         type: text
+  #         label: Deployment notes
+  #         required: false
+  #         multiline: true
+
+  # Step 6: Assert all inputs were resolved correctly
+  - step:
+      id: assert_resolution
+      type: assert
+      title: Assert all inputs resolved successfully
+      assert:
+        - type: not-empty
+          subject: "{{ .api_key }}"
+          message: "api_key must be resolved from env provider"
+        - type: not-empty
+          subject: "{{ .database_host }}"
+          message: "database_host must be resolved from file provider or default"
+        - type: not-empty
+          subject: "{{ .default_region }}"
+          message: "default_region must be resolved from workspace or prompt"
+        - type: not-empty
+          subject: "{{ .operator_name }}"
+          message: "operator_name must be resolved from prompt or default"
+
+  # Step 7: Completion
+  - step:
+      id: complete
+      type: end
+      title: Input provider test complete
+      outcome:
+        category: success
+        code: input_provider_test_passed

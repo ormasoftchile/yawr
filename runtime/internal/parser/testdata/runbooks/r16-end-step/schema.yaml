@@ -1,0 +1,54 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r16-end-step
+name: r16 End Step
+description: |
+  Demonstrates the end step type for explicit runbook termination with
+  an outcome declaration. Runs a simple workflow and terminates with
+  a structured outcome containing category and code.
+
+inputs:
+  task_name:
+    type: string
+    description: Name of the task to execute
+    default: "backup-database"
+
+flow:
+  # Step 1: Initialize task
+  - step:
+      id: init
+      type: cli
+      title: Initialize task
+      command: echo
+      args: ["Initializing task: {{ .task_name }}"]
+      capture:
+        init_output: stdout
+
+  # Step 2: Execute task
+  - step:
+      id: execute
+      type: cli
+      title: Execute task
+      command: echo
+      args: ["Executing {{ .task_name }}"]
+      capture:
+        exec_output: stdout
+
+  # Step 3: Verify task completion
+  - step:
+      id: verify
+      type: cli
+      title: Verify task completion
+      command: echo
+      args: ["Task {{ .task_name }} completed successfully"]
+      capture:
+        verify_output: stdout
+
+  # Step 4: End with explicit outcome
+  - step:
+      id: task_complete
+      type: end
+      title: Task execution complete
+      outcome:
+        category: resolved
+        code: task_succeeded

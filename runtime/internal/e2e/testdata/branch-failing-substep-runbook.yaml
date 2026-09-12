@@ -1,0 +1,29 @@
+apiVersion: yawr.runbook/v1
+id: e2e-branch-failing-substep
+name: e2e-branch-failing-substep
+inputs:
+  flag:
+    type: string
+flow:
+  - step:
+      id: branch-step
+      type: branch
+      branches:
+        - condition: 'flag == "true"'
+          label: then
+          steps:
+            - step:
+                id: failing-substep
+                type: cli
+                command: sh
+                args: ["-c", "exit 1"]
+            - step:
+                id: should-not-run
+                type: cli
+                command: echo
+                args: ["this should not run"]
+  - step:
+      id: after-branch
+      type: cli
+      command: echo
+      args: ["after branch ran"]

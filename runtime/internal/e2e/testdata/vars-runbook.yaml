@@ -1,0 +1,19 @@
+apiVersion: yawr.runbook/v1
+id: e2e-vars
+name: e2e-vars
+inputs:
+  greeting:
+    type: string
+flow:
+  - step:
+      id: step1
+      type: cli
+      command: echo
+      args: ["${greeting}"]
+      capture:
+        message: stdout
+  - step:
+      id: step2
+      type: cli
+      command: echo
+      args: ["received: ${message}"]

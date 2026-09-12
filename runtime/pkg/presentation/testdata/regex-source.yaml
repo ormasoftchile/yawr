@@ -1,0 +1,16 @@
+flow:
+  - step:
+      type: assert
+      assert:
+        - type: matches
+          subject: '${name}'
+          expected: &db_name '^[A-Za-z0-9][A-Za-z0-9-]{0,62}$'
+        - type: matches
+          subject: '${other}'
+          expected: *db_name
+        - type: eq
+          subject: '${regex.match(name, "^ab+$")}'
+          expected: 'true'
+        - type: eq
+          subject: '^ab+$'
+          expected: '^ab+$'

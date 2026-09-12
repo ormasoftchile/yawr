@@ -1,0 +1,34 @@
+apiVersion: yawr.tool/v1
+meta: {name: records, version: "1.0.0"}
+transport: {mode: native, command: unused}
+actions:
+  - name: rows
+    classification: read-only
+    args:
+      name: {type: string, required: true}
+      count: {type: string, required: true}
+    outputs:
+      rows: {type: array, required: true}
+      status: {type: string, required: true, enum: [observed, no-data, failed]}
+    execute: {kind: runbook, path: rows.runbook.yaml}
+  - name: gather
+    classification: read-only
+    args:
+      configurations: {type: array, required: true}
+    outputs:
+      records: {type: array, required: true}
+      labels: {type: array, required: true}
+    execute: {kind: runbook, path: gather.runbook.yaml}
+  - name: relay
+    classification: read-only
+    outputs:
+      records: {type: array, required: true}
+      labels: {type: array, required: true}
+    execute: {kind: runbook, path: relay.runbook.yaml}
+  - name: order
+    classification: read-only
+    args:
+      observations: {type: array, required: true}
+    outputs:
+      ordering: {type: object, required: true}
+    execute: {kind: runbook, path: order.runbook.yaml}

@@ -1,0 +1,13 @@
+apiVersion: yawr.runbook/v1
+id: enum-fixture
+name: enum-fixture
+inputs:
+  env_name:
+    type: string
+    required: true
+    enum: ["prod", "staging"]
+flow:
+  - step:
+      id: end
+      type: end
+      outcome: {category: success, code: ok}

@@ -1,0 +1,4778 @@
+# Tool Packages conformance corpus.
+# Vectors model a synthetic workspace filesystem as a flat map from
+# workspace-relative POSIX paths to file content.
+#
+# Modeling extensions beyond plain file-content strings:
+#   - 'builtins': [name, ...]        — tier-0 built-in registry contents.
+#   - 'extensions': ["srv/tool", ...] — tier-3 extension/MCP registrations.
+#   - 'symlinks': {path: target}     — POSIX symlink, evaluated against the
+#     same flat filesystem map (path resolves through target).
+#   - 'reparse_points': {path: target} — NTFS junction/reparse point,
+#     evaluated identically to 'symlinks'.
+#
+# Categories: PKG-VERSION, PKG-RESOLVE, PKG-COLLIDE, PKG-PATH, PKG-SUBST,
+# PKG-DIGEST, PKG-ERROR. Every reachable PKG-001..030 (PKG-019 reserved),
+# PLAN-010, PKG-W003, and PKG-W004 are covered by the corpus.
+vectors:
+- id: TV-PKG-VERSION-001
+  category: PKG-VERSION
+  description: Caret constraint ^1.4.2 is satisfied by a package version inside its upper-exclusive bound
+    (>=1.4.2 <2.0.0).
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.9.9"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.9.9
+  tags:
+  - AR-TP-4
+- id: TV-PKG-VERSION-002
+  category: PKG-VERSION
+  description: Caret constraint ^1.4.2 rejects a package version at or above the caret's exclusive upper
+    bound (2.0.0).
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "2.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+- id: TV-PKG-VERSION-003
+  category: PKG-VERSION
+  description: Caret constraint on a 0.y.z version (^0.4.2) narrows to >=0.4.2 <0.5.0; a patch-level bump
+    within the same minor satisfies it.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^0.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "0.4.9"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 0.4.9
+- id: TV-PKG-VERSION-004
+  category: PKG-VERSION
+  description: Caret constraint on a 0.y.z version (^0.4.2) rejects a version at the next minor (0.5.0)
+    — the 0.x narrowing rule.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^0.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "0.5.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+- id: TV-PKG-VERSION-005
+  category: PKG-VERSION
+  description: Caret constraint on a 0.0.z version (^0.0.3) narrows to the exact patch >=0.0.3 <0.0.4.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^0.0.3"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "0.0.3"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 0.0.3
+- id: TV-PKG-VERSION-006
+  category: PKG-VERSION
+  description: Caret constraint on a 0.0.z version (^0.0.3) rejects the very next patch (0.0.4) under
+    the tightest 0.0.x narrowing.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^0.0.3"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "0.0.4"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+- id: TV-PKG-VERSION-007
+  category: PKG-VERSION
+  description: Tilde constraint ~1.4.2 (>=1.4.2 <1.5.0) is satisfied by a later patch within the same
+    minor.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "~1.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.4.9"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.4.9
+- id: TV-PKG-VERSION-008
+  category: PKG-VERSION
+  description: Tilde constraint ~1.4.2 rejects a version at the next minor (1.5.0).
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "~1.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.5.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+- id: TV-PKG-VERSION-009
+  category: PKG-VERSION
+  description: Conjunctive (space-separated, AND) constraint '>=1.2.0 <2.0.0' is satisfied inside both
+    bounds.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: ">=1.2.0 <2.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.5.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.5.0
+- id: TV-PKG-VERSION-010
+  category: PKG-VERSION
+  description: Conjunctive constraint '>=1.2.0 <2.0.0' rejects the exclusive upper bound value itself
+    (2.0.0).
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: ">=1.2.0 <2.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "2.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+- id: TV-PKG-VERSION-011
+  category: PKG-VERSION
+  description: Bare version constraint '1.4.2' (implicit '=') matches only the exact version — an exact-equality
+    comparator, not a range.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "1.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.4.2"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.4.2
+  tags:
+  - exact-equivalence
+- id: TV-PKG-VERSION-012
+  category: PKG-VERSION
+  description: 'Build metadata on the candidate version (+build.5) is ignored for ordering and satisfaction:
+    it still satisfies ^1.4.2.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.4.2"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.4.2+build.5"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.4.2+build.5
+  tags:
+  - build-metadata
+- id: TV-PKG-VERSION-013
+  category: PKG-VERSION
+  description: 'A prerelease candidate (1.5.0-rc.1) does NOT satisfy ^1.4.0: the comparator''s own version
+    has no prerelease component.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.4.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.5.0-rc.1"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+  tags:
+  - prerelease
+- id: TV-PKG-VERSION-014
+  category: PKG-VERSION
+  description: 'A prerelease candidate (1.5.0-rc.1) DOES satisfy ''>=1.5.0-rc.1 <1.6.0'': the comparator
+    shares the same prerelease-bearing major.minor.patch.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: ">=1.5.0-rc.1 <1.6.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.5.0-rc.1"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.5.0-rc.1
+  tags:
+  - prerelease
+- id: TV-PKG-VERSION-015
+  category: PKG-VERSION
+  description: Disjunction '||' is not supported by the MVP constraint grammar and is rejected as a malformed
+    constraint.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "1.0.0 || 2.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-003
+- id: TV-PKG-VERSION-016
+  category: PKG-VERSION
+  description: Partial-version caret '^1' (no minor/patch) is not supported by the MVP grammar and is
+    rejected as malformed.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-003
+- id: TV-PKG-VERSION-017
+  category: PKG-VERSION
+  description: 'A leading ''v'' on a package manifest version (v1.4.2) is rejected, not stripped: strict
+    SemVer 2.0.0 only.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.4.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "v1.4.2"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-025
+- id: TV-PKG-RESOLVE-001
+  category: PKG-RESOLVE
+  description: A tier-1 package tool bare name (kubectl) resolves ahead of a same-named tier-0 built-in
+    when declared via toolRefs.package.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    builtins:
+    - kubectl
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: Tier 0 (built-in) is modeled via the synthetic 'builtins' list since it has no on-disk representation;
+    tier 1 (package) wins because it is the strictly higher tier and the runbook declares the intent via
+    toolRefs[].package (Sec 'Precedence Rule' rule 2).
+- id: TV-PKG-RESOLVE-002
+  category: PKG-RESOLVE
+  description: A tier-2 project tool bare name (kubectl) resolves ahead of a same-named tier-1 package
+    tool when declared via a tier-4 direct toolRefs.path pointing at the project tool file.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          path: ./tools/kubectl.tool.yaml
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "2.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: kubectl
+        tier: 4
+        resolvedVersion: 2.0.0
+  note: toolRefs[].path pins tier 4 (the runbook's own direct reference), which is the strictly highest
+    tier and is explicitly declared — resolves silently per Sec 'Precedence Rule' rule 2, ahead of the
+    tier-1 package's same bare name.
+- id: TV-PKG-RESOLVE-003
+  category: PKG-RESOLVE
+  description: When two tier-1 packages both export the bare name 'kubectl', referencing each ONLY by
+    its fully-qualified name avoids the ambiguity entirely — fully-qualified names never collide (Sec...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+        - package: acme.other-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-other-tools
+      toolRefs:
+        - name: acme.incident-tools/kubectl
+          package: acme.incident-tools
+        - name: acme.other-tools/kubectl
+          package: acme.other-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/acme-other-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.other-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-other-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      acme.incident-tools/kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+      acme.other-tools/kubectl:
+        qualifiedName: acme.other-tools/kubectl
+        tier: 1
+  note: '''Precedence Rule'' rule 3).'
+  tags:
+  - qualified-name
+- id: TV-PKG-RESOLVE-004
+  category: PKG-RESOLVE
+  description: The same package name declared at both project scope and runbook scope intersects the version
+    constraints; a version satisfying both resolves successfully.
+  input: runbook.yaml
+  variables:
+    .yawr/config.yaml: |
+      apiVersion: yawr.config/v1
+      requires:
+        - package: acme.incident-tools
+          version: ">=1.0.0"
+          path: ./vendor/acme-incident-tools
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "<2.0.0"
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.4.2"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.4.2
+  tags:
+  - intersection
+- id: TV-PKG-RESOLVE-005
+  category: PKG-RESOLVE
+  description: The same package name declared at project scope (>=2.0.0) and runbook scope (<2.0.0) produces
+    an empty constraint intersection — PKG-002, not the last-declared value winning.
+  input: runbook.yaml
+  variables:
+    .yawr/config.yaml: |
+      apiVersion: yawr.config/v1
+      requires:
+        - package: acme.incident-tools
+          version: ">=2.0.0"
+          path: ./vendor/acme-incident-tools
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "<2.0.0"
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.4.2"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-002
+  tags:
+  - intersection
+  - empty
+- id: TV-PKG-RESOLVE-006
+  category: PKG-RESOLVE
+  description: 'The same package name declared twice within one runbook-level requires: list is PKG-005,
+    unconditionally, even with identical constraints and paths.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-005
+- id: TV-PKG-RESOLVE-007
+  category: PKG-RESOLVE
+  description: A runbook-level requires[].path that disagrees with the project-level path for the same
+    package name is PKG-024 — the project entry is authoritative, disagreement is an error, never a silent
+    override.
+  input: runbook.yaml
+  variables:
+    .yawr/config.yaml: |
+      apiVersion: yawr.config/v1
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./somewhere-else/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-024
+- id: TV-PKG-RESOLVE-008
+  category: PKG-RESOLVE
+  description: 'toolRefs referencing a tool id that exists in the package root but is not listed under
+    exports.tools is PKG-011: there is no implicit tools/ directory scan.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: helm
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/acme-incident-tools/tools/helm.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: helm
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-011
+- id: TV-PKG-RESOLVE-009
+  category: PKG-RESOLVE
+  description: 'A required package with no path anywhere (no runbook-level path, no matching project-level
+    entry) is PKG-001: nothing to install, no remote catalog to fall back to.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-001
+- id: TV-PKG-RESOLVE-010
+  category: PKG-RESOLVE
+  description: A toolRefs name with no matching catalog entry at all — from any tier — is PKG-030, distinct
+    from PKG-011 (which requires an existing-but-non-exporting package).
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: nonexistent-tool
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-030
+- id: TV-PKG-RESOLVE-011
+  category: PKG-RESOLVE
+  description: 'A toolRefs entry supplying both ''package'' and ''path'' on the same entry is PKG-029:
+    the two fields are mutually exclusive, schema-valid but semantically rejected.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+          path: ./vendor/acme-incident-tools/tools/kubectl.tool.yaml
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-029
+- id: TV-PKG-RESOLVE-012
+  category: PKG-RESOLVE
+  description: A tool export id that does not equal the referenced .tool.yaml's own meta.name is PKG-023,
+    even though the file itself is otherwise valid.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl-cli
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-023
+- id: TV-PKG-RESOLVE-013
+  category: PKG-RESOLVE
+  description: A package name shaped like a URL (github.com/acme/yawr-tools) fails PackageMeta.name's
+    reverse-DNS schema pattern and is PKG-004 — a name that looks like a location invites a remote fetch
+    the MVP...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: github.com/acme/yawr-tools
+          version: "^1.0.0"
+          path: ./vendor/yawr-tools
+      toolRefs:
+        - name: kubectl
+          package: github.com/acme/yawr-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/yawr-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: github.com/acme/yawr-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/yawr-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-004
+  note: does not perform.
+- id: TV-PKG-RESOLVE-014
+  category: PKG-RESOLVE
+  description: 'A lazily-expanded include (expand: lazy) that would introduce a package not already in
+    the frozen package set is PKG-017: lazy affects execution expansion only, never plan-time package
+    analysis.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      flow:
+        - step:
+            id: maybe
+            type: include
+            include:
+              path: ./child.yaml
+              expand: lazy
+    child.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-017
+  note: 'The child''s requires: is still read and folded into Phase C at plan time (design/yawr/sections/02-architecture.tex
+    Sec ''Plan-Time Package Analysis of Lazy Includes''); it must be declared at the root/eagerly reachable
+    scope, not first introduced by a lazy edge, if it is to be treated as already-frozen. This vector
+    models the root NOT declaring acme.incident-tools anywhere outside the lazy child, so it is late binding.'
+  tags:
+  - lazy-include
+- id: TV-PKG-RESOLVE-015
+  category: PKG-RESOLVE
+  description: 'Non-empty dependencies: in a package manifest is schema-valid (not a generic PKG-004 failure)
+    so the resolver can raise the more specific PKG-016.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+      dependencies:
+        - dep: some.other.package
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-016
+- id: TV-PKG-COLLIDE-001
+  category: PKG-COLLIDE
+  description: Two same-tier (tier 1) packages both exporting the bare name 'kubectl' coexist in the catalog
+    without error as long as neither is referenced unqualified; only actual bare-name use triggers PKG-006.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+        - package: acme.other-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-other-tools
+      toolRefs:
+        - name: acme.incident-tools/kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/acme-other-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.other-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-other-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      acme.incident-tools/kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: Both bare 'kubectl' entries are present in the underlying catalog construction (Phase C) but ambiguous;
+    this is legal because Phase B (binding) never dereferences the bare form here.
+- id: TV-PKG-COLLIDE-002
+  category: PKG-COLLIDE
+  description: 'Two same-tier (tier 1) packages both exporting ''kubectl'' and a toolRefs entry that references
+    the bare name ''kubectl'' (no package: qualifier) is PKG-006 at binding time.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+        - package: acme.other-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-other-tools
+      toolRefs:
+        - name: kubectl
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/acme-other-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.other-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-other-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-006
+- id: TV-PKG-COLLIDE-003
+  category: PKG-COLLIDE
+  description: Undeclared cross-tier shadowing — a tier-2 project tool and a tier-1 package tool share
+    the bare name 'kubectl', and the toolRefs entry uses the bare name with NEITHER 'package:' NOR 'path:'
+    to...
+  input: runbook.yaml
+  variables:
+    .yawr/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "9.9.9"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-022
+  note: 'declare which one is intended — is PKG-022, not a silent higher-tier resolution: cross-tier shadowing
+    is permitted and silent ONLY when the runbook explicitly declares the intent.'
+- id: TV-PKG-COLLIDE-004
+  category: PKG-COLLIDE
+  description: 'Declared cross-tier shadowing: the same tier-2/tier-1 ''kubectl'' collision as COLLIDE-003,
+    but the toolRefs entry declares ''package: acme.incident-tools'' explicitly — this pins the LOWER
+    tier (1)...'
+  input: runbook.yaml
+  variables:
+    .yawr/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "9.9.9"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        resolvedVersion: 1.0.0
+  note: 'Explicit toolRefs[].package overrides the ordinary tier-precedence direction: an explicitly-declared
+    LOWER tier is legal and silent, since the declaration itself is the disambiguating signal, not the
+    tier ranking (AR-TP ruling item 2: ''shadowing entry is at a strictly higher tier AND the runbook
+    declares intent'' describes the SILENT case for undeclared bare references; an explicit qualifier
+    is unconditionally honored). on purpose, which is legal (an explicit qualifier always wins, regardless
+    of tier direction) and produces no PKG-022.'
+- id: TV-PKG-COLLIDE-005
+  category: PKG-COLLIDE
+  description: A same-package collision — one package exporting the same tool id twice under two different
+    export entries with different underlying files — is PKG-004 (package manifest fails schema validation:...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+          - id: kubectl
+            path: tools/kubectl-alt.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/acme-incident-tools/tools/kubectl-alt.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-004
+  note: tool-package.v1.schema.json documents exports.tools as 'Unique by both id and path'; a manifest
+    violating this uniqueness invariant fails package manifest validation as PKG-004, the same code used
+    for any other manifest-shape violation (e.g. the URL-shaped-name case in RESOLVE-013). exports.tools
+    MUST be unique by both id and path), detected at Phase C regardless of whether the bare name is ever
+    referenced.
+- id: TV-PKG-COLLIDE-006
+  category: PKG-COLLIDE
+  description: An explicit exports.tools[].id that intentionally differs from the underlying meta.name
+    aliases the export cleanly (PKG-023 only fires on a MISMATCH, not on the presence of distinct id vs...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: internal name when the id used for export is corrected to equal meta.name); this vector demonstrates
+    the legal same-name export baseline that COLLIDE-... variants above are diffed against.
+  tags:
+  - baseline
+- id: TV-PKG-COLLIDE-007
+  category: PKG-COLLIDE
+  description: 'Qualified-name collision: two DIFFERENT packages that happen to share the exact same reverse-DNS
+    meta.name string but were required from two different paths is PKG-005 (duplicate package name in...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/a
+        - package: acme.incident-tools
+          version: "^2.0.0"
+          path: ./vendor/b
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/a/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/a/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/b/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "2.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/b/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-005
+  note: 'Two requires: entries for the same package name at the same scope is PKG-005 regardless of whether
+    their paths/constraints differ; this is the general form of RESOLVE-006''s identical-entry special
+    case. one requires: list), not a silent last-wins.'
+- id: TV-PKG-COLLIDE-008
+  category: PKG-COLLIDE
+  description: A tier-3 (extension/MCP) tool can never be reached by a bare toolRefs name — it always
+    requires the fully-qualified <server>/<tool> form — so a bare-name toolRefs entry intending it resolves
+    to...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: get-nodes
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    builtins: []
+    extensions:
+    - acme-mcp/get-nodes
+  expected:
+    error:
+      code: PKG-030
+  note: Tier 3 identifiers are single-label (no dot), so they cannot satisfy toolRefs[].package's reverse-DNS
+    pattern either; the only legal reference form is the fully-qualified bare tool name 'acme-mcp/get-nodes'
+    used directly as toolRefs[].name. PKG-030, not a silent tier-3 bind.
+- id: TV-PKG-PATH-001
+  category: PKG-PATH
+  description: requires[].path at project scope is workspace-root-relative; a path staying inside the
+    workspace root resolves cleanly.
+  input: runbook.yaml
+  variables:
+    .yawr/config.yaml: |
+      apiVersion: yawr.config/v1
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+- id: TV-PKG-PATH-002
+  category: PKG-PATH
+  description: requires[].path at project scope is workspace-level; a parent-directory escape resolving
+    outside the workspace root is permitted and reported as PKG-W003, never PKG-007.
+  input: runbook.yaml
+  variables:
+    .yawr/config.yaml: |
+      apiVersion: yawr.config/v1
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ../../../outside/acme-incident-tools
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    ../../../outside/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    ../../../outside/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+    warnings:
+    - PKG-W003
+  note: §06 Table tab:tool-path-bases classifies project-scope requires[].path as workspace-level, and
+    §06 Symlinks rule 6 makes an escape an external root (lock/trace external:sha256:..., PKG-W003),
+    not a containment violation. PKG-007 is reserved for package-internal kinds. A workspace-level escape
+    whose target does not exist is PKG-001 (package not resolvable), still never PKG-007.
+- id: TV-PKG-PATH-003
+  category: PKG-PATH
+  description: requires[].path at runbook scope is relative to the DECLARING runbook file, not the workspace
+    root or the caller of an included runbook.
+  input: runbook.yaml
+  variables:
+    sub/runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    sub/vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    sub/vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      flow:
+        - step:
+            id: inc
+            type: include
+            include:
+              path: ./sub/runbook.yaml
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: The include is at workspace root but './sub/runbook.yaml' declares its own requires[].path relative
+    to itself (sub/), not the including file's directory — the workspace root remains the containment
+    root (workspace-level class), but only for the external-root report (PKG-W003); an escape is never
+    PKG-007. Only the base directory for the relative path differs.
+- id: TV-PKG-PATH-004
+  category: PKG-PATH
+  description: exports.tools[].path is relative to the package's own yawr-package.yaml (package root);
+    an escape above the package root (../../outside) is PKG-007 even if the target is still inside the
+    workspace.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: ../../outside-tool.tool.yaml
+    outside-tool.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-007
+- id: TV-PKG-PATH-005
+  category: PKG-PATH
+  description: execute.path from a .tool.yaml resolves relative to that FILE's own directory, not the
+    package root directly; a '..' that still lands inside the package root (tools/../runbooks/drain-node.yaml
+    ->...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      toolRefs:
+        - name: kubectl
+          path: ../tools/kubectl.tool.yaml
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: packageRoot/runbooks/drain-node.yaml) is legal, not PKG-007 — the canonical acme.incident-tools
+    reference shape.
+- id: TV-PKG-PATH-006
+  category: PKG-PATH
+  description: execute.path with a '..' escape that leaves the package root entirely (tools/../../outside.yaml)
+    is PKG-007, distinguishing the legal same-package '..' of PATH-005 from a genuine escape.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../../outside.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    outside.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: outside
+      name: outside
+      flow: []
+  expected:
+    error:
+      code: PKG-007
+- id: TV-PKG-PATH-007
+  category: PKG-PATH
+  description: toolRefs[].path at ordinary (non-package-internal) runbook scope is declaring-file-relative
+    and MAY point outside the workspace root without being rejected — only PKG-W003 (path outside...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: kubectl
+          path: ../../../outside/kubectl.tool.yaml
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    ../../../outside/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: kubectl
+        tier: 4
+    warnings:
+    - PKG-W003
+  note: workspace) is emitted, never a hard error.
+- id: TV-PKG-PATH-008
+  category: PKG-PATH
+  description: tool-paths[] is workspace-root-relative and workspace-level; an entry resolving outside
+    the workspace root is permitted and reported as PKG-W003, never PKG-007.
+  input: runbook.yaml
+  variables:
+    .yawr/config.yaml: |
+      apiVersion: yawr.config/v1
+      tool-paths:
+        - ../../outside-root
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: kubectl
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    ../../outside-root/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: kubectl
+        tier: 2
+    warnings:
+    - PKG-W003
+  note: Same ruling as TV-PKG-PATH-002; §06 Symlinks rule 6 names tool-paths[] alongside requires[].path
+    as permitted-but-reported external roots. Tools discovered under a tool-paths[] root are tier 2 with
+    bare names (§06 tier table).
+- id: TV-PKG-PATH-009
+  category: PKG-PATH
+  description: A package-internal include (a substitute runbook including a sibling file via a relative
+    path) is resolved and containment-checked against the PACKAGE root, not the workspace root; an include...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: include
+            include:
+              path: ../../../outside-include.yaml
+    outside-include.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: outside
+      name: outside
+      flow: []
+  expected:
+    error:
+      code: PKG-007
+  note: escaping the package root is PKG-007 even though the target is still inside the overall workspace.
+- id: TV-PKG-PATH-010
+  category: PKG-PATH
+  description: 'A path containing a symlink whose target resolves outside the containment root is PKG-008:
+    symlink/junction escape is a distinct code from a plain lexical/textual escape (PKG-007) — containment...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    symlinks:
+      vendor/acme-incident-tools/tools: ../../../outside-tools
+    outside-tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-008
+  note: '''symlinks'' is a synthetic modeling extension (relative-path string -> relative-path target,
+    evaluated against the same flat filesystem map) since a literal on-disk symlink cannot be expressed
+    as a file-content string in this vector format; see corpus header note. is enforced against the real
+    (post-symlink) filesystem path, not the lexical/pre-resolution one.'
+- id: TV-PKG-PATH-011
+  category: PKG-PATH
+  description: A path containing a Windows reparse point (junction) behaving as a directory symlink is
+    subject to the identical real-path containment check as a POSIX symlink — same PKG-008 outcome,...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    reparse_points:
+      vendor/acme-incident-tools/tools: C:\\outside\\tools
+    outside-tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-008
+  note: '''reparse_points'' models an NTFS junction/reparse point the same way ''symlinks'' models a POSIX
+    symlink, per Sec ''Secure Path Resolution'': containment enforcement is defined in terms of the resolved
+    real path and is explicitly platform-independent; PKG-008 (symlink/junction escape, cycle, or hop
+    limit exceeded) is the specific code for this class, distinct from the general lexical-escape PKG-007.
+    platform-independent.'
+- id: TV-PKG-PATH-012
+  category: PKG-PATH
+  description: 'Case-only collision: two portable path spellings (''Tools/Kubectl.tool.yaml'' vs ''tools/kubectl.tool.yaml'')
+    that denote the same case-insensitive-filesystem file but different export entries is...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+          - id: kubectl-case
+            path: Tools/Kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-018
+  note: Portable/case-insensitive collision handling per Sec 'Secure Path Resolution' cross-platform portability
+    rules; the second export path is treated as denoting the SAME underlying file as the first on a case-insensitive
+    filesystem, producing PKG-018 rather than a missing-file error. PKG-018 (reserved name, case-only
+    or NFC-only collision, trailing dot/space).
+- id: TV-PKG-PATH-013
+  category: PKG-PATH
+  description: A path containing a raw NUL byte or other structurally invalid path component is PKG-007
+    (unsafe or escaping path — syntax or containment), rejected before any filesystem containment check
+    is...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: "./vendor/acme\u0000-incident-tools"
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-007
+  note: attempted.
+- id: TV-PKG-PATH-014
+  category: PKG-PATH
+  description: 'An absolute filesystem path used where a package-relative path is required (requires[].path:
+    /etc/acme-incident-tools) is PKG-007: absolute paths are always rejected as an escape, never treated...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: "/etc/acme-incident-tools"
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-007
+  note: as workspace-root-anchored.
+- id: TV-PKG-SUBST-001
+  category: PKG-SUBST
+  description: 'The caller declares only ''action: drain-node'' with node in / drained out; the substitution''s
+    implementation kind (nested runbook, not a process) is completely invisible in the resulting...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: catalog/success shape (AR-TP-5 opacity requirement).
+- id: TV-PKG-SUBST-002
+  category: PKG-SUBST
+  description: 'A caller step attempting to read a process-shaped output root (stdout) directly off a
+    substituted action''s step is GCP-PARSE-001: process-shaped roots MUST NOT be used on a substituted
+    action''s...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: stdout
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    error_class: GCP-PARSE
+    error_code: GCP-PARSE-001
+  note: This asserts the GCP-level grammar rule from gcp.ebnf Sec 3.4a LocalOutputs, reachable specifically
+    through a PKG-SUBST scenario; expected uses ErrorExpected (GCP-*) rather than PackageExpected since
+    the failure is at capture-path parse time, not package resolution. capture.
+- id: TV-PKG-SUBST-003
+  category: PKG-SUBST
+  description: A caller step referencing an unknown name under outputs.* (outputs.nonexistent) that the
+    substitute action never declares is GCP-RESOLVE-002.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.nonexistent
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    error_class: GCP-RESOLVE
+    error_code: GCP-RESOLVE-002
+- id: TV-PKG-SUBST-004
+  category: PKG-SUBST
+  description: 'The substitute runbook''s own outputs: block declares a name (''drained'') and type (boolean)
+    that exactly matches the action''s declared outputs: contract — the required superset-free,...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: by-name-and-type match succeeds.
+  tags:
+  - contract-match
+- id: TV-PKG-SUBST-005
+  category: PKG-SUBST
+  description: 'The substitute runbook declares an output (''extra_field'') not present in the action''s
+    outputs: contract — a superset mismatch — is PKG-013.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+        extra_field: {type: string, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    error:
+      code: PKG-013
+- id: TV-PKG-SUBST-006
+  category: PKG-SUBST
+  description: The substitute runbook declares 'drained' with a mismatched type (string instead of the
+    action's declared boolean) is PKG-013.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: string, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    error:
+      code: PKG-013
+- id: TV-PKG-SUBST-007
+  category: PKG-SUBST
+  description: 'The substitute runbook''s input declares ''from: env'' instead of the required ''from:
+    context'' — inputs to a substitute MUST bind only from the caller''s evaluated context, never prompt/env
+    directly...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: env, env: NODE_NAME}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    error:
+      code: PKG-026
+  note: is PKG-026.
+- id: TV-PKG-SUBST-008
+  category: PKG-SUBST
+  description: A substitution cycle — action A's execute.path names a runbook that (directly or transitively)
+    invokes action A again — is PKG-015, detected statically at plan time before any execution.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      toolRefs:
+        - name: kubectl
+          path: ../tools/kubectl.tool.yaml
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+  expected:
+    error:
+      code: PKG-015
+- id: TV-PKG-SUBST-009
+  category: PKG-SUBST
+  description: A substitution chain exceeding the maximum nesting depth (each substitute action itself
+    substituted, N levels deep beyond the configured limit) is PKG-028, distinct from the cycle detection
+    of...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/level1.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/level1.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: level1
+      name: level1
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.next.outputs.drained"}
+      toolRefs:
+        - name: level1-tool
+          path: ../tools/level1.tool.yaml
+      flow:
+        - step:
+            id: next
+            type: tool
+            tool:
+              name: level1-tool
+              action: chain
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+    vendor/acme-incident-tools/tools/level1.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: chain
+          execute:
+            kind: runbook
+            path: ../runbooks/level1.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+  expected:
+    error:
+      code: PKG-028
+  note: This vector is deliberately structured as unbounded self-recursion (not a literal cycle back to
+    the top-level drain-node action) so that PKG-028 (substitution depth > 4) is the code the resolver
+    reaches rather than PKG-015 (cycle) — both static analyses detect the same shape from different angles
+    per the ruling, and the corpus models the depth-first framing explicitly via the synthetic level1
+    chain. PKG-015.
+- id: TV-PKG-SUBST-010
+  category: PKG-SUBST
+  description: A substitute runbook's governance block is a strict subset of the caller action's own governance
+    (narrower allow_commands) — legal composition, resolves without PKG-014.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        allow-commands: ["kubectl", "bash"]
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      governance:
+        allow-commands: ["bash"]
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  tags:
+  - governance-composition
+- id: TV-PKG-SUBST-011
+  category: PKG-SUBST
+  description: A substitute runbook's governance block WIDENS allow-commands beyond the caller action's
+    own set (adds 'curl', which the caller does not allow) is PKG-014, checked statically at plan time
+    —...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        allow-commands: ["kubectl", "bash"]
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      governance:
+        allow-commands: ["bash", "curl"]
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+  expected:
+    error:
+      code: PKG-014
+  note: capability sets may only narrow across the substitution boundary, never widen.
+- id: TV-PKG-SUBST-012
+  category: PKG-SUBST
+  description: The replay-mode execution of a caller step whose action is package-substituted matches
+    the substitute's own NESTED cli/tool steps individually by argv against the caller's scenario file
+    (the...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+    scenario.yaml: |
+      apiVersion: yawr.scenario/v1
+      mode: replay
+      responses:
+        - match:
+            argv: ["bash", "-c", "echo '{\"drained\": true}'"]
+          respond:
+            stdout: "{\"drained\": true}"
+            exit_code: 0
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+  note: 'Sec ''Replay Semantics for Substitution'': the substitute executes in replay mode against the
+    caller''s scenario file exactly as if it were `invoke`d, matched per-nested-step by argv, not as a
+    single opaque action-level response. substitute is not treated as one opaque action response) — the
+    drain step''s own ''bash -c ...'' argv is matched, not a synthetic ''kubectl drain-node'' argv.'
+  tags:
+  - replay
+- id: TV-PKG-DIGEST-001
+  category: PKG-DIGEST
+  description: The package digest of a two-file package (yawr-package.yaml + its single exported tool.yaml)
+    is the sha256 of the sorted, newline-joined 'hex  relpath' lines over exactly those two files — a...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        packageDigest: sha256:e0064533d330e74b123316009eb705804fa724519d885a499bbd5e3a31e216b4
+  note: 'packageDigest computed by this corpus''s generator exactly per the two-file export closure using
+    the spec algorithm (raw-byte sha256 per file, ''hex  posix-relpath'' lines sorted ascending by UTF-8
+    byte order, blob = lines joined with trailing newlines, sha256 of blob, ''sha256:'' prefix). Recomputed
+    value: sha256:e0064533d330e74b123316009eb705804fa724519d885a499bbd5e3a31e216b4 real, independently-recomputable
+    ground-truth value.'
+  tags:
+  - ground-truth
+- id: TV-PKG-DIGEST-002
+  category: PKG-DIGEST
+  description: 'The package digest is invariant to a no-op re-read of the exact same file bytes: re-resolving
+    the same package a second time without any file modification yields the identical packageDigest value.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        packageDigest: sha256:e0064533d330e74b123316009eb705804fa724519d885a499bbd5e3a31e216b4
+  tags:
+  - determinism
+- id: TV-PKG-DIGEST-003
+  category: PKG-DIGEST
+  description: 'Changing the exported tool argv changes the packageDigest to a different,
+    still-recomputable value.'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version-current"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        packageDigest: sha256:9222d20a54be9fe2b602cc27ffd9f43740fd9840fe4650ffadccb9b15c704fa3
+  note: content-sensitive, not just filename/structure-sensitive.
+  tags:
+  - content-sensitivity
+- id: TV-PKG-DIGEST-004
+  category: PKG-DIGEST
+  description: The catalog digest over a single-package, single-tool catalog is the sha256 of the sorted
+    'qualifiedName  digestOrFileDigest  tierNumber' line for that one entry — a real, independently-recomputabl...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+        packageDigest: sha256:e0064533d330e74b123316009eb705804fa724519d885a499bbd5e3a31e216b4
+        catalogDigest: sha256:5a0553161390200a88854a7b94e5cb1ae3f91021065f416e9bc64304fa949f24
+  note: 'Recomputed catalogDigest: sha256:5a0553161390200a88854a7b94e5cb1ae3f91021065f416e9bc64304fa949f24
+    e ground-truth value distinct from the per-package digest.'
+  tags:
+  - ground-truth
+- id: TV-PKG-DIGEST-005
+  category: PKG-DIGEST
+  description: Resuming a previously-planned execution (--resume) whose recorded catalogDigest does not
+    match the freshly-recomputed one is PKG-009 (a hard refusal), never a silent re-plan.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    resume_state.yaml: |
+      recordedCatalogDigest: "sha256:5a0553161390200a88854a7b94e5cb1ae3f91021065f416e9bc64304fa949f24"
+  expected:
+    error:
+      code: PKG-009
+  note: 'resume_state.yaml''s recordedCatalogDigest is the DIGEST-004 ground-truth value computed against
+    the baseline tool.yaml; the filesystem here instead has the DIGEST-003 modified variant,
+    so recomputation at resume time necessarily disagrees with the recorded value.'
+- id: TV-PKG-DIGEST-006
+  category: PKG-DIGEST
+  description: Resuming with a mismatched catalogDigest AND the explicit '--allow-package-drift' override
+    flag proceeds without PKG-009 and instead surfaces the drift as an accepted, non-blocking governance...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    resume_state.yaml: |
+      recordedCatalogDigest: "sha256:5a0553161390200a88854a7b94e5cb1ae3f91021065f416e9bc64304fa949f24"
+      allowPackageDrift: true
+  expected:
+    catalog:
+      kubectl:
+        qualifiedName: acme.incident-tools/kubectl
+        tier: 1
+      trace:
+        event: governance/packageDriftAccepted
+  note: '''trace.event'' here is a free-form catalog-shaped assertion, not a warnings: entry, precisely
+    because governance/packageDriftAccepted is a trace event name rather than a PKG-W* code (Sec ''Resume
+    Semantics''). event — modeled here via a free-form catalog note field since ''governance/packageDriftAccepted''
+    is a trace event name, not a PKG-W* warning code and therefore outside the vector schema''s constrained
+    warnings: array.'
+- id: TV-PKG-ERROR-001
+  category: PKG-ERROR
+  description: An exports.tools[].path pointing at a file that does not exist on disk (the export entry
+    itself is otherwise well-formed and in-bounds) is PKG-010, distinct from PKG-007 (which is about...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+  expected:
+    error:
+      code: PKG-010
+  note: unsafe/escaping paths, not missing ones).
+- id: TV-PKG-ERROR-002
+  category: PKG-ERROR
+  description: 'A step referencing an action name the resolved tool does not declare (step.tool.action:
+    ''delete-node'' when the tool only declares ''get-nodes''/''drain-node'') is PKG-012 (action not declared
+    by the...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: bad
+            type: tool
+            tool:
+              name: kubectl
+              action: delete-node
+              args: {}
+            capture:
+              r: exit_code
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: get-nodes
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-012
+  note: resolved tool), distinct from PKG-011 (which is about the tool itself not being exported).
+- id: TV-PKG-ERROR-003
+  category: PKG-ERROR
+  description: An export path using a reserved Windows device name as a path component ('tools/CON.tool.yaml')
+    is PKG-018 (reserved name), rejected for cross-platform portability even on a POSIX host where...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/CON.tool.yaml
+    vendor/acme-incident-tools/tools/CON.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-018
+  note: '''CON'' has no special meaning.'
+- id: TV-PKG-ERROR-004
+  category: PKG-ERROR
+  description: An export path with a trailing dot or trailing space in a path component ('tools/kubectl.tool.yaml.'
+    or 'tools/kubectl.tool.yaml ') is PKG-018, since such names are silently normalized/truncated...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml.
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml.: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-018
+  note: by some filesystems (a portability hazard) even though they are syntactically valid POSIX paths.
+- id: TV-PKG-ERROR-005
+  category: PKG-ERROR
+  description: Two export entries whose paths are the same Unicode string under two different normalization
+    forms (NFC 'caf\u00e9.tool.yaml' vs NFD 'cafe\u0301.tool.yaml') denote the same real file on an...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+          - id: cafe-nfc
+            path: "tools/café.tool.yaml"
+          - id: cafe-nfd
+            path: "tools/café.tool.yaml"
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    vendor/acme-incident-tools/tools/café.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: cafe
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+  expected:
+    error:
+      code: PKG-018
+  note: NFC-normalizing filesystem and collapse to a collision — PKG-018 (NFC-only collision).
+- id: TV-PKG-ERROR-006
+  category: PKG-ERROR
+  description: A top-level 'toolPackages:' key anywhere in a runbook document is rejected as PKG-020 before
+    generic additionalProperties:false schema validation ever runs, per the mandated parse-gate pre-check...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolPackages:
+        - name: acme.incident-tools
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-020
+  note: 'ordering — the diagnostic is specific (''use requires: instead''), not a generic unknown-key
+    error.'
+- id: TV-PKG-ERROR-007
+  category: PKG-ERROR
+  description: A toolRefs[].alias key present on any toolRefs entry is rejected as PKG-021 before generic
+    schema validation runs — aliases are out of MVP scope entirely, not merely unsupported.
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: kubectl
+          alias: k
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-021
+- id: TV-PKG-ERROR-008
+  category: PKG-ERROR
+  description: 'A document with BOTH a top-level ''toolPackages:'' key AND a toolRefs[].alias entry present
+    simultaneously surfaces PKG-020, not PKG-021: the mandated pre-check ordering checks toolPackages
+    first...'
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolPackages:
+        - name: acme.incident-tools
+      toolRefs:
+        - name: kubectl
+          alias: k
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PKG-020
+  note: 'Sec ''Parse-gate pre-check for PKG-020/PKG-021'': the toolPackages check is listed and performed
+    first and halts before any subsequent check (including the alias check) runs; this vector is the direct
+    conformance assertion of that ordering guarantee. and halts immediately, so the alias check is never
+    reached.'
+- id: TV-PKG-ERROR-009
+  category: PKG-ERROR
+  description: A substitute runbook whose 'drained' output is only produced (has a value:) on one of two
+    mutually-exclusive terminal branches (a 'when:' conditional end) — the other terminal path reaches
+    its...
+  input: runbook.yaml
+  variables:
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      requires:
+        - package: acme.incident-tools
+          version: "^1.0.0"
+          path: ./vendor/acme-incident-tools
+      toolRefs:
+        - name: kubectl
+          package: acme.incident-tools
+      flow:
+        - step:
+            id: drain
+            type: tool
+            tool:
+              name: kubectl
+              action: drain-node
+              args:
+                node: node-1
+            capture:
+              drained: outputs.drained
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    vendor/acme-incident-tools/yawr-package.yaml: |
+      apiVersion: yawr.tool-package/v1
+      meta:
+        name: acme.incident-tools
+        version: "1.0.0"
+      exports:
+        tools:
+          - id: kubectl
+            path: tools/kubectl.tool.yaml
+    vendor/acme-incident-tools/tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: drain-node
+          execute:
+            kind: runbook
+            path: ../runbooks/drain-node.yaml
+          args:
+            node: {type: string, required: true}
+          outputs:
+            drained: {type: boolean}
+    vendor/acme-incident-tools/runbooks/drain-node.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: acme.incident-tools/drain-node
+      name: drain-node
+      inputs:
+        node: {type: string, required: true, from: context}
+      outputs:
+        drained: {type: boolean, value: "step.drain.json.drained"}
+      flow:
+        - step:
+            id: check
+            type: branch
+            when: "context.node == 'node-1'"
+            then: drain
+            else: skip
+        - step:
+            id: drain
+            type: cli
+            command: bash
+            args: ["-c", "echo '{\"drained\": true}'"]
+            capture:
+              drain: json
+            next: set_drained
+        - step:
+            id: skip
+            type: end
+            outcome: {category: success, code: skipped}
+        - step:
+            id: set_drained
+            type: end
+            outcome: {category: success, code: node_drained}
+  expected:
+    error:
+      code: PKG-027
+  note: The 'skip' terminal branch reaches an 'end' step without ever executing the 'drain' step whose
+    capture assigns the value the runbook-level outputs.drained declaration reads from (step.drain.json.drained)
+    — that path never produces 'drained', which is the PKG-027 condition. own 'end' step without ever
+    assigning the declared output — is PKG-027 (declared substitute output not produced on all terminal
+    paths), checked statically at plan time.
+- id: TV-PKG-ERROR-010
+  category: PKG-ERROR
+  description: A step.tool.name reference resolving to a catalog entry that exists ONLY because a DIFFERENT
+    runbook file in the same workspace declares a matching toolRefs entry — the declaring file itself
+    has...
+  input: runbook.yaml
+  variables:
+    other.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      toolRefs:
+        - name: kubectl
+          path: ./tools/kubectl.tool.yaml
+      flow:
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+    tools/kubectl.tool.yaml: |
+      apiVersion: yawr.tool/v1
+      meta:
+        name: kubectl
+        version: "1.0.0"
+      transport:
+        mode: stdio
+      governance:
+        allowed-environments: ["real"]
+        requires-approval: true
+      actions:
+        - name: noop
+          argv: ["version"]
+          args: {}
+    runbook.yaml: |
+      apiVersion: yawr.runbook/v1
+      id: r
+      name: r
+      flow:
+        - step:
+            id: use
+            type: tool
+            tool:
+              name: kubectl
+              action: noop
+              args: {}
+            capture:
+              r: exit_code
+        - step:
+            id: end
+            type: end
+            outcome: {category: success, code: ok}
+  expected:
+    error:
+      code: PLAN-010
+  note: '''other.yaml'' is never included by ''runbook.yaml'' in this vector; it exists purely to demonstrate
+    that even IF a same-named toolRefs entry is declared somewhere else in the workspace, it has zero
+    effect on ''runbook.yaml'', which has no toolRefs of its own for ''kubectl'' — design/yawr/sections/02-architecture.tex
+    §Lexical Tool-Name Scoping. no toolRefs binding for that name — is PLAN-010: tool-name binding is
+    lexically scoped strictly per declaring file, never inherited across files (even sibling/included
+    ones).'

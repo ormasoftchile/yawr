@@ -1,0 +1,417 @@
+# tv-gxl-path.yaml
+# Category:    GXL-PATH
+# Grammar ref: spec/grammar/gxl.ebnf §3 (GDP production), §5.3 (Missing Path Behavior)
+# Schema ref:  design/yawr/conformance/vector.schema.json
+# Owner:       Yawr runtime
+# Date:        2026-06-05T00:27:12-04:00
+#
+# Purpose: Pin down every GDP (YAWR Dotted Path) resolution behaviour:
+# object field access, array indexing, mixed traversal, missing-path errors,
+# type errors during traversal, null-in-path, identifier edge cases, and
+# bracket-vs-dot syntax distinctions.
+#
+# PATH concerns: GXL-PATH-001 (not found), GXL-PATH-002 (out of bounds),
+#                GXL-PATH-003 (index on non-array or null).
+#
+# Notes:
+#   - No array/object literals in GXL expressions; all structured data
+#     comes from the 'variables' context map.
+#   - Vectors TV-GXL-PATH-024/025 cover parse-adjacent edge cases (foo.0,
+#     negative index) classified as GXL-PARSE errors; they appear here for
+#     organizational completeness. Category is still GXL-PATH.
+#
+# Ambiguities surfaced:
+#   TESS-AMBIG-5: dot-access on non-object scalar — no explicit PATH code.
+#   TESS-AMBIG-6: dot-access on null — GXL-PATH-001 vs GXL-PATH-003 unclear.
+
+vectors:
+
+  # --- Object access: simple ---
+  # gxl.ebnf §3 GDP = IDENT { DOT IDENT | LBRACKET INTEGER RBRACKET }
+
+  - id: TV-GXL-PATH-001
+    category: GXL-PATH
+    description: "Top-level variable access — bare IDENT resolves to its value in the context map."
+    input: "hostname"
+    variables: {hostname: "db.example.com"}
+    expected:
+      value: "db.example.com"
+    tags: [gdp, object, top-level]
+
+  - id: TV-GXL-PATH-002
+    category: GXL-PATH
+    description: "One-level field access — foo.bar resolves the 'bar' field of the 'foo' object."
+    input: "foo.bar"
+    variables: {foo: {bar: 42}}
+    expected:
+      value: 42
+    tags: [gdp, object, one-level]
+
+  - id: TV-GXL-PATH-003
+    category: GXL-PATH
+    description: "Two-level field access — foo.bar.baz resolves three segments deep."
+    input: "foo.bar.baz"
+    variables: {foo: {bar: {baz: "found"}}}
+    expected:
+      value: "found"
+    tags: [gdp, object, two-level]
+
+  - id: TV-GXL-PATH-004
+    category: GXL-PATH
+    description: "Five-level deep nesting — a.b.c.d.e resolves all the way to the leaf."
+    input: "a.b.c.d.e"
+    variables: {a: {b: {c: {d: {e: "deep_value"}}}}}
+    expected:
+      value: "deep_value"
+    note: "Exercises the { DOT IDENT } repetition in the GDP production to its practical limit."
+    tags: [gdp, object, deep-nesting]
+
+  # --- Array indexing ---
+  # gxl.ebnf §3 GDP: LBRACKET INTEGER RBRACKET. Zero-based indexing.
+
+  - id: TV-GXL-PATH-005
+    category: GXL-PATH
+    description: "foo[0] resolves to the first element of the array."
+    input: "foo[0]"
+    variables: {foo: [10, 20, 30]}
+    expected:
+      value: 10
+    tags: [gdp, array, index-zero]
+
+  - id: TV-GXL-PATH-006
+    category: GXL-PATH
+    description: "foo[2] resolves to the third element (zero-based)."
+    input: "foo[2]"
+    variables: {foo: [10, 20, 30]}
+    expected:
+      value: 30
+    tags: [gdp, array, index-nonzero]
+
+  - id: TV-GXL-PATH-007
+    category: GXL-PATH
+    description: "foo[0] on a single-element array returns the sole element."
+    input: "foo[0]"
+    variables: {foo: ["only"]}
+    expected:
+      value: "only"
+    tags: [gdp, array, single-element]
+
+  # --- Mixed: object + array traversal ---
+
+  - id: TV-GXL-PATH-008
+    category: GXL-PATH
+    description: "foo.bar[0].baz — field then index then field resolves leaf."
+    input: "foo.bar[0].baz"
+    variables: {foo: {bar: [{baz: "hello", other: 99}]}}
+    expected:
+      value: "hello"
+    tags: [gdp, mixed, field-index-field]
+
+  - id: TV-GXL-PATH-009
+    category: GXL-PATH
+    description: "foo[0].bar[1] — index then field then index resolves leaf."
+    input: "foo[0].bar[1]"
+    variables: {foo: [{bar: [100, 200, 300]}]}
+    expected:
+      value: 200
+    tags: [gdp, mixed, index-field-index]
+
+  - id: TV-GXL-PATH-010
+    category: GXL-PATH
+    description: "records[0].name.first — real-world-style path through an array of objects."
+    input: "records[0].name.first"
+    variables: {records: [{name: {first: "Example", last: "User"}, active: true}]}
+    expected:
+      value: "Example"
+    tags: [gdp, mixed, realistic]
+
+  # --- Subtree captures (OQ5) ---
+  # gxl.ebnf §5.3, decisions.md OI-GCP-02: a variable bound to an object subtree
+  # is walked identically to a literal object. These vectors confirm that GDP
+  # resolution is indifferent to how a value arrived in the context map.
+
+  - id: TV-GXL-PATH-011
+    category: GXL-PATH
+    description: "config.database.host — three-level walk through a subtree-captured object."
+    input: "config.database.host"
+    variables: {config: {database: {host: "localhost", port: 5432}, app: {name: "yawr"}}}
+    expected:
+      value: "localhost"
+    note: "OQ5 subtree capture witness. 'config' represents a subtree bound from a bare-root capture (OI-GCP-02). GDP resolution is identical whether the object arrived via capture or inline variable."
+    tags: [gdp, subtree-capture, OQ5, three-level]
+
+  - id: TV-GXL-PATH-012
+    category: GXL-PATH
+    description: "config.database.port — second field of the same subtree-captured inner object."
+    input: "config.database.port"
+    variables: {config: {database: {host: "localhost", port: 5432}, app: {name: "yawr"}}}
+    expected:
+      value: 5432
+    note: "OQ5 subtree capture witness, second path on same variable. Confirms all fields of subtree are accessible."
+    tags: [gdp, subtree-capture, OQ5]
+
+  - id: TV-GXL-PATH-013
+    category: GXL-PATH
+    description: "config.app.name — sibling subtree field on the same captured object."
+    input: "config.app.name"
+    variables: {config: {database: {host: "localhost", port: 5432}, app: {name: "yawr"}}}
+    expected:
+      value: "yawr"
+    note: "OQ5 subtree capture witness, third path on same variable. Confirms full subtree is navigable."
+    tags: [gdp, subtree-capture, OQ5]
+
+  # --- Missing-path errors (hard errors per gxl.ebnf §5.3) ---
+  # "Silent empty-string/null substitution is FORBIDDEN."
+
+  - id: TV-GXL-PATH-014
+    category: GXL-PATH
+    description: "Accessing a missing top-level variable raises GXL-PATH-001."
+    input: "totally_missing"
+    variables: {}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-001
+    note: "gxl.ebnf §5.3: 'Missing variable (first IDENT not found in context map) → GXL-PATH-001'. Hard error; no substitution."
+    tags: [gdp, missing, path-error, top-level]
+
+  - id: TV-GXL-PATH-015
+    category: GXL-PATH
+    description: "foo.missing raises GXL-PATH-001 — 'missing' field does not exist in foo."
+    input: "foo.missing"
+    variables: {foo: {exists: 1}}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-001
+    note: "gxl.ebnf §5.3: 'Missing intermediate segment → GXL-PATH-001'. foo exists but foo.missing does not."
+    tags: [gdp, missing, path-error, intermediate]
+
+  - id: TV-GXL-PATH-016
+    category: GXL-PATH
+    description: "a.b.c.missing raises GXL-PATH-001 — missing segment at level 4."
+    input: "a.b.c.missing"
+    variables: {a: {b: {c: {present: true}}}}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-001
+    note: "Missing segment anywhere in the chain triggers GXL-PATH-001 (not silently null)."
+    tags: [gdp, missing, path-error, deep]
+
+  - id: TV-GXL-PATH-017
+    category: GXL-PATH
+    description: "foo[99] raises GXL-PATH-002 — index 99 out of bounds for a 3-element array."
+    input: "foo[99]"
+    variables: {foo: [1, 2, 3]}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-002
+    note: "gxl.ebnf §5.3: 'Index beyond array bounds → GXL-PATH-002'. Array has 3 elements (indices 0..2)."
+    tags: [gdp, array, out-of-bounds, path-error]
+
+  - id: TV-GXL-PATH-018
+    category: GXL-PATH
+    description: "foo[0] raises GXL-PATH-002 — index 0 out of bounds for an empty array."
+    input: "foo[0]"
+    variables: {foo: []}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-002
+    note: "Empty array: no valid index exists. Index 0 is out of bounds."
+    tags: [gdp, array, out-of-bounds, empty, path-error]
+
+  # --- Type errors during traversal ---
+
+  - id: TV-GXL-PATH-019
+    category: GXL-PATH
+    description: "foo[0] when foo is an object raises GXL-PATH-003 — index on non-array."
+    input: "foo[0]"
+    variables: {foo: {key: "value"}}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-003
+    note: "gxl.ebnf §5.3: 'Index on null or non-array value → GXL-PATH-003'. Objects are not arrays."
+    tags: [gdp, index, non-array, path-error]
+
+  - id: TV-GXL-PATH-020
+    category: GXL-PATH
+    description: "foo[0] when foo is a string raises GXL-PATH-003 — index on non-array."
+    input: "foo[0]"
+    variables: {foo: "hello"}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-003
+    note: "gxl.ebnf §5.3: strings are not indexable in GXL GDP syntax. GXL-PATH-003."
+    tags: [gdp, index, non-array, string, path-error]
+
+  - id: TV-GXL-PATH-021
+    category: GXL-PATH
+    description: "foo[0] when foo is null raises GXL-PATH-003 — index on null."
+    input: "foo[0]"
+    variables: {foo: null}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-003
+    note: "gxl.ebnf §5.3: 'Index on null or non-array value → GXL-PATH-003'."
+    tags: [gdp, index, "null", path-error]
+
+  - id: TV-GXL-PATH-022
+    category: GXL-PATH
+    description: "foo.bar when foo is a number raises GXL-PATH-004 — field access on non-object scalar."
+    input: "foo.bar"
+    variables: {foo: 7}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-004
+    note: "GXL-PATH-004 distinguishes field access on a non-object from a missing field in an object (GXL-PATH-001)."
+    tags: [gdp, field, non-object, path-error, TESS-AMBIG-5]
+
+  - id: TV-GXL-PATH-023
+    category: GXL-PATH
+    description: "nullFoo.bar when nullFoo is null raises GXL-PATH-004 — field access on null."
+    input: "nullFoo.bar"
+    variables: {nullFoo: null}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-004
+    note: "Null is not an object; GXL-PATH-004 covers null and scalars, while GXL-PATH-001 is reserved for missing object fields."
+    tags: [gdp, field, "null", path-error, TESS-AMBIG-6]
+
+  # --- Bracket vs dot: syntax classification ---
+  # The grammar allows only IDENT after DOT and only INTEGER inside brackets.
+
+  - id: TV-GXL-PATH-024
+    category: GXL-PATH
+    description: "foo.0 is a parse error — '0' is not a valid IDENT after DOT."
+    input: "foo.0"
+    variables: {foo: [10, 20, 30]}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "GDP production: DOT must be followed by IDENT (IDENT_START = a-z, A-Z, _). '0' is a digit, not IDENT_START → GXL-PARSE-001 (unexpected token). Authors must use 'foo[0]' not 'foo.0'. Category GXL-PATH for organizational proximity; error is parse-time."
+    tags: [gdp, parse-error, bracket-vs-dot, edge]
+
+  - id: TV-GXL-PATH-025
+    category: GXL-PATH
+    description: "foo[-1] is a parse error — negative array indices are forbidden."
+    input: "foo[-1]"
+    variables: {foo: [10, 20, 30]}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §3 GDP comment: 'Negative indices are not permitted: GXL-PARSE-007.' Also listed in §2.6 forbidden syntax table. Category GXL-PATH for organizational proximity; error is parse-time."
+    tags: [gdp, parse-error, negative-index, forbidden, edge]
+
+  # --- Identifier edge cases ---
+  # gxl.ebnf §2.3: IDENT = IDENT_START { IDENT_CONT } where the result is NOT a KEYWORD.
+  # The following identifiers start with or contain keyword substrings but are valid.
+
+  - id: TV-GXL-PATH-026
+    category: GXL-PATH
+    description: "'andthing' is a valid identifier — 'and' is a prefix but 'andthing' is not a keyword."
+    input: "andthing"
+    variables: {andthing: "correct"}
+    expected:
+      value: "correct"
+    note: "Keyword prefix but not a keyword. Parsers MUST NOT mismatch 'andthing' as KW_AND + 'thing'. The IDENT production applies to the maximal token match."
+    tags: [gdp, identifier, edge, keyword-prefix]
+
+  - id: TV-GXL-PATH-027
+    category: GXL-PATH
+    description: "'ornot' is a valid identifier — starts with 'or' but is not the keyword 'or'."
+    input: "ornot"
+    variables: {ornot: "correct"}
+    expected:
+      value: "correct"
+    note: "Keyword prefix guard. 'ornot' is a single token, not KW_OR + KW_NOT."
+    tags: [gdp, identifier, edge, keyword-prefix]
+
+  - id: TV-GXL-PATH-028
+    category: GXL-PATH
+    description: "'trueish' is a valid identifier — 'true' is a prefix but 'trueish' is not a keyword."
+    input: "trueish"
+    variables: {trueish: "correct"}
+    expected:
+      value: "correct"
+    tags: [gdp, identifier, edge, keyword-prefix]
+
+  - id: TV-GXL-PATH-029
+    category: GXL-PATH
+    description: "'nullPtr' is a valid identifier — contains keyword prefix 'null' but is not 'null'."
+    input: "nullPtr"
+    variables: {nullPtr: "correct"}
+    expected:
+      value: "correct"
+    tags: [gdp, identifier, edge, keyword-prefix]
+
+  - id: TV-GXL-PATH-030
+    category: GXL-PATH
+    description: "Single-character identifier 'a' is valid — minimum-length identifier."
+    input: "a"
+    variables: {a: 99}
+    expected:
+      value: 99
+    tags: [gdp, identifier, edge, single-char]
+
+  - id: TV-GXL-PATH-031
+    category: GXL-PATH
+    description: "Identifier with digit suffix 'x9' is valid — digit not in leading position."
+    input: "x9"
+    variables: {x9: 42}
+    expected:
+      value: 42
+    note: "gxl.ebnf §2.3: IDENT_CONT includes '0'..'9'. IDENT_START does not. 'x9' is valid; '9x' would be invalid."
+    tags: [gdp, identifier, edge, digit-suffix]
+
+  - id: TV-GXL-PATH-032
+    category: GXL-PATH
+    description: "Identifier with underscore 'my_var' is valid — underscore allowed in IDENT_START and IDENT_CONT."
+    input: "my_var"
+    variables: {my_var: "underscore_ok"}
+    expected:
+      value: "underscore_ok"
+    tags: [gdp, identifier, edge, underscore]
+
+  # --- Array: multi-element realistic scenarios ---
+
+  - id: TV-GXL-PATH-033
+    category: GXL-PATH
+    description: "items[1].status — second element field access in an array of objects."
+    input: "items[1].status"
+    variables: {items: [{status: "ok"}, {status: "error"}, {status: "pending"}]}
+    expected:
+      value: "error"
+    tags: [gdp, array, mixed, realistic]
+
+  - id: TV-GXL-PATH-034
+    category: GXL-PATH
+    description: "matrix[0][0] — NOT valid in GXL GDP syntax (nested brackets require separate idents)."
+    input: "matrix[0]"
+    variables: {matrix: [[1, 2], [3, 4]]}
+    expected:
+      value: [1, 2]
+    note: "GDP production allows LBRACKET INTEGER RBRACKET after an IDENT. 'matrix[0]' returns the first row (a list value). Accessing matrix[0][0] is not valid GDP syntax (no chained bare brackets); authors must use an intermediate variable. This vector confirms list-valued array element is returned as-is."
+    tags: [gdp, array, nested-list, realistic]
+
+  # --- Null variable in top-level access ---
+
+  - id: TV-GXL-PATH-035
+    category: GXL-PATH
+    description: "Accessing a top-level variable whose value is null returns null."
+    input: "myNullVar"
+    variables: {myNullVar: null}
+    expected:
+      value: null
+    note: "The variable EXISTS in the context map (no GXL-PATH-001). Its value happens to be null. Null is a valid PJVM value; returning null is correct."
+    tags: [gdp, "null", top-level]
+
+  # --- TESS-AMBIG-5 companion: string scalar dot-access ---
+
+  - id: TV-GXL-PATH-036
+    category: GXL-PATH
+    description: "foo.length when foo is a string raises GXL-PATH-004 — field access on non-object string."
+    input: "foo.length"
+    variables: {foo: "hello"}
+    expected:
+      error_class: GXL-PATH
+      error_code: GXL-PATH-004
+    note: "TESS-AMBIG-5 companion vector for string scalar. Confirms GXL-PATH-004 applies to string values as well as numbers (TV-GXL-PATH-022). Strings have no fields in GXL; use str.length(foo) instead."
+    tags: [gdp, field, non-object, string, path-error, TESS-AMBIG-5]

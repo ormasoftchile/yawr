@@ -1,0 +1,12 @@
+{
+  "agents": {
+    "lead": {"persistent_name": "Lead", "universe": "descriptive", "status": "active"},
+    "runtime": {"persistent_name": "Runtime", "universe": "descriptive", "status": "active"},
+    "tooling": {"persistent_name": "Tooling", "universe": "descriptive", "status": "active"},
+    "tester": {"persistent_name": "Tester", "universe": "descriptive", "status": "active"},
+    "scribe": {"persistent_name": "Scribe", "universe": "descriptive", "status": "active"},
+    "ralph": {"persistent_name": "Ralph", "universe": "descriptive", "status": "active"},
+    "rai": {"persistent_name": "Rai", "universe": "descriptive", "status": "active"},
+    "fact-checker": {"persistent_name": "Fact Checker", "universe": "descriptive", "status": "active"}
+  }
+}

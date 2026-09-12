@@ -1,0 +1,424 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: k8s-pod-incident-response
+name: Kubernetes Pod Incident Response
+kind: mitigation
+description: |
+  Automated incident response for unhealthy Kubernetes pods detected
+  by monitoring. Includes automated diagnostics, decision-based
+  remediation (restart vs. scale vs. escalate), and evidence collection.
+
+inputs:
+  pod_name:
+    type: string
+    required: true
+    description: Name of the unhealthy pod
+    from: webhook.pod_name
+  namespace:
+    type: string
+    required: true
+    description: Kubernetes namespace
+    from: webhook.namespace
+  cluster:
+    type: string
+    required: true
+    description: Kubernetes cluster name
+    from: webhook.cluster
+  alert_severity:
+    type: string
+    required: true
+    description: Alert severity from monitoring
+    from: webhook.severity
+
+toolRefs:
+  - name: kubectl
+  - name: git
+  - name: prometheus
+  - name: slack-notify
+  - name: pagerduty-notify
+  - name: alertmanager-notify
+
+governance:
+  rules:
+    - effects: ["k8s.read"]
+      action: allow
+    - effects: ["k8s.write", "k8s.restart"]
+      action: require-approval
+      min_approvers: 1
+  redact:
+    - pattern: "(?i)password=\\S+"
+      replace: "password=<redacted>"
+
+flow:
+  # Step 1: Detect Alert
+  # INTENT: Pause execution until Prometheus fires an alert webhook for pod {{ .pod_name }}.
+  # Previously: type: extension (incorrect)
+  - step:
+      id: detect_alert
+      type: wait_for_event
+      title: "Wait for Prometheus alert webhook for pod {{ .pod_name }}"
+      event:
+        source: webhook
+        id: prometheus.alert.firing
+        filter:
+          alertname: "PodCrashLooping"
+      capture:
+        timestamp: json.startsAt
+        alert_id: json.fingerprint
+      timeout: 30m
+      on_timeout: fail
+      contract:
+        effects: []
+        reads: []
+        writes: [timestamp, alert_id]
+
+  # Step 2: Gather Diagnostics (parallel)
+  - step:
+      id: gather_diagnostics
+      type: parallel
+      title: Gather pod diagnostics
+      branches:
+        - label: Get pod manifest
+          steps:
+            - step:
+                id: get_pod_json
+                type: cli
+                title: "Get pod JSON: {{ .pod_name }}"
+                command: kubectl
+                args:
+                  - get
+                  - pod
+                  - "{{ .pod_name }}"
+                  - "-n"
+                  - "{{ .namespace }}"
+                  - "-o"
+                  - json
+                capture:
+                  pod_json: stdout
+                contract:
+                  effects: ["k8s.read"]
+
+        - label: Describe pod
+          steps:
+            - step:
+                id: describe_pod
+                type: cli
+                title: "Describe pod: {{ .pod_name }}"
+                command: kubectl
+                args:
+                  - describe
+                  - pod
+                  - "{{ .pod_name }}"
+                  - "-n"
+                  - "{{ .namespace }}"
+                capture:
+                  pod_describe: stdout
+                contract:
+                  effects: ["k8s.read"]
+
+        - label: Get pod logs
+          steps:
+            - step:
+                id: get_logs
+                type: cli
+                title: "Get logs: {{ .pod_name }}"
+                command: kubectl
+                args:
+                  - logs
+                  - "{{ .pod_name }}"
+                  - "-n"
+                  - "{{ .namespace }}"
+                  - "--tail=100"
+                capture:
+                  pod_logs: stdout
+                contract:
+                  effects: ["k8s.read"]
+      join:
+        wait_for: all
+        on_failure: fail
+
+  # Step 3: Analyze Failure Mode
+  - step:
+      id: analyze_failure
+      type: branch
+      title: Analyze pod failure mode
+      branches:
+        - condition: 'pod_json contains "CrashLoopBackOff" || pod_json contains "ImagePullBackOff"'
+          label: Config Issue
+          steps:
+            # Branch: Fix Config (Steps 4a-4d)
+            - step:
+                id: get_recent_changes
+                type: cli
+                title: Check recent config changes in Git
+                command: git
+                args:
+                  - log
+                  - "--oneline"
+                  - "--since=1 hour ago"
+                  - "--"
+                  - "k8s/{{ .namespace }}/{{ .pod_name }}.yaml"
+                capture:
+                  recent_changes: stdout
+
+            - step:
+                id: approval_restart
+                type: collector
+                title: "Approve pod restart with config rollback"
+                prompt: |
+                  Pod {{ .pod_name }} is in CrashLoopBackOff or ImagePullBackOff.
+                  Recent config changes:
+                  {{ .recent_changes }}
+                  
+                  Approve restarting with previous config?
+                fields:
+                  - name: approved
+                    type: text
+                    label: "Type 'yes' to approve"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [sre-oncall]
+                  timeout: 5m
+                  on_timeout: escalate
+                  escalate_to: [sre-senior]
+
+            - step:
+                id: rollback_config
+                type: cli
+                title: Apply previous config
+                when: 'approved == "yes"'
+                command: kubectl
+                args:
+                  - apply
+                  - "-f"
+                  - "k8s/{{ .namespace }}/{{ .pod_name }}.yaml.previous"
+                contract:
+                  effects: ["k8s.write"]
+
+            - step:
+                id: wait_pod_ready
+                type: cli
+                title: Wait for pod ready
+                command: kubectl
+                args:
+                  - wait
+                  - "--for=condition=Ready"
+                  - "pod/{{ .pod_name }}"
+                  - "-n"
+                  - "{{ .namespace }}"
+                  - "--timeout=120s"
+                retry:
+                  max: 3
+                  interval: 10s
+                  backoff: linear
+
+        - condition: 'pod_json contains "OOMKilled"'
+          label: Resource Limit Issue
+          steps:
+            # Branch: Scale Resources (Steps 5a-5c)
+            - step:
+                id: approval_scale
+                type: collector
+                title: Approve memory limit increase
+                prompt: |
+                  Pod {{ .pod_name }} was OOMKilled.
+                  Current limits: {{ .pod_json }}
+                  
+                  Approve doubling memory limit?
+                fields:
+                  - name: approved
+                    type: text
+                    label: "Type 'yes' to approve"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [sre-oncall]
+                  timeout: 5m
+                  on_timeout: escalate
+                  escalate_to: [sre-senior]
+
+            - step:
+                id: patch_deployment
+                type: cli
+                title: Patch deployment memory limits
+                when: 'approved == "yes"'
+                command: kubectl
+                args:
+                  - patch
+                  - deployment
+                  - "{{ .pod_name }}"
+                  - "-n"
+                  - "{{ .namespace }}"
+                  - "--patch"
+                  - '{"spec":{"template":{"spec":{"containers":[{"name":"main","resources":{"limits":{"memory":"2Gi"}}}]}}}}'
+                contract:
+                  effects: ["k8s.write"]
+
+            - step:
+                id: wait_new_pod
+                type: cli
+                title: Wait for new pod ready
+                command: kubectl
+                args:
+                  - wait
+                  - "--for=condition=Ready"
+                  - "pod"
+                  - "-l"
+                  - "app={{ .pod_name }}"
+                  - "-n"
+                  - "{{ .namespace }}"
+                  - "--timeout=120s"
+                retry:
+                  max: 3
+                  interval: 10s
+                  backoff: linear
+
+        - condition: 'pod_json contains "NodeNotReady"'
+          label: Node Health Issue
+          steps:
+            # Branch: Check Node Health (Steps 6a-6c)
+            - step:
+                id: ssh_node
+                type: cli
+                title: Check node health
+                command: ssh
+                args:
+                  - "{{ .node_name }}"
+                  - "uptime && df -h && free -m"
+                capture:
+                  node_health: stdout
+
+            - step:
+                id: get_node_logs
+                type: cli
+                title: Collect node kubelet logs
+                command: ssh
+                args:
+                  - "{{ .node_name }}"
+                  - "journalctl -u kubelet --since '10 minutes ago'"
+                capture:
+                  node_logs: stdout
+
+            - step:
+                id: escalate_infra
+                type: collector
+                title: Escalate to infrastructure team
+                prompt: |
+                  Node {{ .node_name }} is unhealthy.
+                  Health check: {{ .node_health }}
+                  Logs: {{ .node_logs }}
+                fields:
+                  - name: escalation_notes
+                    type: multiline
+                    label: Additional notes for infrastructure team
+                    required: false
+                approvals:
+                  min: 1
+                  roles: [infra-oncall]
+                  timeout: 10m
+                  on_timeout: escalate
+                  escalate_to: [infra-manager]
+
+        - else: true
+          label: Unknown Failure
+          steps:
+            # Branch: Escalate to On-Call (Steps 7a-7b)
+            - step:
+                id: create_pagerduty_incident
+                type: tool
+                title: Create PagerDuty incident
+                tool:
+                  name: pagerduty-notify
+                  action: trigger-alert
+                  args:
+                    severity: high
+                    title: "Pod {{ .pod_name }} unhealthy - unknown cause"
+                    details: "{{ .pod_describe }}"
+                capture:
+                  incident_id: json.incident_id
+                contract:
+                  effects: [pagerduty.write]
+                  reads: [pod_name, pod_describe]
+
+            - step:
+                id: wait_acknowledgment
+                type: collector
+                title: Wait for on-call acknowledgment
+                prompt: |
+                  PagerDuty incident {{ .incident_id }} created.
+                  Acknowledge to proceed with investigation.
+                fields:
+                  - name: acknowledged
+                    type: text
+                    label: "Type 'ack' to acknowledge"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [sre-oncall]
+                  timeout: 15m
+                  on_timeout: escalate
+                  escalate_to: [sre-manager]
+
+  # Step 8: Bundle Evidence
+  - step:
+      id: bundle_evidence
+      type: cli
+      title: Bundle diagnostic evidence
+      command: tar
+      args:
+        - czf
+        - "/evidence/{{ .alert_id }}-{{ .pod_name }}.tar.gz"
+        - "-C"
+        - "/tmp"
+        - "pod_diagnostics"
+      capture:
+        evidence_path: stdout
+
+  # Step 9: Upload Evidence
+  - step:
+      id: upload_evidence
+      type: cli
+      title: Upload evidence to S3
+      command: aws
+      args:
+        - s3
+        - cp
+        - "{{ .evidence_path }}"
+        - "s3://incidents/{{ .timestamp }}-{{ .pod_name }}.tar.gz"
+
+  # Step 10: Close Alert
+  - step:
+      id: close_alert
+      type: tool
+      title: Resolve AlertManager alert
+      tool:
+        name: alertmanager-notify
+        action: resolve-alert
+        args:
+          alert_id: "{{ .alert_id }}"
+      contract:
+        effects: [alertmanager.write]
+        reads: [alert_id]
+
+  - step:
+      id: notify_slack
+      type: tool
+      title: Send Slack notification
+      tool:
+        name: slack-notify
+        action: send-message
+        args:
+          channel: "#incidents"
+          message: "Incident resolved for pod {{ .pod_name }}"
+      contract:
+        effects: [slack.write]
+        reads: [pod_name]
+
+  - step:
+      id: complete
+      type: end
+      title: Incident response complete
+      outcome:
+        category: resolved
+        code: pod_incident_resolved

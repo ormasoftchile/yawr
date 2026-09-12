@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "runID": "r-active-001",
+    "state": "running",
+    "runbookPath": "runbooks/deploy.yaml",
+    "startedAt": "2026-04-21T10:00:00.000000000Z",
+    "currentStep": "step-deploy",
+    "currentStepIndex": 2,
+    "vars": {"env": "prod", "region": "us-east-1"},
+    "source": "active"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "casting_policy_version": "1.2",
+  "allow_custom_universes": false,
+  "default_naming": "descriptive",
+  "allowlist_universes": ["descriptive"]
+}

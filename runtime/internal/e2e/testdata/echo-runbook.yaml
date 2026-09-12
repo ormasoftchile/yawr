@@ -1,0 +1,9 @@
+apiVersion: yawr.runbook/v1
+id: e2e-echo
+name: e2e-echo
+flow:
+  - step:
+      id: echo-step
+      type: cli
+      command: echo
+      args: ["hello", "e2e"]

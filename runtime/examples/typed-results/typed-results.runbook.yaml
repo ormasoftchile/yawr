@@ -1,0 +1,23 @@
+apiVersion: yawr.runbook/v1
+id: typed-results-example
+name: Native named Results
+bindings:
+  - {name: phase, type: string, mutable: true, value: pending}
+  - {name: observations, type: array, mutable: true, value: []}
+outputs:
+  status: {type: string, value_expr: phase}
+  result:
+    type: object
+    value_tree:
+      observations: '${observations}'
+      empty: ""
+      zero: 0
+      flag: false
+      nullable: null
+flow:
+  - step:
+      id: settle
+      type: assign
+      assign:
+        - {name: phase, value: observed}
+  - step: {id: results, type: results, title: Results}

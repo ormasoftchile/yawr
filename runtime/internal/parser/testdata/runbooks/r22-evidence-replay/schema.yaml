@@ -1,0 +1,308 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r22-evidence-replay
+name: r22 Evidence Collection & Replay Test Fixture
+description: |
+  Integration test fixture for Phase 11 Evidence & Replay.
+  
+  Tests evidence collection, trace format, and replay mode:
+  - Stdout capture (cli step evidence)
+  - File artifact creation and SHA256 capture
+  - Environment variable capture
+  - Deterministic execution for replay
+  - Infix condition evaluation (branch on captured value)
+  - JSONL trace format validation
+  - Resumption from checkpoint
+  
+  REPLAY SCENARIO:
+  1. Run once in real mode: yawr exec schema.yaml --var build_id=b123
+  2. Capture trace: .runbook/runs/<run-id>/trace.jsonl
+  3. Verify evidence captured:
+     - step/completed for capture_env: captures.build_env="production"
+     - step/completed for create_artifact: evidence.artifact_file (SHA256)
+     - step/completed for verify_artifact: captures.artifact_hash
+  4. Replay from trace: yawr exec --mode replay --scenario replay.yaml
+  5. Verify identical trace output (modulo timestamps/event_ids)
+  
+  RESUMPTION SCENARIO:
+  1. Run schema.yaml with simulated crash after step 2
+  2. Verify checkpoint: .runbook/runs/<run-id>/snapshots/step-0002.json
+  3. Resume: yawr exec --resume <run-id>
+  4. Verify steps 1-2 not re-executed, step 3+ execute normally
+
+# Variables can be overridden via CLI: yawr exec schema.yaml --var build_id=b456
+inputs:
+  build_id:
+    type: string
+    description: Build identifier for deployment
+    default: "b001"
+  build_env:
+    type: string
+    description: Build environment (staging, production)
+    default: "production"
+
+flow:
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 1: Capture environment variable (evidence kind: text)
+  # Expected evidence: step/completed.captures.build_env = "production"
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: capture_env
+      type: cli
+      title: Capture build environment variable
+      command: echo
+      args:
+        - "{{ .build_env }}"
+      capture:
+        # Captured stdout becomes evidence in step/completed event
+        build_env: stdout
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 2: Create file artifact (evidence kind: attachment)
+  # Expected evidence: step/completed.evidence[0] = {
+  #   "name": "artifact_file",
+  #   "kind": "attachment",
+  #   "path": "build-artifact-{{ .build_id }}.txt",
+  #   "sha256": "<hex>",
+  #   "size": <bytes>
+  # }
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: create_artifact
+      type: cli
+      title: Create build artifact file
+      command: bash
+      args:
+        - "-c"
+        - |
+          echo "Build ID: {{ .build_id }}" > build-artifact-{{ .build_id }}.txt
+          echo "Environment: {{ .build_env }}" >> build-artifact-{{ .build_id }}.txt
+          echo "Timestamp: 2026-04-20T12:00:00Z" >> build-artifact-{{ .build_id }}.txt
+          cat build-artifact-{{ .build_id }}.txt
+      capture:
+        artifact_content: stdout
+      # Runtime should detect output file and attach it to evidence
+      evidence:
+        - name: artifact_file
+          kind: attachment
+          path: "build-artifact-{{ .build_id }}.txt"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 3: Verify artifact hash (deterministic hash for replay)
+  # Expected evidence: step/completed.captures.artifact_hash = SHA256 hex
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: verify_artifact
+      type: cli
+      title: Compute artifact SHA256 hash
+      command: bash
+      args:
+        - "-c"
+        - "sha256sum build-artifact-{{ .build_id }}.txt | awk '{print $1}'"
+      capture:
+        artifact_hash: stdout
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 4: Conditional branch (deterministic for replay)
+  # Uses infix condition syntax: build_env == "production"
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: branch_by_env
+      type: branch
+      title: Route by build environment
+      branches:
+        # Branch 1: Production deployment path
+        - condition: 'build_env == "production"'
+          label: Production deployment
+          steps:
+            - step:
+                id: prod_deploy
+                type: cli
+                title: Deploy to production
+                command: echo
+                args:
+                  - "Deploying build {{ .build_id }} to PRODUCTION"
+                capture:
+                  deploy_result: stdout
+
+            - step:
+                id: prod_verify
+                type: cli
+                title: Verify production deployment
+                command: echo
+                args:
+                  - "Production deployment verified for {{ .build_id }}"
+                capture:
+                  verify_result: stdout
+
+        # Branch 2: Staging deployment path
+        - condition: 'build_env == "staging"'
+          label: Staging deployment
+          steps:
+            - step:
+                id: staging_deploy
+                type: cli
+                title: Deploy to staging
+                command: echo
+                args:
+                  - "Deploying build {{ .build_id }} to STAGING"
+                capture:
+                  deploy_result: stdout
+
+        # Branch 3: Default fallback (should not be reached)
+        - condition: 'true'
+          label: Unknown environment
+          steps:
+            - step:
+                id: unknown_env
+                type: cli
+                title: Unknown environment error
+                command: echo
+                args:
+                  - "ERROR: Unknown environment {{ .build_env }}"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 5: Environment snapshot capture (evidence kind: env snapshot)
+  # Expected evidence: step/completed.evidence[0] = {
+  #   "name": "env_snapshot",
+  #   "kind": "text",
+  #   "value": "BUILD_ID=b123\nBUILD_ENV=production\n..."
+  # }
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: capture_env_snapshot
+      type: cli
+      title: Capture environment snapshot
+      command: bash
+      args:
+        - "-c"
+        - |
+          echo "BUILD_ID={{ .build_id }}"
+          echo "BUILD_ENV={{ .build_env }}"
+          echo "DEPLOY_RESULT={{ .deploy_result }}"
+      capture:
+        env_snapshot: stdout
+      evidence:
+        - name: env_snapshot
+          kind: text
+          value: "{{ .env_snapshot }}"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # STEP 6: Completion marker (uses all captured variables)
+  # ────────────────────────────────────────────────────────────────────────────
+  - step:
+      id: complete
+      type: cli
+      title: Deployment complete
+      command: echo
+      args:
+        - "Deployment complete: {{ .build_id }} to {{ .build_env }}, hash {{ .artifact_hash }}"
+      capture:
+        completion_message: stdout
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXPECTED TRACE EVENT SEQUENCE (build_id=b123, build_env=production)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Seq  | Event Kind            | Key Payload Fields
+# -----|-----------------------|--------------------------------------------------
+# 0    | run/started           | runbook_id="r22-evidence-replay", mode="real"
+# 1    | step/started          | step_id="capture_env"
+# 2    | step/completed        | step_id="capture_env", captures.build_env="production"
+# 3    | step/started          | step_id="create_artifact"
+# 4    | step/completed        | step_id="create_artifact", evidence[0].kind="attachment"
+# 5    | step/started          | step_id="verify_artifact"
+# 6    | step/completed        | step_id="verify_artifact", captures.artifact_hash="<sha256>"
+# 7    | step/started          | step_id="branch_by_env"
+# 8    | step/completed        | step_id="branch_by_env", branch="Production deployment"
+# 9    | step/started          | step_id="prod_deploy"
+# 10   | step/completed        | step_id="prod_deploy", captures.deploy_result="..."
+# 11   | step/started          | step_id="prod_verify"
+# 12   | step/completed        | step_id="prod_verify", captures.verify_result="..."
+# 13   | step/started          | step_id="capture_env_snapshot"
+# 14   | step/completed        | step_id="capture_env_snapshot", evidence[0].kind="text"
+# 15   | step/started          | step_id="complete"
+# 16   | step/completed        | step_id="complete", captures.completion_message="..."
+# 17   | run/completed         | final_status="passed", step_count=7
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CHECKPOINT FILES (for resumption testing)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# .runbook/runs/<run-id>/snapshots/
+#   step-0000.json  ← after capture_env completes
+#   step-0001.json  ← after create_artifact completes
+#   step-0002.json  ← after verify_artifact completes
+#   step-0003.json  ← after branch_by_env completes
+#   step-0004.json  ← after prod_deploy completes
+#   step-0005.json  ← after prod_verify completes
+#   step-0006.json  ← after capture_env_snapshot completes
+#   step-0007.json  ← after complete completes (final checkpoint)
+#
+# Each checkpoint contains:
+# - RunID, RunbookPath, Mode, StartedAt, Actor
+# - Path (tree cursor for next step)
+# - Vars (all input variables)
+# - Captures (all accumulated step outputs)
+# - History (completed step records with status/duration)
+# - LastCheckpointSeq (trace sequence number at checkpoint time)
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REPLAY MODE SCENARIO FILE (replay.yaml)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# commands:
+#   - argv: ["echo", "production"]
+#     stdout: "production\n"
+#     stderr: ""
+#     exit_code: 0
+#
+#   - argv: ["bash", "-c", "echo \"Build ID: b123\" > build-artifact-b123.txt && ..."]
+#     stdout: "Build ID: b123\nEnvironment: production\nTimestamp: 2026-04-20T12:00:00Z\n"
+#     stderr: ""
+#     exit_code: 0
+#
+#   - argv: ["bash", "-c", "sha256sum build-artifact-b123.txt | awk '{print $1}'"]
+#     stdout: "a1b2c3d4e5f6...\n"
+#     stderr: ""
+#     exit_code: 0
+#
+#   - argv: ["echo", "Deploying build b123 to PRODUCTION"]
+#     stdout: "Deploying build b123 to PRODUCTION\n"
+#     stderr: ""
+#     exit_code: 0
+#
+#   - argv: ["echo", "Production deployment verified for b123"]
+#     stdout: "Production deployment verified for b123\n"
+#     stderr: ""
+#     exit_code: 0
+#
+#   - argv: ["bash", "-c", "echo \"BUILD_ID=b123\" && ..."]
+#     stdout: "BUILD_ID=b123\nBUILD_ENV=production\nDEPLOY_RESULT=...\n"
+#     stderr: ""
+#     exit_code: 0
+#
+#   - argv: ["echo", "Deployment complete: b123 to production, hash a1b2c3d4..."]
+#     stdout: "Deployment complete: b123 to production, hash a1b2c3d4...\n"
+#     stderr: ""
+#     exit_code: 0
+#
+# evidence:
+#   create_artifact:
+#     artifact_file:
+#       kind: attachment
+#       path: "build-artifact-b123.txt"
+#       sha256: "a1b2c3d4e5f6..."
+#       size: 89
+#
+#   capture_env_snapshot:
+#     env_snapshot:
+#       kind: text
+#       value: "BUILD_ID=b123\nBUILD_ENV=production\nDEPLOY_RESULT=...\n"
+#
+# ══════════════════════════════════════════════════════════════════════════════

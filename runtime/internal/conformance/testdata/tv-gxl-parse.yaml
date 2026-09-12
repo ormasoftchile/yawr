@@ -1,0 +1,944 @@
+# tv-gxl-parse.yaml
+# Category:    GXL-PARSE
+# Grammar ref: spec/grammar/gxl.ebnf
+# Schema ref:  design/yawr/conformance/vector.schema.json
+# Owner:       Yawr runtime
+# Date:        2026-06-05T00:14:04-04:00
+#
+# Purpose: Pin down every grammar production in gxl.ebnf that is
+# observable at PARSE time (lexer + syntactic grammar). Evaluation
+# semantics (type errors, path resolution, short-circuit behaviour)
+# are deferred to tv-gxl-eval.yaml.
+#
+# Convention for positive vectors:
+#   expected.value: "parse_ok"
+#   The AST shape is implementation-defined; conforming runtimes
+#   MUST accept the expression without error.
+#
+# Convention for negative vectors:
+#   expected.error_class + expected.error_code match gxl.ebnf §6.1.
+#
+# Parser edge cases:
+#   See .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md
+#   §Ambiguities for GXL-PARSE-010-vs-007 and 1.2.3 classification.
+
+vectors:
+
+  # ---------------------------------------------------------------
+  # Literals — INTEGER
+  # gxl.ebnf §2.5, §3 Literal → NUMBER → INTEGER
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-001
+    category: GXL-PARSE
+    description: "Parser accepts a simple decimal integer literal."
+    input: "42"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, integer]
+
+  - id: TV-GXL-PARSE-002
+    category: GXL-PARSE
+    description: "Parser accepts zero as a standalone integer literal (single-digit form)."
+    input: "0"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, integer, edge]
+
+  - id: TV-GXL-PARSE-003
+    category: GXL-PARSE
+    description: "Parser accepts a negative integer produced by UnaryMinus applied to NUMBER."
+    input: "-7"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Negative numbers are NOT lexer tokens; '-7' is UnaryMinus(NUMBER('7')). See gxl.ebnf §2.5."
+    tags: [literal, integer, unary-minus]
+
+  # ---------------------------------------------------------------
+  # Literals — FLOAT / SCIENTIFIC
+  # gxl.ebnf §2.5 NUMBER = INTEGER [ FRAC ] [ EXP ]
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-004
+    category: GXL-PARSE
+    description: "Parser accepts a decimal float literal (integer part + fractional part)."
+    input: "3.14"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, float]
+
+  - id: TV-GXL-PARSE-005
+    category: GXL-PARSE
+    description: "Parser accepts scientific notation with lowercase 'e' and positive exponent."
+    input: "1.5e10"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, float, scientific]
+
+  - id: TV-GXL-PARSE-006
+    category: GXL-PARSE
+    description: "Parser accepts scientific notation with uppercase 'E' and negative exponent."
+    input: "2.0E-3"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, float, scientific]
+
+  - id: TV-GXL-PARSE-007
+    category: GXL-PARSE
+    description: "Parser accepts scientific notation with explicit '+' exponent sign."
+    input: "1e+5"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, float, scientific]
+
+  # ---------------------------------------------------------------
+  # Literals — BOOLEAN and NULL
+  # gxl.ebnf §2.2 KW_TRUE, KW_FALSE, KW_NULL; §3 BoolLiteral, NullLiteral
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-008
+    category: GXL-PARSE
+    description: "Parser accepts the boolean literal 'true'."
+    input: "true"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, boolean]
+
+  - id: TV-GXL-PARSE-009
+    category: GXL-PARSE
+    description: "Parser accepts the boolean literal 'false'."
+    input: "false"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, boolean]
+
+  - id: TV-GXL-PARSE-010
+    category: GXL-PARSE
+    description: "Parser accepts the null literal."
+    input: "null"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, "null"]
+
+  # ---------------------------------------------------------------
+  # Literals — STRINGS
+  # gxl.ebnf §2.4 STRING = DQUOTE_STRING | SQUOTE_STRING
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-011
+    category: GXL-PARSE
+    description: "Parser accepts a double-quoted string containing ordinary ASCII characters."
+    input: '"hello world"'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, double-quote]
+
+  - id: TV-GXL-PARSE-012
+    category: GXL-PARSE
+    description: "Parser accepts a single-quoted string containing ordinary ASCII characters."
+    input: "'hello world'"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, single-quote]
+
+  - id: TV-GXL-PARSE-013
+    category: GXL-PARSE
+    description: "Parser accepts an empty double-quoted string."
+    input: '""'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, empty]
+
+  - id: TV-GXL-PARSE-014
+    category: GXL-PARSE
+    description: "Parser accepts an empty single-quoted string."
+    input: "''"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, empty, single-quote]
+
+  - id: TV-GXL-PARSE-015
+    category: GXL-PARSE
+    description: "Parser accepts a string containing Unicode characters (non-ASCII content)."
+    input: '"café résumé"'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "gxl.ebnf §2.4: string content may be any Unicode code point except the quote char, backslash, LF, CR."
+    tags: [literal, string, unicode]
+
+  - id: TV-GXL-PARSE-016
+    category: GXL-PARSE
+    description: "Parser accepts a string with recognized escape sequences — backslash, newline, tab."
+    input: '"line1\\nline2\\ttabbed"'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, escape]
+
+  - id: TV-GXL-PARSE-017
+    category: GXL-PARSE
+    description: "Parser accepts a string with a 4-digit Unicode escape sequence (\\uXXXX)."
+    input: '"snowman \u2603"'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, escape, unicode]
+
+  - id: TV-GXL-PARSE-018
+    category: GXL-PARSE
+    description: "Parser accepts a string with an 8-digit Unicode escape sequence (\\UXXXXXXXX)."
+    input: '"emoji \U0001F600"'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [literal, string, escape, unicode]
+
+  - id: TV-GXL-PARSE-019
+    category: GXL-PARSE
+    description: "Parser accepts a double-quoted string with an embedded single quote (no escaping needed)."
+    input: '"it''s fine"'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Inside a double-quoted string, single-quote needs no escape. gxl.ebnf §2.4."
+    tags: [literal, string, mixed-quote]
+
+  - id: TV-GXL-PARSE-020
+    category: GXL-PARSE
+    description: "Parser accepts a single-quoted string with an embedded double quote (no escaping needed)."
+    input: "'she said \"hi\"'"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Inside a single-quoted string, double-quote needs no escape. gxl.ebnf §2.4."
+    tags: [literal, string, mixed-quote]
+
+  # ---------------------------------------------------------------
+  # Identifiers and GDP Paths
+  # gxl.ebnf §2.3 IDENT; §3 GDP
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-021
+    category: GXL-PARSE
+    description: "Parser accepts a simple lowercase identifier as a GDP path (single segment)."
+    input: "hostname"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [identifier, gdp]
+
+  - id: TV-GXL-PARSE-022
+    category: GXL-PARSE
+    description: "Parser accepts an identifier containing an underscore."
+    input: "my_var"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [identifier, gdp, underscore]
+
+  - id: TV-GXL-PARSE-023
+    category: GXL-PARSE
+    description: "Parser accepts an identifier with trailing digits (digits not in leading position)."
+    input: "var1"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [identifier, gdp]
+
+  - id: TV-GXL-PARSE-024
+    category: GXL-PARSE
+    description: "Parser accepts a camelCase identifier."
+    input: "myVariable"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [identifier, gdp, camel-case]
+
+  - id: TV-GXL-PARSE-025
+    category: GXL-PARSE
+    description: "Parser accepts a GDP path with one dot-separated field access (two segments)."
+    input: "config.region"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [gdp, dot-access]
+
+  - id: TV-GXL-PARSE-026
+    category: GXL-PARSE
+    description: "Parser accepts a GDP path with an integer array index."
+    input: "items[0]"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [gdp, array-index]
+
+  - id: TV-GXL-PARSE-027
+    category: GXL-PARSE
+    description: "Parser accepts a deeply-nested GDP path combining dot access and array indexing."
+    input: "response.items[0].metadata.name"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [gdp, dot-access, array-index, nested]
+
+  - id: TV-GXL-PARSE-028
+    category: GXL-PARSE
+    description: "Parser accepts a GDP path using multi-digit array index."
+    input: "list[10]"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "INTEGER in GDP index follows the same production as literal INTEGER: no leading zeros."
+    tags: [gdp, array-index]
+
+  # ---------------------------------------------------------------
+  # Operators — Comparison
+  # gxl.ebnf §3 CompOp = OP_EQ | OP_NEQ | OP_LTE | OP_GTE | OP_LT | OP_GT
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-029
+    category: GXL-PARSE
+    description: "Parser accepts equality comparison operator (==)."
+    input: "status == \"ok\""
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, comparison, eq]
+
+  - id: TV-GXL-PARSE-030
+    category: GXL-PARSE
+    description: "Parser accepts inequality comparison operator (!=)."
+    input: "status != \"error\""
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, comparison, neq]
+
+  - id: TV-GXL-PARSE-031
+    category: GXL-PARSE
+    description: "Parser accepts strict less-than comparison operator (<)."
+    input: "count < 100"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, comparison, lt]
+
+  - id: TV-GXL-PARSE-032
+    category: GXL-PARSE
+    description: "Parser accepts less-than-or-equal comparison operator (<=)."
+    input: "count <= 100"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, comparison, lte]
+
+  - id: TV-GXL-PARSE-033
+    category: GXL-PARSE
+    description: "Parser accepts strict greater-than comparison operator (>)."
+    input: "score > 0"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, comparison, gt]
+
+  - id: TV-GXL-PARSE-034
+    category: GXL-PARSE
+    description: "Parser accepts greater-than-or-equal comparison operator (>=)."
+    input: "score >= 0"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, comparison, gte]
+
+  # ---------------------------------------------------------------
+  # Operators — Arithmetic
+  # gxl.ebnf §3 Addition, Multiply, UnaryMinus
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-035
+    category: GXL-PARSE
+    description: "Parser accepts binary addition operator (+) between two GDP paths."
+    input: "a + b"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, arithmetic, plus]
+
+  - id: TV-GXL-PARSE-036
+    category: GXL-PARSE
+    description: "Parser accepts binary subtraction operator (-) between GDP path and integer literal."
+    input: "count - 1"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, arithmetic, minus]
+
+  - id: TV-GXL-PARSE-037
+    category: GXL-PARSE
+    description: "Parser accepts multiplication operator (*)."
+    input: "price * quantity"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, arithmetic, multiply]
+
+  - id: TV-GXL-PARSE-038
+    category: GXL-PARSE
+    description: "Parser accepts division operator (/)."
+    input: "total / count"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, arithmetic, divide]
+
+  - id: TV-GXL-PARSE-039
+    category: GXL-PARSE
+    description: "Parser accepts modulo operator (%)."
+    input: "value % 3"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, arithmetic, modulo]
+
+  # ---------------------------------------------------------------
+  # Operators — Logical
+  # gxl.ebnf §3 OrExpr, AndExpr, NotExpr; §2.2 KW_AND, KW_OR, KW_NOT
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-040
+    category: GXL-PARSE
+    description: "Parser accepts logical 'and' operator between two boolean GDP paths."
+    input: "is_ready and is_enabled"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, logical, and]
+
+  - id: TV-GXL-PARSE-041
+    category: GXL-PARSE
+    description: "Parser accepts logical 'or' operator between two boolean GDP paths."
+    input: "is_admin or is_owner"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, logical, or]
+
+  - id: TV-GXL-PARSE-042
+    category: GXL-PARSE
+    description: "Parser accepts logical 'not' as a unary prefix operator."
+    input: "not is_blocked"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [operator, logical, not]
+
+  # ---------------------------------------------------------------
+  # Operator Precedence
+  # gxl.ebnf §3 precedence table (comment block before Expression rule)
+  # These vectors pin the PARSE-time binding — they do not evaluate.
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-043
+    category: GXL-PARSE
+    description: "Parser accepts 'not a and b'; 'not' binds tighter than 'and', so this is (not a) and b."
+    input: "not a and b"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Precedence level 3 (not) > level 2 (and). Evaluation of (not a) and b is in TV-GXL-EVAL. gxl.ebnf §3."
+    tags: [precedence, not, and]
+
+  - id: TV-GXL-PARSE-044
+    category: GXL-PARSE
+    description: "Parser accepts 'a or b and c'; 'and' binds tighter than 'or', so this is a or (b and c)."
+    input: "a or b and c"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Precedence level 1 (or) < level 2 (and). Evaluation witness in TV-GXL-EVAL. gxl.ebnf §3."
+    tags: [precedence, or, and]
+
+  - id: TV-GXL-PARSE-045
+    category: GXL-PARSE
+    description: "Parser accepts 'a + b * c'; '*' binds tighter than '+', so this is a + (b * c)."
+    input: "a + b * c"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Precedence level 5 (+) < level 6 (*). gxl.ebnf §3."
+    tags: [precedence, arithmetic]
+
+  - id: TV-GXL-PARSE-046
+    category: GXL-PARSE
+    description: "Parser accepts a parenthesized sub-expression that overrides default precedence."
+    input: "(a + b) * c"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "LPAREN overrides the default * > + precedence. gxl.ebnf §3 Primary → LPAREN Expression RPAREN."
+    tags: [precedence, parentheses]
+
+  # ---------------------------------------------------------------
+  # Function Calls — len builtin and namespace calls
+  # gxl.ebnf §3 LenCall, NamespaceCall; §4 stdlib reference
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-047
+    category: GXL-PARSE
+    description: "Parser accepts len() builtin with a single GDP path argument."
+    input: "len(items)"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [function-call, len]
+
+  - id: TV-GXL-PARSE-048
+    category: GXL-PARSE
+    description: "Parser accepts a namespace function call with two arguments (str.contains)."
+    input: 'str.contains(message, "error")'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [function-call, namespace, str]
+
+  - id: TV-GXL-PARSE-049
+    category: GXL-PARSE
+    description: "Parser accepts a namespace function call with a single argument (str.trim)."
+    input: "str.trim(label)"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [function-call, namespace, str]
+
+  - id: TV-GXL-PARSE-050
+    category: GXL-PARSE
+    description: "Parser accepts a list namespace function call with two arguments (list.contains)."
+    input: "list.contains(tags, \"prod\")"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [function-call, namespace, list]
+
+  - id: TV-GXL-PARSE-051
+    category: GXL-PARSE
+    description: "Parser accepts a regex namespace function call (regex.match)."
+    input: 'regex.match(path, "^/api/")'
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [function-call, namespace, regex]
+
+  - id: TV-GXL-PARSE-052
+    category: GXL-PARSE
+    description: "Parser accepts a nested function call (len inside a namespace call argument)."
+    input: "str.contains(message, \"x\") and len(items) > 0"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    tags: [function-call, nested, len, str]
+
+  - id: TV-GXL-PARSE-053
+    category: GXL-PARSE
+    description: "Parser accepts a GDP path as an argument to a namespace function call."
+    input: "str.startsWith(config.prefix, \"prod\")"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "Covers OI-GXL-05: GDP path in function argument position. gxl.ebnf §6 OI-GXL-05."
+    tags: [function-call, gdp, nested, OI-GXL-05]
+
+  # ---------------------------------------------------------------
+  # Short-Circuit Witness (OQ1)
+  # gxl.ebnf §5.1; .squad/decisions/inbox/copilot-directive-gxl-oq1-oq2-ratification.md
+  # Parse must accept 'false and X' regardless of what X resolves to.
+  # Semantic short-circuit behaviour is tested in TV-GXL-EVAL.
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-054
+    category: GXL-PARSE
+    description: "Parser accepts 'false and missingVar'; short-circuit parse form must be syntactically valid."
+    input: "false and missingVar"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "OQ1 ratified: 'false and X' short-circuits — X is not evaluated. Parser MUST accept this form. Evaluation witness (short-circuit prevents path error) is TV-GXL-EVAL. gxl.ebnf §5.1."
+    tags: [short-circuit, OQ1, and]
+
+  - id: TV-GXL-PARSE-055
+    category: GXL-PARSE
+    description: "Parser accepts 'true or missingVar'; short-circuit parse form must be syntactically valid."
+    input: "true or missingVar"
+    variables: {}
+    expected:
+      value: "parse_ok"
+    note: "OQ1 ratified: 'true or X' short-circuits — X is not evaluated. Parser MUST accept this form. gxl.ebnf §5.1."
+    tags: [short-circuit, OQ1, or]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-001: Unexpected token
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-056
+    category: GXL-PARSE
+    description: "Parser rejects a bare leading-dot path (.foo) — DOT is not a valid Primary start."
+    input: ".foo"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "GDP production requires a leading IDENT, not DOT. gxl.ebnf §3 GDP."
+    tags: [negative, unexpected-token]
+
+  - id: TV-GXL-PARSE-057
+    category: GXL-PARSE
+    description: "Parser rejects a trailing operator with no right-hand operand."
+    input: "a +"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "Addition rule requires a Multiply on the right; EOF is unexpected. gxl.ebnf §3 Addition."
+    tags: [negative, unexpected-token]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-002: Unterminated string literal
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-058
+    category: GXL-PARSE
+    description: "Parser rejects a double-quoted string that is never closed before EOF."
+    input: '"unterminated'
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-002
+    note: "gxl.ebnf §2.4: EOF before closing quote → GXL-PARSE-002."
+    tags: [negative, string, unterminated]
+
+  - id: TV-GXL-PARSE-059
+    category: GXL-PARSE
+    description: "Parser rejects a single-quoted string that is never closed before EOF."
+    input: "'unterminated"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-002
+    tags: [negative, string, unterminated, single-quote]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-003: Invalid number literal
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-060
+    category: GXL-PARSE
+    description: "Parser rejects an integer literal with leading zeros (007)."
+    input: "007"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-003
+    note: "gxl.ebnf §2.5 explicitly states: '007 is a parse error: GXL-PARSE-003'. INTEGER = '0' | ('1'..'9' {'0'..'9'}); '007' is not in this grammar."
+    tags: [negative, number, leading-zero]
+
+  - id: TV-GXL-PARSE-061
+    category: GXL-PARSE
+    description: "Parser rejects a number with two decimal points (1.2.3) — invalid numeric token."
+    input: "1.2.3"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "The lexer tokenises '1.2' as NUMBER then '.' as DOT then '3' as NUMBER; parsing rejects the unexpected DOT after Primary."
+    tags: [negative, number, invalid, ambiguous]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-004: Invalid escape sequence
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-062
+    category: GXL-PARSE
+    description: "Parser rejects a string containing an unrecognized escape sequence (\\q)."
+    input: '"hello \q world"'
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-004
+    note: "gxl.ebnf §2.4 ESCAPE_BODY: 'Any other character after backslash is error GXL-PARSE-004'."
+    tags: [negative, string, escape, invalid]
+
+  - id: TV-GXL-PARSE-063
+    category: GXL-PARSE
+    description: "Parser rejects a string with a \\x hex escape (recognized in many languages but not in GXL)."
+    input: '"hex \xFF"'
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-004
+    note: "GXL uses \\uXXXX and \\UXXXXXXXX for Unicode; \\x is not in ESCAPE_BODY. gxl.ebnf §2.4."
+    tags: [negative, string, escape, invalid]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-005: Unknown namespace
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-064
+    category: GXL-PARSE
+    description: "Parser rejects a call to the 'math' namespace (reserved for v2, no methods in v1)."
+    input: "math.abs(x)"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-005
+    note: "gxl.ebnf §4.5: 'Referencing math.* → GXL-PARSE-005'. KW_MATH is reserved but not usable in v1."
+    tags: [negative, namespace, math, reserved]
+
+  - id: TV-GXL-PARSE-065
+    category: GXL-PARSE
+    description: "Parser rejects a call to a completely unknown namespace prefix."
+    input: "http.get(url)"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-005
+    note: "Namespace allowlist is str, list, regex only. 'http' is not reserved but also not allowed. gxl.ebnf §3 Namespace."
+    tags: [negative, namespace, unknown]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-006: Unknown namespace method
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-066
+    category: GXL-PARSE
+    description: "Parser rejects a call to an unknown method on the 'str' namespace (str.explode)."
+    input: "str.explode(s, \",\")"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-006
+    note: "gxl.ebnf §4.2: str namespace defines startsWith, endsWith, contains, toLower, toUpper, trim, length, trimPrefix, trimSuffix — 'explode' is not among them."
+    tags: [negative, namespace, method, unknown]
+
+  - id: TV-GXL-PARSE-067
+    category: GXL-PARSE
+    description: "Parser rejects a call to an unknown method on the 'list' namespace (list.sort)."
+    input: "list.sort(items)"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-006
+    note: "gxl.ebnf §4.3: list namespace defines contains, indexOf, length only. 'sort' is not defined."
+    tags: [negative, namespace, method, unknown]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-007: Forbidden syntax
+  # gxl.ebnf §2.6 "Forbidden operator tokens" comment block
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-068
+    category: GXL-PARSE
+    description: "Parser rejects '&&' (C-style logical AND) — use 'and' keyword instead."
+    input: "a && b"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §2.6 forbidden: '&&'. Legacy fixtures used C-style boolean operators; GXL forbids them."
+    tags: [negative, forbidden-syntax, logical, audit]
+
+  - id: TV-GXL-PARSE-069
+    category: GXL-PARSE
+    description: "Parser rejects '||' (C-style logical OR) — use 'or' keyword instead."
+    input: "a || b"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §2.6 forbidden: '||'. Legacy audit finding."
+    tags: [negative, forbidden-syntax, logical, audit]
+
+  - id: TV-GXL-PARSE-070
+    category: GXL-PARSE
+    description: "Parser rejects '!' (C-style logical NOT) — use 'not' keyword instead."
+    input: "!is_ready"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §2.6 forbidden: '!'. Legacy audit finding."
+    tags: [negative, forbidden-syntax, logical, audit]
+
+  - id: TV-GXL-PARSE-071
+    category: GXL-PARSE
+    description: "Parser rejects unsupported infix 'contains'."
+    input: "items contains \"prod\""
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §2.6 forbidden: infix 'contains'. Use list.contains() or str.contains() instead. Audit finding."
+    tags: [negative, forbidden-syntax, infix, audit]
+
+  - id: TV-GXL-PARSE-072
+    category: GXL-PARSE
+    description: "Parser rejects a ternary conditional expression (?:) — not part of GXL grammar."
+    input: "a ? b : c"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §2.6 forbidden: ternary (?:). GXL has no conditional expression form."
+    tags: [negative, forbidden-syntax, ternary]
+
+  - id: TV-GXL-PARSE-073
+    category: GXL-PARSE
+    description: "Parser rejects a negative array index (foo[-1]) — negative indices are forbidden."
+    input: "foo[-1]"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §3 GDP: 'Negative indices are not permitted: GXL-PARSE-007.' INTEGER in index position must be non-negative."
+    tags: [negative, forbidden-syntax, array-index]
+
+  - id: TV-GXL-PARSE-074
+    category: GXL-PARSE
+    description: "Parser rejects a bare function call that is not 'len' (foo() without namespace)."
+    input: "foo()"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §3 Primary: 'Bare function calls (other than len) are GXL-PARSE-007.' All calls must use a namespace prefix (str., list., regex.) or be exactly len."
+    tags: [negative, forbidden-syntax, bare-call]
+
+  - id: TV-GXL-PARSE-075
+    category: GXL-PARSE
+    description: "Parser rejects an assignment expression (x = 5) — GXL is read-only."
+    input: "x = 5"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §2.6 forbidden: assignment. GXL expressions are pure (§5.6 No Side Effects)."
+    tags: [negative, forbidden-syntax, assignment]
+
+  - id: TV-GXL-PARSE-076
+    category: GXL-PARSE
+    description: "Parser rejects unary plus (+5) — unary '+' is not a supported operator."
+    input: "+5"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-007
+    note: "gxl.ebnf §3 UnaryMinus: 'Unary + is not supported (GXL-PARSE-007).' Only unary '-' is defined."
+    tags: [negative, forbidden-syntax, unary-plus]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-008: Unmatched parenthesis
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-077
+    category: GXL-PARSE
+    description: "Parser rejects an expression with an unclosed left parenthesis."
+    input: "(a + b"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-008
+    note: "gxl.ebnf §3 Primary: 'LPAREN Expression RPAREN' requires a matching RPAREN."
+    tags: [negative, unmatched-paren]
+
+  - id: TV-GXL-PARSE-078
+    category: GXL-PARSE
+    description: "Parser rejects an expression with a spurious extra right parenthesis."
+    input: "a + b)"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-008
+    note: "After parsing 'a + b', the trailing RPAREN has no matching LPAREN."
+    tags: [negative, unmatched-paren]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-009: Chained comparison
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-079
+    category: GXL-PARSE
+    description: "Parser rejects a chained comparison (a < b < c) — comparisons are non-associative."
+    input: "a < b < c"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-009
+    note: "gxl.ebnf §3 Comparison: 'Exactly zero or one CompOp per expression. a < b < c is GXL-PARSE-009.' Use 'a < b and b < c' instead."
+    tags: [negative, chained-comparison]
+
+  - id: TV-GXL-PARSE-080
+    category: GXL-PARSE
+    description: "Parser rejects a chained equality comparison (a == b == c)."
+    input: "a == b == c"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-009
+    note: "Chained comparison with == is also GXL-PARSE-009. Same rule: one CompOp maximum."
+    tags: [negative, chained-comparison]
+
+  # ---------------------------------------------------------------
+  # Negative Parse Vectors — GXL-PARSE-010: Keyword used as identifier
+  # gxl.ebnf §2.3 (IDENT ≠ KEYWORD) and §6.1 GXL-PARSE-010
+  # ARBITRATED 2026-06-05 (barbara-tess-conflicts-arbitration):
+  #   GXL-PARSE-010 is the sole authoritative code for
+  #   keyword-as-identifier.  gxl.ebnf §2.3 body text previously
+  #   cited GXL-PARSE-007 in error; that has been corrected in the
+  #   grammar.  GXL-PARSE-007 covers forbidden SYNTAX tokens only.
+  # ---------------------------------------------------------------
+
+  - id: TV-GXL-PARSE-081
+    category: GXL-PARSE
+    description: "Parser rejects 'and' used as a standalone primary expression (keyword as identifier)."
+    input: "and"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-010
+    note: "ARBITRATED: GXL-PARSE-010 is correct per barbara-tess-conflicts-arbitration. gxl.ebnf §2.3 body-text bug (GXL-PARSE-007) has been patched."
+    tags: [negative, keyword-as-identifier]
+
+  - id: TV-GXL-PARSE-082
+    category: GXL-PARSE
+    description: "Parser rejects 'or' used as a standalone primary expression (keyword as identifier)."
+    input: "or"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-010
+    note: "ARBITRATED: GXL-PARSE-010, same ruling as TV-GXL-PARSE-081."
+    tags: [negative, keyword-as-identifier]
+
+  - id: TV-GXL-PARSE-083
+    category: GXL-PARSE
+    description: "Parser rejects 'str.foo' (no parens) — reserved namespace keyword cannot be used as GDP identifier, and incomplete NamespaceCall fails at missing LPAREN."
+    input: "str.foo"
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "ARBITRATED: Under PEG ordered alternation Primary tries NamespaceCall first: 'str' matches Namespace, '.' matches DOT, 'foo' matches Method, but LPAREN is absent — NamespaceCall fails. GDP also fails ('str' is KW_STR, not IDENT). All Primary alternatives fail → GXL-PARSE-001 (unexpected token). This is NOT GXL-PARSE-010 (no identifier position) and NOT GXL-PARSE-006 (no parens → method validation never reached). See barbara-tess-conflicts-arbitration for rationale."
+    tags: [negative, namespace, no-parens]

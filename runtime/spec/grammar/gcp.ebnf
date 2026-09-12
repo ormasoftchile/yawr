@@ -1,0 +1,626 @@
+(* ============================================================
+   YAWR Capture Path (GCP) — Reference Grammar
+   Version:    1.0.0-draft
+   Date:       2026-06-04T23:56:26-04:00
+   Owner:      Yawr runtime
+   References:
+     - design/yawr/expression-language-proposal.md §3.3
+     - design/yawr/expression-evaluation-audit.md §Capture path surface
+       (Don's audit — source prefix inventory; cited per source below)
+     - .squad/decisions/inbox/copilot-directive-gxl-oq1-oq2-ratification.md
+       (OQ2: capture.default: scalars only → GCP-DEFAULT-SUBTREE)
+     - .squad/decisions/inbox/barbara-gxl-phase1-plan.md §3 (TV-GCP-*)
+     - gxl.ebnf (GDP path grammar; shared with GXL and GIS)
+     - gis.ebnf §4 (Portable JSON Value Model)
+
+   Usage sites: the 'capture:' map in every step type.
+     capture:
+       variable_name: <CapturePath>
+
+   This file is the SINGLE SOURCE OF TRUTH for both the Go and C#
+   GCP parser implementations.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 1 — NOTATION CONVENTIONS
+   See gxl.ebnf §1 for full notation description.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 2 — LEXICAL GRAMMAR
+   
+   GCP values are YAML scalar strings appearing as the values in
+   a 'capture:' map. They contain no whitespace (leading/trailing
+   whitespace is stripped by the YAML parser). The GCP grammar is
+   a pure path language — no operators, no literals, no keywords.
+   ============================================================ *)
+
+(* --- 2.1 Identifiers and Path Segments --- *)
+
+IDENT_START = 'a'..'z' | 'A'..'Z' | '_' ;
+IDENT_CONT  = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' ;
+IDENT       = IDENT_START { IDENT_CONT } ;
+INTEGER     = '0' | ( '1'..'9' { '0'..'9' } ) ;
+
+(* --- 2.2 Header Names (HTTP and event headers) ---
+   HTTP header names may contain hyphens (e.g., Content-Type).
+   In capture paths, header names are written in lowercase with
+   hyphens preserved: 'http.headers.content-type'.
+   ## Note: header name normalization
+   At evaluation time, header lookup is CASE-INSENSITIVE (HTTP
+   headers are case-insensitive per RFC 7230 §3.2). The canonical
+   form in the capture path uses lowercase. Implementations MUST
+   normalize both the path segment and the actual header name to
+   lowercase before comparison.
+*)
+HEADER_NAME = IDENT_START { IDENT_CONT | '-' } ;
+              (* Permits: content-type, x-request-id, authorization *)
+
+
+(* ============================================================
+   SECTION 3 — SYNTACTIC GRAMMAR
+   
+   A CapturePath identifies a specific value to extract from a step's
+   output and store in the run variable context under the key declared
+   in the capture map.
+   
+   Top-level structure:
+     CapturePath = StepCapture | HttpCapture | EventCapture | LocalCapture ;
+   
+   Source prefix classification:
+     StepCapture    — references the output of a named peer step
+     HttpCapture    — references an HTTP response (http_call steps)
+     EventCapture   — references the triggering event payload
+     LocalCapture   — references the current step's own output
+                      (most common; used in cli/tool steps)
+   ============================================================ *)
+
+CapturePath    = StepCapture
+               | HttpCapture
+               | EventCapture
+               | LocalCapture
+               ;
+
+
+(* --- 3.1 Cross-Step Capture ---
+   References a named step's output by step ID.
+   Source: Don's audit §Capture path surface + proposal §3.3.
+   
+   Examples:
+     step.run_scan.stdout           → raw text of stdout
+     step.run_scan.exit_code        → numeric exit status
+     step.run_scan.json.results[0]  → first element of JSON array
+*)
+StepCapture    = "step" "." StepId "." StepOutput ;
+StepId         = IDENT ;   (* MUST match a step 'id:' in the runbook *)
+StepOutput     = StepScalar
+               | StepText
+               | StepStructured
+               ;
+
+StepScalar     = "exit_code" ;
+                 (* Returns: number (integer 0–255).
+                    No GDP path suffix permitted. The full value is always
+                    captured. GCP-PARSE-002 if '.' follows 'exit_code'. *)
+
+StepText       = ( "stdout" | "stderr" ) [ GDP ] ;
+                 (* Returns: string (raw captured text).
+                    If GDP is absent, the full raw text is captured.
+                    If GDP is present, the runtime parses the text as
+                    JSON and navigates the path (equivalent to 'json' source
+                    with same GDP). This allows: step.foo.stdout.result
+                    when stdout contains a JSON body.
+                    GDP absence → scalar string capture.
+                    GDP presence → structured capture (subtree or scalar
+                    depending on the path resolution result). *)
+
+StepStructured = ( "json" | "yaml" ) [ GDP ] ;
+                 (* Returns: PJVM value.
+                    ## RATIFIED 2026-06-05T00:14:04-04:00 (OI-GCP-02)
+                    ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
+                    GDP is now OPTIONAL. When GDP is absent, the ENTIRE
+                    parsed root value (object, array, or scalar) is captured
+                    as a subtree. This is a bare-root capture.
+                      json          → entire parsed stdout as PJVM root
+                      json.items[0] → first element of 'items' array
+                    Bare-root capture is semantically equivalent to a
+                    subtree capture (§5.1.2). The 'capture.default:'
+                    prohibition for subtree captures (§6, GCP-DEFAULT-SUBTREE)
+                    applies to bare-root captures when the root resolves to
+                    an object or array.
+                    ## Note: 'json' vs 'yaml' source parity
+                    Both 'json' and 'yaml' parse the step stdout as the
+                    named format. If the text is not valid JSON (or YAML),
+                    GCP-RESOLVE-004 is raised. YAML sources produce PJVM
+                    types: YAML scalars → string/number/bool/null per YAML
+                    1.2 core schema. YAML sequences → array. YAML mappings
+                    → object. YAML anchors and aliases are resolved before
+                    path traversal. YAML-specific types (timestamps, binary)
+                    are mapped to strings. *)
+
+
+(* --- 3.2 HTTP Response Capture ---
+   References the response of an http_call step.
+   Source: task Stream A specification (GCP deliverable).
+   
+   The 'http' source is available only within steps that follow
+   an http_call step in execution order and within scope.
+   In cross-step reference, use 'step.{id}.json...' instead.
+   
+   Examples:
+     http.status                    → HTTP status code (number)
+     http.body                      → raw response body (string)
+     http.body.data.items[0].id     → path into parsed JSON body
+     http.headers.content-type      → response header value
+*)
+HttpCapture    = "http" "." HttpField ;
+HttpField      = HttpStatus
+               | HttpBody
+               | HttpHeader
+               ;
+
+HttpStatus     = "status" ;
+                 (* Returns: number (HTTP status code, e.g., 200, 404).
+                    No GDP suffix permitted. GCP-PARSE-002 if '.' follows. *)
+
+HttpBody       = "body" [ GDP ] ;
+                 (* Returns: string (if GDP absent) or PJVM value (if
+                    GDP present). When GDP is present, the body MUST be
+                    valid JSON; otherwise GCP-RESOLVE-004. *)
+
+HttpHeader     = "headers" "." HEADER_NAME ;
+                 (* Returns: string (the header value).
+                    Returns null (not GCP-RESOLVE-002) if the header is
+                    absent — HTTP headers are optional by nature.
+                    No GDP suffix: headers are always scalar strings. *)
+
+
+(* --- 3.3 Event Capture ---
+   References the payload of the triggering event for event-driven
+   runbooks (event.filter / event.body / event.id).
+   Source: task Stream A specification (GCP deliverable).
+   
+   Examples:
+     event.id                       → event identifier string
+     event.body                     → raw event body (string)
+     event.body.type                → field in parsed JSON event body
+     event.headers.x-github-event   → event header value
+*)
+EventCapture   = "event" "." EventField ;
+EventField     = EventId
+               | EventBody
+               | EventHeader
+               ;
+
+EventId        = "id" ;
+                 (* Returns: string. The event's unique identifier.
+                    No GDP suffix permitted. GCP-PARSE-002 if '.' follows. *)
+
+EventBody      = "body" [ GDP ] ;
+                 (* Returns: string (if GDP absent) or PJVM value (if
+                    GDP present). When GDP present, body MUST be JSON. *)
+
+EventHeader    = "headers" "." HEADER_NAME ;
+                 (* Returns: string. Null if header absent. *)
+
+
+(* --- 3.4 Local Step Capture ---
+   References the current step's own output. This is the most
+   common form. Used in 'capture:' blocks of cli, tool, and
+   http_call steps.
+   Source: Don's audit §Capture path surface (stdout, stderr,
+   exitCode / exit_code, json.*, yaml.*, stdout.*).
+   
+   ## Note: exit_code vs exitCode spelling
+   Don's audit found both 'exitCode' and 'exit_code' in the existing
+   corpus. This grammar standardizes on 'exit_code' (snake_case,
+   consistent with YAML authoring conventions and YAWR field naming).
+   'exitCode' is not a recognized capture name and MUST be rejected
+   with parse error GCP-PARSE-001.
+   
+   Examples:
+     stdout                         → full stdout as string
+     stderr                         → full stderr as string
+     exit_code                      → numeric exit status
+     json.items[0].metadata.name    → path into JSON-parsed stdout
+     yaml.config.region             → path into YAML-parsed stdout
+     stdout.incident.id             → path into JSON-parsed stdout
+                                      (equivalent to json.incident.id)
+*)
+LocalCapture   = LocalScalar
+               | LocalText
+               | LocalStructured
+               | LocalOutputs
+               ;
+
+LocalScalar    = "exit_code" ;
+                 (* Returns: number. No GDP suffix. *)
+
+LocalText      = ( "stdout" | "stderr" ) [ GDP ] ;
+                 (* Returns: string (if GDP absent) or PJVM value (if
+                    GDP present, treating stdout as JSON). *)
+
+LocalStructured = ( "json" | "yaml" ) [ GDP ] ;
+                  (* Returns: PJVM value.
+                     GDP is OPTIONAL (ratified OI-GCP-02). When GDP is
+                     absent, the entire parsed root is captured (bare-root).
+                     'json' and 'yaml' parse stdout as the named format. *)
+
+(* --- 3.4a Substituted Tool Action Output Capture ---
+   Package-qualified capture path
+   (.squad/decisions/inbox/barbara-tool-packages-gate-review.md) and
+   design/yawr/sections/06-tool-runtime.tex §Action Substitution,
+   §Output contract. A tool step whose bound action is
+   'execute.kind: runbook' (a substituted action) never produces stdout,
+   stderr, or an exit code -- 'exit_code'/'stdout'/'stderr'/'json'/'yaml'
+   MUST NOT be used in a capture: block attached to such a step
+   (GCP-PARSE-001: the source does not exist for that step). Instead, the
+   action's declared 'outputs:' map crosses the caller boundary under this
+   dedicated root.
+
+   Examples:
+     outputs.drained                → the substitute's declared boolean
+                                       output 'drained'
+*)
+LocalOutputs   = "outputs" "." OutputName ;
+OutputName     = IDENT ;
+                 (* MUST be one of the resolved action's declared 'outputs:'
+                    key names (design/yawr/sections/06-tool-runtime.tex
+                    §Output contract). Any other name is GCP-RESOLVE-002
+                    (path segment not found). No GDP suffix is permitted
+                    beyond the output name in the MVP: substituted outputs
+                    are declared as scalar PJVM types
+                    (design/yawr/sections/06-tool-runtime.tex
+                    §Action Substitution). Valid ONLY for a 'tool' step
+                    whose bound action is 'execute.kind: runbook'; using it
+                    against a process-backed action's step is
+                    GCP-PARSE-001 (the 'outputs' source does not exist for
+                    that step). *)
+
+
+(* ============================================================
+   SECTION 4 — GDP PATH TRAVERSAL
+
+   GDP (YAWR Dotted Path) is the shared path grammar used in
+   GXL (variable access), GIS (interpolation paths), and GCP
+   (capture paths). It is defined here for GCP and referenced
+   by gxl.ebnf §3 (GDP non-terminal).
+
+   The GDP grammar is identical in all three languages.
+   The resolution semantics differ by context (see §5).
+*)
+
+GDP            = "." PathSegment { PathSegment } ;
+                 (* GDP begins with '.' in GCP (following the source
+                    prefix), but NOT in GXL where GDP is a standalone
+                    primary expression starting with an IDENT. *)
+
+PathSegment    = DotSegment | IndexSegment ;
+DotSegment     = "." IDENT ;
+IndexSegment   = "[" INTEGER "]" ;
+
+(* GDP examples in GCP context (after source prefix):
+     .status.phase           → { "status": { "phase": "Running" } }
+     .items[0].metadata.name → first item's name in an array
+     .config                 → entire 'config' object (subtree capture)
+     [2].value               → third element of a root array
+
+   Path resolution rules:
+     1. Start at the root of the parsed document (or PJVM value).
+     2. For each DotSegment: access the named key of an object.
+        If current value is not an object → GCP-RESOLVE-002.
+        If key not present in object → GCP-RESOLVE-002.
+     3. For each IndexSegment: access the nth element of an array.
+        If current value is not an array → GCP-RESOLVE-003.
+        If index >= array length → GCP-RESOLVE-003.
+     4. The value at the final segment is the captured value.
+*)
+
+
+(* ============================================================
+   SECTION 5 — CAPTURE SEMANTICS
+
+   5.1  Scalar vs Subtree Capture
+   ────────────────────────────────
+   A captured value is classified as:
+   
+   SCALAR CAPTURE: the resolved PJVM value is of type
+     null, boolean, number, or string.
+   
+   SUBTREE CAPTURE: the resolved PJVM value is of type
+     array or object.
+   
+   The capture type determines what is stored in the run variable
+   context map and whether 'capture.default:' is permitted (§5.2).
+   
+   5.1.1  Scalar capture
+     The scalar value is stored directly in the variable map.
+     Subsequent GXL expressions and GIS interpolations reference it
+     by the declared variable name.
+     Example:
+       capture:
+         pod_phase: json.status.phase   → "Running" (string scalar)
+       then: 'when: pod_phase == "Running"'
+
+   5.1.2  Subtree capture
+     The entire PJVM object or array value is stored in the variable
+     map. The stored value is a full PJVM composite (not serialized
+     to string at capture time).
+     Example:
+       capture:
+         config: json.config            → { "region": "us-east-1" }
+       then: 'when: config.region == "us-east-1"'
+     The GDP path in a subsequent GXL expression navigates INTO the
+     stored subtree.
+     
+   5.1.3  Subtree capture and list iteration
+     Subtree captures of array type may be used as the source of
+     'iterate.over:'. The iteration variable receives each element.
+     Example:
+       capture:
+         services: json.services        → ["svc-a", "svc-b"]
+       then: 'iterate.over: services'
+
+   5.2  Type Inference at Plan Time
+     The parser/planner SHOULD infer the likely capture type from
+     the path:
+       - 'exit_code', 'http.status', 'event.id' → always scalar
+       - Paths ending at a known scalar field (e.g., 'json.count')
+         → inferred scalar if the conformance corpus declares it
+       - Paths that are unknown at plan time → type unknown;
+         validated at evaluation time.
+     Type inference is best-effort. Definitive type classification
+     occurs at evaluation time.
+*)
+
+
+(* ============================================================
+   SECTION 6 — capture.default: POLICY  [OQ2 — ratified]
+
+   6.1  Decision Summary
+   ──────────────────────
+   capture.default: is PERMITTED only for SCALAR captures.
+   capture.default: is FORBIDDEN for SUBTREE captures (array/object).
+   
+   Violation: parser/planner rejects a subtree capture that declares
+   'capture.default:' at PLAN TIME with error GCP-DEFAULT-SUBTREE.
+   
+   6.2  Scalar capture default behavior
+   ──────────────────────────────────────
+   Schema form:
+     capture:
+       variable_name: <CapturePath>
+     capture_defaults:
+       variable_name: <scalar_literal>
+   
+   Semantics:
+     IF the capture path fails to resolve (GCP-RESOLVE-002,
+     GCP-RESOLVE-003) OR the resolved value is null:
+       → use the declared default value as the captured value.
+     IF the capture path resolves to a non-null scalar:
+       → use the resolved value; default is ignored.
+   
+   The default value MUST be of a type compatible with the expected
+   capture type. Type mismatch at plan time → GCP-TYPE-001.
+   
+   Permitted default types: string, number, boolean, null.
+     ('null' as default restores null semantics if capture is absent)
+   
+   6.3  Subtree capture default prohibition
+   ──────────────────────────────────────────
+   Authors MUST NOT declare 'capture.default:' for a capture that
+   resolves to an object or array. The prohibition exists because:
+   
+   (1) Specifying a full object/array as a YAML default is verbose
+       and error-prone. Authors would paste entire JSON blobs.
+   (2) A missing subtree usually indicates a structural change in
+       the step's output — the consuming step should be guarded
+       with 'when:' rather than silently receiving a partial default.
+   (3) Subtree capture defaults cannot be type-checked at plan time
+       because the subtree shape is not declared in the schema.
+   
+   Correct pattern for optional subtree:
+     # WRONG — rejected at plan time with GCP-DEFAULT-SUBTREE:
+     capture:
+       config: json.optional_config
+     capture_defaults:
+       config: {}
+   
+     # CORRECT — guard the consuming step:
+     capture:
+       config: json.optional_config   # null if path missing
+     # In the consuming step:
+     when: config != null
+   
+   ## Implementation note
+   The planner MUST check:
+     for each (variable_name, default_value) in capture_defaults:
+       path = capture[variable_name]
+       inferred_type = infer_type(path)
+       if inferred_type in {array, object}:
+         raise GCP-DEFAULT-SUBTREE(variable_name, path)
+   
+   If type cannot be inferred at plan time, the check is deferred to
+   first evaluation. If the path resolves to an array/object AND a
+   default is declared, GCP-DEFAULT-SUBTREE is raised at that point.
+*)
+
+
+(* ============================================================
+   SECTION 7 — ERROR CLASS CATALOG
+
+   7.1  Parse Errors  (raised at load/plan time)
+   ──────────────────────────────────────────────
+   GCP-PARSE-001  Unknown source prefix: the first path segment does
+                  not match any known source (step, http, event,
+                  stdout, stderr, exit_code, json, yaml).
+                  Example: 'xml.root.item' → GCP-PARSE-001.
+   GCP-PARSE-002  Invalid path suffix: a GDP suffix is used where
+                  none is permitted (e.g., 'exit_code.something',
+                  'http.status.extra', 'event.id.sub').
+   GCP-PARSE-003  Negative array index: '[−1]' or any negative INTEGER.
+   GCP-PARSE-004  Empty path segment: '..' (double dot) or trailing dot.
+   GCP-PARSE-005  Invalid header name: character not permitted in
+                  HEADER_NAME (e.g., space, colon, comma).
+   GCP-PARSE-006  StepId not found in runbook: 'step.{id}.*' where
+                  the referenced step id does not exist in the runbook.
+                  (This is a semantic/plan-time error, not a pure parse
+                  error, but is raised at plan time.)
+
+   7.2  Resolution Errors  (raised at evaluation time)
+   ─────────────────────────────────────────────────────
+   GCP-RESOLVE-001  Source not available: the step referenced by
+                    'step.{id}.*' has not executed yet, or its output
+                    is not available (e.g., step was skipped due to
+                    'when:' guard).
+   GCP-RESOLVE-002  Path segment not found: a DotSegment references a
+                    key that does not exist in the current object.
+                    Applies to all structured sources.
+   GCP-RESOLVE-003  Array index out of bounds: IndexSegment index is
+                    >= array length, or the current value is not an array.
+   GCP-RESOLVE-004  Output not parseable: the step output could not be
+                    parsed as the declared format (json or yaml).
+                    Includes: empty output when json/yaml path is given,
+                    invalid JSON syntax, invalid YAML syntax.
+   GCP-RESOLVE-005  Header not found: 'http.headers.*' or
+                    'event.headers.*' references a header that is absent
+                    from the response/event. Returns null (not an error)
+                    unless 'capture.default:' is absent and a non-null
+                    value is required downstream.
+                    ## Note: GCP-RESOLVE-005 is a soft resolve: absent
+                    headers yield null, not an error, by design.
+
+   7.3  Default Policy Errors  (raised at plan time)
+   ────────────────────────────────────────────────────
+   GCP-DEFAULT-SUBTREE  [OQ2]
+                    A 'capture.default:' is declared for a capture
+                    path that resolves to an object or array (subtree).
+                    The plan is rejected. Error message MUST include:
+                      - the variable name
+                      - the capture path
+                      - the inferred or observed type (if determinable)
+                      - the correction hint: "use 'when: varname != null'
+                        to guard the consuming step"
+
+   7.4  Type Errors  (raised at plan or evaluation time)
+   ──────────────────────────────────────────────────────
+   GCP-TYPE-001   Default value type mismatch: the declared
+                  'capture.default:' value is not of a type compatible
+                  with the capture path's expected scalar type.
+                  Example: capture path is 'exit_code' (number), but
+                  default is "not_run" (string) → GCP-TYPE-001.
+*)
+
+
+(* ============================================================
+   SECTION 8 — SOURCE PREFIX REFERENCE TABLE
+   
+   Quick reference for runbook authors and parser implementors.
+   All sources confirmed against Don's audit and extended with
+   http/event/step-qualified sources per Stream A specification.
+   
+   ┌───────────────────────────────┬────────────┬────────────────────┐
+   │ Capture Path Pattern          │ Return     │ Applies To         │
+   ├───────────────────────────────┼────────────┼────────────────────┤
+   │ exit_code                     │ number     │ cli, tool steps    │
+   │ stdout                        │ string     │ cli, tool steps    │
+   │ stdout.{gdp}                  │ PJVM       │ cli, tool steps    │
+   │ stderr                        │ string     │ cli, tool steps    │
+   │ stderr.{gdp}                  │ PJVM       │ cli, tool steps    │
+   │ json                          │ PJVM root  │ cli, tool steps    │
+   │ json.{gdp}                    │ PJVM       │ cli, tool steps    │
+   │ yaml                          │ PJVM root  │ cli, tool steps    │
+   │ yaml.{gdp}                    │ PJVM       │ cli, tool steps    │
+   │ outputs.{name}                │ per action │ tool steps only,   │
+   │                               │ 'outputs'  │ execute.kind:      │
+   │                               │ decl.      │ runbook (§3.4a)    │
+   ├───────────────────────────────┼────────────┼────────────────────┤
+   │ step.{id}.exit_code           │ number     │ any step type      │
+   │ step.{id}.stdout              │ string     │ any step type      │
+   │ step.{id}.stdout.{gdp}        │ PJVM       │ any step type      │
+   │ step.{id}.stderr              │ string     │ any step type      │
+   │ step.{id}.json                │ PJVM root  │ any step type      │
+   │ step.{id}.json.{gdp}          │ PJVM       │ any step type      │
+   │ step.{id}.yaml                │ PJVM root  │ any step type      │
+   │ step.{id}.yaml.{gdp}          │ PJVM       │ any step type      │
+   ├───────────────────────────────┼────────────┼────────────────────┤
+   │ http.status                   │ number     │ http_call steps    │
+   │ http.body                     │ string     │ http_call steps    │
+   │ http.body.{gdp}               │ PJVM       │ http_call steps    │
+   │ http.headers.{name}           │ string     │ http_call steps    │
+   ├───────────────────────────────┼────────────┼────────────────────┤
+   │ event.id                      │ string     │ event-triggered    │
+   │ event.body                    │ string     │ event-triggered    │
+   │ event.body.{gdp}              │ PJVM       │ event-triggered    │
+   │ event.headers.{name}          │ string     │ event-triggered    │
+   └───────────────────────────────┴────────────┴────────────────────┘
+   
+   Don's audit source (design/yawr/expression-evaluation-audit.md):
+   - §Capture path surface: stdout, stderr, exitCode, json.*, yaml.*,
+     stdout.incident.id (tool-runtime dot path form)
+   - §06-tool-runtime.tex:282-299: capture path formalization needed
+   - §02-architecture.tex:1030-1040: event.body pattern
+   
+   Sources added by Stream A (not in Don's audit):
+   - step.{id}.* — cross-step references (inferred from fixture patterns)
+   - http.* — HTTP step captures (inferred from http_call step type)
+   - event.id, event.headers.* — event metadata (inferred from
+     event trigger model in 03-schema-vnext.tex)
+*)
+
+
+(* ============================================================
+   SECTION 9 — STREAM A OPEN ISSUES
+
+   OI-GCP-01: exitCode vs exit_code normalization
+     Don's audit found 'exitCode' (camelCase) in some spec locations
+     and 'exit_code' (snake_case) in others. This grammar standardizes
+     on 'exit_code'. Go and C# parsers MUST accept ONLY 'exit_code'
+     and reject 'exitCode' with parse error GCP-PARSE-001. Conformance
+     corpus must include a vector: 'exitCode' → parse error GCP-PARSE-001.
+
+   OI-GCP-02: Root JSON capture without path
+     ## RATIFIED 2026-06-05T00:14:04-04:00 (ormasoftchile via Copilot)
+     ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
+     Bare 'json' or 'yaml' (no GDP path) is ALLOWED and captures the
+     entire parsed root as a subtree. Grammar updated: StepStructured
+     and LocalStructured now have [ GDP ] (optional). Conformance includes
+     TV-GCP-PARSE-ROOT-* conformance vectors for this case.
+
+   OI-GCP-03: Capture path validation against step scope
+     GCP-PARSE-006 (StepId not found) requires the planner to know
+     all step IDs at plan time. For includes and conditional branches,
+     the effective step set may vary by execution path. The planner
+     should validate only against the statically reachable step set.
+     The definition of "statically reachable" must be specified in
+     Stream F (Parser/Planner Gate Specification).
+
+   OI-GCP-04: Multiple captures from the same path
+     A runbook may declare two capture variables pointing to the same
+     path. This is semantically valid (both variables receive the same
+     value). No deduplication is required. Confirm this understanding
+     in the conformance corpus.
+
+   OI-GCP-05: http.* capture scope lifetime
+     'http.*' captures are defined within the scope of an http_call
+     step. After the step completes, the captured variables persist in
+     the run variable map (like any other capture) but 'http.*' paths
+     are no longer resolvable. Cross-step HTTP captures must use the
+     'step.{id}.json.*' form. The spec should clarify whether 'http.*'
+     paths are permitted in the capture block of a SUBSEQUENT step
+     (they should not be — it would be GCP-RESOLVE-001).
+
+   OI-GCP-06: YAML PJVM mapping completeness
+     The grammar states that YAML captures produce PJVM values via the
+     YAML 1.2 core schema. YAML 1.2 core schema types map to PJVM as:
+       !!str  → string, !!int → number, !!float → number,
+       !!bool → boolean, !!null → null,
+       sequence → array, mapping → object.
+     YAML 1.2 core schema does NOT include !!timestamp, !!binary, etc.
+     These are YAML 1.1 types. If a YAML file contains a timestamp
+     (e.g., '2026-06-04'), the YAML 1.2 core schema treats it as a
+     string. Implementations must use YAML 1.2 core schema strictly.
+     This MUST be explicitly stated in a conformance test vector.
+*)

@@ -1,0 +1,13 @@
+# Fixture: multi-root-b version of shared-tool.
+# Contract-identical to multi-root-a's version except for the registered
+# MCP tool name — this difference is the assertion target in the test.
+meta: {name: shared-tool}
+transport:
+  mode: vscode-mcp
+  vscode_tool: tool-from-root-b
+actions:
+  - name: run
+    outputs:
+      result:
+        type: string
+        required: true

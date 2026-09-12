@@ -1,0 +1,418 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: canary-deployment-rollback
+name: Production Deployment with Canary
+kind: mitigation
+description: |
+  Deploys new application version to production using canary strategy:
+  deploy to 10% traffic, monitor metrics for 10 minutes, then promote
+  to 100% or rollback. Includes automated health checks, metric queries,
+  and rollback compensation.
+
+inputs:
+  docker_tag:
+    type: string
+    required: true
+    description: Docker image tag to deploy
+    from: prompt
+  current_version:
+    type: string
+    required: true
+    description: Currently deployed version (for rollback)
+    from: env.CURRENT_VERSION
+
+vars:
+  deployment_name: payment-service
+
+toolRefs:
+  - name: kubectl
+  - name: prometheus
+  - name: docker
+  - name: git
+
+governance:
+  rules:
+    - effects: ["k8s.read"]
+      action: allow
+    - effects: ["k8s.deployment.create", "k8s.deployment.scale"]
+      action: require-approval
+      min_approvers: 1
+      roles: [release-manager]
+
+flow:
+  # Step 1: Pre-Deployment Checks
+  - step:
+      id: pre_deploy_checks
+      type: assert
+      title: Pre-deployment assertions
+      assert:
+        - type: eq
+          subject: "{{ .git_tag_exists }}"
+          expected: "true"
+          message: "Git tag must exist"
+        - type: eq
+          subject: "{{ .docker_image_exists }}"
+          expected: "true"
+          message: "Docker image must exist"
+        - type: eq
+          subject: "{{ .staging_tests_passed }}"
+          expected: "true"
+          message: "Staging tests must pass"
+
+  # Step 2: Human Approval
+  - step:
+      id: approval_deploy
+      type: collector
+      title: Approve production deployment
+      prompt: |
+        Deploy {{ .docker_tag }} to production?
+        
+        Git changelog: {{ .git_changelog }}
+        Docker digest: {{ .docker_digest }}
+      fields:
+        - name: approved
+          type: text
+          label: "Type 'yes' to approve"
+          required: true
+      approvals:
+        min: 1
+        roles: [release-manager]
+        timeout: 30m
+        on_timeout: fail
+
+  # Step 3: Tag Deployment Start
+  - step:
+      id: tag_deployment_start
+      type: extension
+      title: Create deployment marker in observability
+      extension:
+        name: datadog
+        action: create-event
+        args:
+          title: "Deployment started: {{ .docker_tag }}"
+          tags: ["deployment", "canary"]
+      capture:
+        deployment_id: json.deployment_id
+
+  # Step 4: Register Rollback Compensation
+  - step:
+      id: register_rollback
+      type: compensate
+      title: Register rollback compensation
+      compensate:
+        on: any
+        steps:
+          - step:
+              id: rollback_canary_to_zero
+              type: cli
+              title: Scale canary to 0%
+              command: kubectl
+              args:
+                - patch
+                - service
+                - "{{ .deployment_name }}"
+                - "--patch"
+                - '{"spec":{"weights":[{"name":"prod","weight":100},{"name":"canary","weight":0}]}}'
+
+          - step:
+              id: wait_before_delete
+              type: cli
+              title: Wait 30 seconds
+              command: sleep
+              args: ["30"]
+
+          - step:
+              id: delete_canary_deployment
+              type: cli
+              title: Delete canary deployment
+              command: kubectl
+              args:
+                - delete
+                - deployment
+                - "{{ .deployment_name }}-canary"
+
+  # Step 5: Deploy Canary (parallel)
+  - step:
+      id: deploy_canary_parallel
+      type: parallel
+      title: Deploy canary and update service weights
+      branches:
+        - label: Create canary deployment
+          steps:
+            - step:
+                id: create_canary
+                type: cli
+                title: Create canary deployment
+                command: kubectl
+                args:
+                  - apply
+                  - "-f"
+                  - "manifests/canary-deployment.yaml"
+                env:
+                  IMAGE_TAG: "{{ .docker_tag }}"
+                contract:
+                  effects: ["k8s.deployment.create"]
+
+        - label: Update service weights
+          steps:
+            - step:
+                id: update_service_weights
+                type: cli
+                title: Set canary to 10% traffic
+                command: kubectl
+                args:
+                  - patch
+                  - service
+                  - "{{ .deployment_name }}"
+                  - "--patch"
+                  - '{"spec":{"weights":[{"name":"prod","weight":90},{"name":"canary","weight":10}]}}'
+                contract:
+                  effects: ["k8s.write"]
+      join:
+        wait_for: all
+        on_failure: fail
+
+  # Step 6: Wait for Canary Healthy
+  - step:
+      id: wait_canary_healthy
+      type: cli
+      title: Wait for canary deployment ready
+      command: kubectl
+      args:
+        - wait
+        - "--for=condition=Available"
+        - "deployment/{{ .deployment_name }}-canary"
+        - "--timeout=120s"
+      retry:
+        max: 5
+        interval: 15s
+        backoff: linear
+
+  # Step 7: Monitor Canary Metrics
+  - iterate:
+      id: monitor_canary
+      max: 60
+      over: null
+      steps:
+        - step:
+            id: query_error_rate
+            type: tool
+            title: "Query Prometheus: error rate (iteration {{ .iteration }})"
+            tool:
+              name: prometheus
+              action: query
+              args:
+                query: 'rate(http_requests_total{deployment="canary",status=~"5.."}[1m])'
+            capture:
+              error_rate: json.data.result[0].value[1]
+
+        - step:
+            id: query_p95_latency
+            type: tool
+            title: "Query Prometheus: p95 latency (iteration {{ .iteration }})"
+            tool:
+              name: prometheus
+              action: query
+              args:
+                query: 'histogram_quantile(0.95, http_request_duration_seconds{deployment="canary"})'
+            capture:
+              p95_latency: json.data.result[0].value[1]
+
+        - step:
+            id: check_metrics_threshold
+            type: branch
+            title: Check if metrics within SLO
+            branches:
+              - condition: 'error_rate > 0.05 || p95_latency > 0.5'
+                label: Metrics unhealthy
+                steps:
+                  - step:
+                      id: fail_monitoring
+                      type: cli
+                      title: Abort — metrics exceed threshold
+                      command: echo
+                      args: ["ERROR: Metrics unhealthy, triggering rollback"]
+
+        - step:
+            id: wait_interval
+            type: cli
+            title: Wait 10 seconds before next check
+            command: sleep
+            args: ["10"]
+
+  # Step 8: Decision - Promote or Rollback
+  - step:
+      id: decision_promote
+      type: branch
+      title: Evaluate canary health
+      branches:
+        - condition: 'error_rate < 0.01 && p95_latency < 0.2'
+          label: Metrics healthy — promote
+          steps:
+            # Step 9: Promote Branch
+            - step:
+                id: approval_promote
+                type: collector
+                title: Approve promotion to 100%
+                prompt: |
+                  Canary metrics summary:
+                  - Error rate: {{ .error_rate }}%
+                  - P95 latency: {{ .p95_latency }}ms
+                  
+                  Promote canary to 100% traffic?
+                fields:
+                  - name: approved
+                    type: text
+                    label: "Type 'yes' to promote"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [release-manager]
+                  timeout: 10m
+                  on_timeout: fail
+
+            - step:
+                id: scale_canary_100
+                type: cli
+                title: Scale canary to 100%
+                when: 'approved == "yes"'
+                command: kubectl
+                args:
+                  - patch
+                  - service
+                  - "{{ .deployment_name }}"
+                  - "--patch"
+                  - '{"spec":{"weights":[{"name":"canary","weight":100}]}}'
+
+            - step:
+                id: delete_old_prod
+                type: cli
+                title: Delete old prod deployment
+                command: kubectl
+                args:
+                  - delete
+                  - deployment
+                  - "{{ .deployment_name }}-prod"
+
+            - step:
+                id: rename_canary
+                type: cli
+                title: Rename canary to prod
+                command: kubectl
+                args:
+                  - patch
+                  - deployment
+                  - "{{ .deployment_name }}-canary"
+                  - "--patch"
+                  - '{"metadata":{"name":"{{ .deployment_name }}-prod"}}'
+
+            - step:
+                id: tag_success
+                type: extension
+                title: Tag deployment as successful
+                extension:
+                  name: datadog
+                  action: update-event
+                  args:
+                    event_id: "{{ .deployment_id }}"
+                    status: success
+
+        - else: true
+          label: Metrics unhealthy — rollback
+          steps:
+            # Step 10: Rollback Branch
+            - step:
+                id: scale_canary_0
+                type: cli
+                title: Scale canary to 0%
+                command: kubectl
+                args:
+                  - patch
+                  - service
+                  - "{{ .deployment_name }}"
+                  - "--patch"
+                  - '{"spec":{"weights":[{"name":"prod","weight":100},{"name":"canary","weight":0}]}}'
+
+            - step:
+                id: wait_before_delete_rb
+                type: cli
+                title: Wait 30 seconds
+                command: sleep
+                args: ["30"]
+
+            - step:
+                id: delete_canary_rb
+                type: cli
+                title: Delete canary deployment
+                command: kubectl
+                args:
+                  - delete
+                  - deployment
+                  - "{{ .deployment_name }}-canary"
+
+            - step:
+                id: tag_rollback
+                type: extension
+                title: Tag deployment as rolled back
+                extension:
+                  name: datadog
+                  action: update-event
+                  args:
+                    event_id: "{{ .deployment_id }}"
+                    status: rolled_back
+
+            - step:
+                id: send_rollback_alert
+                type: extension
+                title: Send rollback alert to Slack
+                extension:
+                  name: slack
+                  action: send-message
+                  args:
+                    channel: "#deployments"
+                    message: "Deployment {{ .docker_tag }} rolled back due to unhealthy metrics"
+
+  # Step 11: Post-Deployment Verification
+  - step:
+      id: verify_prod_healthy
+      type: cli
+      title: Verify production deployment healthy
+      command: kubectl
+      args:
+        - get
+        - deployment
+        - "{{ .deployment_name }}-prod"
+        - "-o"
+        - "jsonpath={.status.conditions[?(@.type=='Available')].status}"
+      capture:
+        prod_status: stdout
+
+  - step:
+      id: smoke_test
+      type: cli
+      title: Run smoke test
+      command: curl
+      args:
+        - "-f"
+        - "-s"
+        - "https://api.company.com/health"
+      retry:
+        max: 3
+        interval: 5s
+        backoff: linear
+
+  # Step 12: Clear Rollback Compensation
+  - step:
+      id: clear_compensation
+      type: cli
+      title: Clear rollback compensation (deployment stable)
+      command: echo
+      args: ["Deployment confirmed stable, compensation cleared"]
+
+  - step:
+      id: complete
+      type: end
+      title: Deployment complete
+      outcome:
+        category: resolved
+        code: deployment_successful

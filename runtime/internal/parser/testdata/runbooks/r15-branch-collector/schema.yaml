@@ -1,0 +1,160 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r15-branch-collector
+name: r15 Branch and Collector
+description: |
+  Demonstrates the collector step type for gathering user input and
+  the branch step type for conditional flow based on collected values.
+  Collects deployment configuration, then branches based on environment
+  selection to execute environment-specific steps.
+
+flow:
+  # Step 1: Collect deployment configuration
+  - step:
+      id: collect_config
+      type: collector
+      title: Collect deployment configuration
+      prompt: |
+        Provide deployment configuration for this release.
+      fields:
+        - name: environment
+          type: select
+          label: Target environment
+          required: true
+          options:
+            - value: development
+              label: Development
+            - value: staging
+              label: Staging
+            - value: production
+              label: Production
+
+        - name: version
+          type: text
+          label: Version to deploy
+          required: true
+          hint: "e.g., v1.2.3"
+
+        - name: enable_monitoring
+          type: boolean
+          label: Enable enhanced monitoring?
+          required: true
+
+        - name: notification_emails
+          type: text
+          label: Notification emails (comma-separated)
+          required: false
+          hint: "e.g., team-id, ops-id"
+
+  # Step 2: Branch based on environment selection
+  - step:
+      id: environment_branch
+      type: branch
+      title: Route by environment
+      branches:
+        - condition: 'environment == "development"'
+          label: Development path
+          steps:
+            - step:
+                id: deploy_dev
+                type: cli
+                title: Deploy to development
+                command: echo
+                args: ["Deploying {{ .version }} to DEVELOPMENT"]
+                capture:
+                  deploy_result: stdout
+
+            - step:
+                id: dev_tests
+                type: cli
+                title: Run dev smoke tests
+                command: echo
+                args: ["Running development smoke tests"]
+
+        - condition: 'environment == "staging"'
+          label: Staging path
+          steps:
+            - step:
+                id: deploy_staging
+                type: cli
+                title: Deploy to staging
+                command: echo
+                args: ["Deploying {{ .version }} to STAGING"]
+                capture:
+                  deploy_result: stdout
+
+            - step:
+                id: staging_tests
+                type: cli
+                title: Run staging integration tests
+                command: echo
+                args: ["Running staging integration tests"]
+
+            - step:
+                id: staging_approval
+                type: collector
+                title: Staging verification approval
+                prompt: |
+                  Staging deployment complete for {{ .version }}.
+                  Verify the deployment before proceeding.
+                fields:
+                  - name: staging_verified
+                    type: boolean
+                    label: Staging deployment verified?
+                    required: true
+
+        - condition: 'environment == "production"'
+          label: Production path
+          steps:
+            - step:
+                id: prod_approval
+                type: collector
+                title: Production deployment approval
+                prompt: |
+                  Ready to deploy {{ .version }} to PRODUCTION.
+                  This is a critical operation. Approve to proceed.
+                fields:
+                  - name: prod_approved
+                    type: boolean
+                    label: Approve production deployment?
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [release-manager]
+                  timeout: 1h
+                  on_timeout: fail
+
+            - step:
+                id: deploy_prod
+                type: cli
+                title: Deploy to production
+                when: 'prod_approved'
+                command: echo
+                args: ["Deploying {{ .version }} to PRODUCTION"]
+                capture:
+                  deploy_result: stdout
+
+            - step:
+                id: prod_monitoring
+                type: cli
+                title: Enable production monitoring
+                when: 'enable_monitoring'
+                command: echo
+                args: ["Enabling enhanced monitoring for {{ .version }}"]
+
+  # Step 3: Send notifications
+  - step:
+      id: notify
+      type: cli
+      title: Send deployment notifications
+      when: 'notification_emails != ""'
+      command: echo
+      args: ["Sending notifications to: {{ .notification_emails }}"]
+
+  # Step 4: Complete
+  - step:
+      id: complete
+      type: cli
+      title: Deployment complete
+      command: echo
+      args: ["Deployment to {{ .environment }} complete for version {{ .version }}"]

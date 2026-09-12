@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Extension: Compile",
+      "type": "npm",
+      "script": "extension:compile",
+      "group": "build",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "Extension: Test",
+      "type": "npm",
+      "script": "extension:test",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Extension: Package VSIX",
+      "type": "npm",
+      "script": "extension:package",
+      "problemMatcher": []
+    },
+    {
+      "label": "Runtime: Build Yawr",
+      "type": "shell",
+      "command": "go",
+      "args": [
+        "build",
+        "-o",
+        "${workspaceFolder}/runtime/${input:runtimeBinary}",
+        "./cmd/yawr"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/runtime"
+      },
+      "group": "build",
+      "problemMatcher": "$go"
+    },
+    {
+      "label": "Runtime: Test",
+      "type": "shell",
+      "command": "go",
+      "args": [
+        "test",
+        "./...",
+        "-count=1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/runtime"
+      },
+      "group": "test",
+      "problemMatcher": "$go"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "runtimeBinary",
+      "type": "pickString",
+      "description": "Runtime binary name for this platform",
+      "options": [
+        "yawr",
+        "yawr.exe"
+      ],
+      "default": "yawr.exe"
+    }
+  ]
+}

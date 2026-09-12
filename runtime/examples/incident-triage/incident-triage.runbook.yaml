@@ -1,0 +1,212 @@
+# Incident Triage — Routing Runbook
+# This is the parent runbook that classifies production incidents and
+# routes to the appropriate investigation procedure via include.
+#
+# Demonstrates: big fan-out branching, choice steps, include, outcomes.
+apiVersion: yawr.runbook/v1
+
+id: incident-triage
+name: incident-triage
+kind: mitigation
+description: >
+  Route production incidents to the appropriate investigation procedure based
+  on symptom classification. Covers network, application, resource, database,
+  security, and unclassified incident types.
+
+imports:
+  network: network.runbook.yaml
+  app_crash: app-crash.runbook.yaml
+  resource_exhaustion: resource-exhaustion.runbook.yaml
+
+vars:
+  # Defaults pick a publicly-resolvable hostname so the demo can run
+  # end-to-end without any pre-configured infra. Override at the
+  # `Run` prompt with your real service to investigate a live
+  # incident.
+  service_name: "example.com"
+  incident_id: "INC-000"
+
+inputs:
+  service_name:
+    type: string
+    required: false
+    description: Affected service name
+    from: prompt
+    default: "example.com"
+  incident_id:
+    type: string
+    required: false
+    description: Incident tracking ID
+    from: prompt
+    default: "INC-000"
+
+flow:
+  # ──────────────────────────────────────────────
+  # Step 1: Classify the incident (fan-out routing)
+  # ──────────────────────────────────────────────
+  - step:
+      id: classify_incident
+      type: choice
+      title: Classify the incident
+      prompt: |
+        Review the incident details for ${service_name} (${incident_id}).
+        Examine alerts, dashboards, and user reports to determine the primary
+        symptom category.
+
+        Select the category that best matches the observed symptoms:
+      variable: category
+      options:
+        - value: "network"
+          label: "Network — DNS failures, timeouts, unreachable endpoints"
+        - value: "app_crash"
+          label: "Application — crashes, OOM, unhandled exceptions"
+        - value: "resource"
+          label: "Resource exhaustion — high CPU, memory, or disk"
+        - value: "database"
+          label: "Database — slow queries, connection pool exhaustion, replication lag"
+        - value: "security"
+          label: "Security — unauthorized access, certificate expiry, credential leak"
+        - value: "unknown"
+          label: "Unknown — symptoms don't match any category"
+
+  - step:
+      id: branch_category
+      type: branch
+      branches:
+        # ── Branch 1: Network (includes child) ──
+        - condition: 'category == "network"'
+          label: Network investigation
+          steps:
+            - step:
+                id: invoke_network
+                type: include
+                title: Network incident investigation
+                include:
+                  runbook: network.runbook.yaml
+                  with:
+                    service_name: "${service_name}"
+                    incident_id: "${incident_id}"
+                  gate:
+                    stop_if: [ resolved, escalated ]
+
+        # ── Branch 2: Application crash (includes child) ──
+        - condition: 'category == "app_crash"'
+          label: Application investigation
+          steps:
+            - step:
+                id: invoke_app_crash
+                type: include
+                title: Application crash investigation
+                include:
+                  runbook: app-crash.runbook.yaml
+                  with:
+                    service_name: "${service_name}"
+                    incident_id: "${incident_id}"
+                  gate:
+                    stop_if: [ resolved, escalated ]
+
+        # ── Branch 3: Resource exhaustion (includes child) ──
+        - condition: 'category == "resource"'
+          label: Resource exhaustion investigation
+          steps:
+            - step:
+                id: invoke_resource
+                type: include
+                title: Resource exhaustion investigation
+                include:
+                  runbook: resource-exhaustion.runbook.yaml
+                  with:
+                    service_name: "${service_name}"
+                    incident_id: "${incident_id}"
+                  gate:
+                    stop_if: [ resolved, escalated ]
+
+        # ── Branch 4: Database (inline) ──
+        - condition: 'category == "database"'
+          label: Database investigation
+          steps:
+            - step:
+                id: check_db
+                type: collector
+                title: Check database connection health
+                prompt: |
+                  For ${service_name}, check:
+                  1. Connection pool utilization
+                  2. Active vs idle connections
+                  3. Replication lag (if applicable)
+                  4. Recent slow query log entries
+                fields:
+                  - name: db_findings
+                    type: text
+                    label: Database findings
+                    required: true
+                    multiline: true
+                required_evidence:
+                  - kind: text
+                    name: db_findings
+
+            - step:
+                id: db_done
+                type: end
+                title: Database investigation complete
+                outcome:
+                  category: escalated
+                  code: db_investigation
+
+        # ── Branch 5: Security (inline with approval) ──
+        - condition: 'category == "security"'
+          label: Security investigation
+          steps:
+            - step:
+                id: security_lockdown
+                type: collector
+                title: Initiate security response
+                prompt: |
+                  For ${service_name}:
+                  1. Check for unauthorized access patterns in audit logs
+                  2. Verify certificate expiry dates
+                  3. Review recent credential rotation status
+                  4. Check for unusual API call patterns
+
+                  If credential leak is suspected, rotate immediately.
+                fields:
+                  - name: security_notes
+                    type: text
+                    label: Security investigation notes
+                    required: true
+                    multiline: true
+                required_evidence:
+                  - kind: checklist
+                    name: security_checklist
+                    items:
+                      - "Audit logs reviewed"
+                      - "Certificates checked"
+                      - "Credentials rotated if needed"
+
+            - step:
+                id: security_approve
+                type: approve
+                title: Security response approval
+                approvals:
+                  min: 1
+                  roles: [ "security-dri" ]
+
+            - step:
+                id: security_done
+                type: end
+                title: Security investigation complete
+                outcome:
+                  category: escalated
+                  code: security_review
+
+        # ── Branch 6: Unknown (escalate immediately) ──
+        - condition: 'category == "unknown"'
+          label: Unclassified incident
+          steps:
+            - step:
+                id: escalate_unknown
+                type: end
+                title: Unclassified incident — escalate
+                outcome:
+                  category: escalated
+                  code: unclassified

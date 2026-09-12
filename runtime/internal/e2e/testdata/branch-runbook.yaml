@@ -1,0 +1,27 @@
+apiVersion: yawr.runbook/v1
+id: e2e-branch
+name: e2e-branch
+inputs:
+  flag:
+    type: string
+flow:
+  - step:
+      id: branch-step
+      type: branch
+      branches:
+        - condition: 'flag == "true"'
+          label: then
+          steps:
+            - step:
+                id: then-step
+                type: cli
+                command: echo
+                args: ["then"]
+        - else: true
+          label: else
+          steps:
+            - step:
+                id: else-step
+                type: cli
+                command: echo
+                args: ["else"]

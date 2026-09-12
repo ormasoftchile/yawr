@@ -1,0 +1,58 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r12-approval-quorum
+name: r12 Approval Quorum
+description: |
+  Demonstrates the approve step requiring a quorum of reviewers.
+  A production deployment is gated behind an approval from at
+  least 2 of 3 named approvers in the pool.
+
+governance:
+  require_approval: true
+  rules:
+    - effects: ["deploy.production"]
+      action: require-approval
+      min_approvers: 2
+
+flow:
+  # Step 1: Pre-flight check
+  - step:
+      id: pre_check
+      type: cli
+      title: Run pre-flight checks
+      command: echo
+      args: ["Running pre-deployment checks"]
+      capture:
+        check_output: stdout
+
+  # Step 2: Gate on quorum approval from named pool
+  - step:
+      id: get_approval
+      type: approve
+      title: Approve production deployment
+      approvals:
+        pool: [alice, bob, carol]
+        required: 2
+        timeout: 4h
+        on_timeout: fail
+      contract:
+        effects: ["deploy.production"]
+
+  # Step 3: Execute deployment
+  - step:
+      id: deploy
+      type: cli
+      title: Execute production deployment
+      command: echo
+      args: ["Deploying to production"]
+      contract:
+        effects: ["deploy.production"]
+        idempotent: false
+
+  # Step 4: Notify stakeholders
+  - step:
+      id: notify
+      type: cli
+      title: Notify deployment complete
+      command: echo
+      args: ["Production deployment complete"]

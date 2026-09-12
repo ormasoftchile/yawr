@@ -1,0 +1,22 @@
+# Fixture: precedence-test tool for vscode_tool resolution order tests.
+#
+# Precedence order (matching core):
+#   1. action-level vscode_tool
+#   2. transport-level vscode_tool
+#   3. logical tool name (fallback)
+#
+# action-with-action-level  → action-level-name   (beats transport-level)
+# action-with-transport-level → transport-level-name (transport-level wins over fallback)
+# action-with-fallback        → precedence-tool      (falls back to logical tool name)
+meta: {name: precedence-tool}
+transport:
+  mode: vscode-mcp
+  vscode_tool: transport-level-name
+actions:
+  - name: action-with-action-level
+    vscode_tool: action-level-name
+    outputs: {}
+  - name: action-with-transport-level
+    outputs: {}
+  - name: action-with-fallback
+    outputs: {}

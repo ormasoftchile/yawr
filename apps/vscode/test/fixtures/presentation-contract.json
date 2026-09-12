@@ -1,0 +1,134 @@
+{
+  "request": {
+    "schema_version": "yawr.presentation-resolve/v1",
+    "request_id": "contract-1",
+    "context": {
+      "project_root": "C:\\highlighting-contract",
+      "generation": 7
+    },
+    "document": {
+      "uri": "file:///C:/highlighting-contract/new.runbook.yaml",
+      "path": "C:\\highlighting-contract\\new.runbook.yaml",
+      "version": 3,
+      "text": "apiVersion: yawr.runbook/v1\nid: example\nname: Example\ntoolRefs:\n  - name: db\n    path: db.tool.yaml\nflow:\n  - step:\n      id: q\n      type: tool\n      tool:\n        name: db\n        action: inspect\n        args:\n          text: 'SELECT 1'\n"
+    },
+    "overlays": [
+      {
+        "uri": "file:///C:/highlighting-contract/db.tool.yaml",
+        "path": "C:\\highlighting-contract\\db.tool.yaml",
+        "version": 9,
+        "text": "apiVersion: yawr.tool/v1\nmeta: {name: db, version: 1.0.0}\ntransport: {mode: native, command: never-execute}\nactions:\n  - name: inspect\n    args:\n      text:\n        type: string\n        presentation: {version: 1, kind: code, language: sql}\n    outputs:\n      script:\n        type: string\n        optional: true\n        presentation: {version: 1, kind: code, language: powershell}\n"
+      }
+    ]
+  },
+  "invalid_runbook_text": "apiVersion: yawr.runbook/v1\nid: example\nname: Example\n toolRefs: []\n",
+  "graph_details_example": {
+    "kind": "tool",
+    "tool": "db",
+    "action": "inspect",
+    "arguments": [
+      {
+        "name": "text",
+        "value": "SELECT 1"
+      }
+    ],
+    "code_presentation": {
+      "version": 1,
+      "status": "resolved",
+      "origin": "current",
+      "tool_id": "db",
+      "tool_digest": "sha256:32ee86a860b5f23964f9a5cb353abd0c7180102fe5f8ec6dee42e1052128acd2",
+      "action": "inspect",
+      "arguments": [
+        {
+          "name": "text",
+          "value_type": "string",
+          "status": "resolved",
+          "presentation": {
+            "version": 1,
+            "kind": "code",
+            "language": "sql"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "script",
+          "value_type": "string",
+          "status": "resolved",
+          "presentation": {
+            "version": 1,
+            "kind": "code",
+            "language": "powershell"
+          }
+        }
+      ]
+    }
+  },
+  "expect": {
+    "schema_version": "yawr.presentation-resolve/v1",
+    "resolver_version": "yawr.core-binding/v1",
+    "request_id": "contract-1",
+    "context": {
+      "project_root": "C:\\highlighting-contract",
+      "generation": 7
+    },
+    "document": {
+      "uri": "file:///C:/highlighting-contract/new.runbook.yaml",
+      "version": 3
+    },
+    "status": "resolved",
+    "bindings": [
+      {
+        "id": "b0",
+        "name": "db",
+        "status": "resolved",
+        "tool_id": "db",
+        "tool_digest": "sha256:bdab0a934d99bbdc6470a7a16b4b30beb39853ab167ada35d2eef6ec9f1a7ae5",
+        "actions": [
+          {
+            "name": "inspect",
+            "arguments": [
+              {
+                "name": "text",
+                "value_type": "string",
+                "status": "resolved",
+                "presentation": {
+                  "version": 1,
+                  "kind": "code",
+                  "language": "sql"
+                }
+              }
+            ],
+            "outputs": [
+              {
+                "name": "script",
+                "value_type": "string",
+                "status": "resolved",
+                "presentation": {
+                  "version": 1,
+                  "kind": "code",
+                  "language": "powershell"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "regions": [
+      {
+        "binding_id": "b0",
+        "action": "inspect",
+        "direction": "input",
+        "field": "text",
+        "yaml_path": "/flow/0/step/tool/args/text",
+        "range": {
+          "start": 223,
+          "end": 233
+        },
+        "status": "resolved"
+      }
+    ]
+  }
+}

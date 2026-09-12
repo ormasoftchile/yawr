@@ -1,0 +1,49 @@
+apiVersion: yawr.runbook/v1
+
+id: edge-case-branch
+name: edge-case-branch
+kind: reference
+description: Edge case runbook with 1 step branching to 2 other runbooks
+
+flow:
+  - step:
+      id: decision_step
+      type: collector
+      title: Decision Point
+      prompt: |
+        This step branches to two different runbooks.
+        Choose option A or B to proceed to the appropriate runbook.
+      fields:
+        - name: option
+          type: select
+          label: Choose option
+          required: true
+          options:
+            - value: "a"
+              label: "Option A"
+            - value: "b"
+              label: "Option B"
+
+  - step:
+      id: branch_targets
+      type: branch
+      branches:
+        - condition: "option == 'a'"
+          label: "Branch to Target 1"
+          steps:
+            - step:
+                id: invoke_target_1
+                type: include
+                title: Execute Target 1
+                include:
+                  runbook: edge-case-branch-target-1.runbook.yaml
+
+        - condition: "option == 'b'"
+          label: "Branch to Target 2"
+          steps:
+            - step:
+                id: invoke_target_2
+                type: include
+                title: Execute Target 2
+                include:
+                  runbook: edge-case-branch-target-2.runbook.yaml

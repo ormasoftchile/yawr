@@ -1,0 +1,426 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: database-migration
+name: Database Migration with Dry-Run and Validation
+kind: reference
+description: |
+  Migrates production database schema (add columns, indexes, foreign keys).
+  Includes dry-run on staging, validation, production migration, health
+  checks, and automatic rollback on failure.
+
+inputs:
+  migration_file:
+    type: string
+    required: true
+    description: Path to migration SQL file
+    from: prompt
+  migration_description:
+    type: string
+    required: true
+    description: Human-readable description of migration
+    from: prompt
+
+toolRefs:
+  - name: psql
+  - name: pg_dump
+
+governance:
+  rules:
+    - effects: ["db.read", "db.staging.write"]
+      action: allow
+    - effects: ["db.production.write"]
+      action: require-approval
+      min_approvers: 1
+      roles: [dba-team]
+
+flow:
+  # Step 1: Pre-Flight Checks
+  - step:
+      id: pre_flight_checks
+      type: assert
+      title: Pre-flight checks
+      assert:
+        - type: eq
+          subject: "{{ .migration_file_exists }}"
+          expected: "true"
+          message: "Migration script must exist"
+        - type: eq
+          subject: "{{ .staging_db_reachable }}"
+          expected: "true"
+          message: "Staging database must be reachable"
+        - type: eq
+          subject: "{{ .prod_db_reachable }}"
+          expected: "true"
+          message: "Production database must be reachable"
+        - type: eq
+          subject: "{{ .backup_recent }}"
+          expected: "true"
+          message: "Backup must be completed within past 24h"
+
+  # Step 2: Dry-Run on Staging
+  - step:
+      id: dry_run_staging
+      type: cli
+      title: Dry-run migration on staging
+      command: psql
+      args:
+        - "-h"
+        - "staging-db"
+        - "-f"
+        - "{{ .migration_file }}"
+      capture:
+        dry_run_output: stdout
+        dry_run_errors: stderr
+
+  # Step 3: Staging Validation Queries
+  - step:
+      id: validate_staging
+      type: cli
+      title: Validate migration on staging
+      command: psql
+      args:
+        - "-h"
+        - "staging-db"
+        - "-c"
+        - "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='preferences';"
+      capture:
+        staging_validation: stdout
+
+  # Step 4: Estimate Production Migration Time
+  - step:
+      id: estimate_duration
+      type: cli
+      title: Estimate production migration time
+      command: psql
+      args:
+        - "-h"
+        - "prod-db-replica"
+        - "-c"
+        - "EXPLAIN ANALYZE SELECT 1 FROM users LIMIT 1;"
+      capture:
+        estimated_duration: stdout
+
+  # Step 5: DBA Approval
+  - step:
+      id: dba_approval
+      type: collector
+      title: DBA approval for production migration
+      prompt: |
+        Migration: {{ .migration_description }}
+        File: {{ .migration_file }}
+        
+        Dry-run output: {{ .dry_run_output }}
+        Estimated duration: {{ .estimated_duration }}
+        
+        ⚠️ This will acquire a table lock for ~{{ .estimated_duration }}
+        
+        Approve production migration?
+      fields:
+        - name: approved
+          type: text
+          label: "Type 'yes' to approve"
+          required: true
+      approvals:
+        min: 1
+        roles: [dba-team]
+        timeout: 8h
+        on_timeout: fail
+
+  # Step 6: Schedule Maintenance Window
+  - step:
+      id: schedule_maintenance
+      type: collector
+      title: Schedule maintenance window
+      prompt: |
+        Set the maintenance window for the production migration.
+      fields:
+        - name: maintenance_start
+          type: text
+          label: Maintenance start time (YYYY-MM-DDTHH:MM:SSZ)
+          required: true
+          validation:
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$"
+            pattern_hint: "Must be RFC 3339 datetime (e.g. 2026-04-30T02:00:00Z)"
+        - name: expected_duration_minutes
+          type: text
+          label: Expected duration (minutes)
+          required: true
+        - name: notification_message
+          type: multiline
+          label: Notification message for engineering team
+          required: true
+      approvals:
+        min: 1
+        roles: [dba-team]
+
+  # Step 7: Wait for Maintenance Window
+  # GAP: Schema lacks datetime-based wait (wait_until: "<datetime>").
+  #      Workaround: compute sleep duration via cli — fragile and timezone-sensitive.
+  - step:
+      id: wait_maintenance_window
+      type: cli
+      title: Wait for maintenance window start
+      command: bash
+      args:
+        - "-c"
+        - "echo 'Waiting for maintenance window: {{ .maintenance_start }}'"
+      # GAP: actual sleep-until-datetime not expressible; runtime would need to implement this
+
+  # Step 8: Take Pre-Migration Snapshot
+  - step:
+      id: take_snapshot
+      type: cli
+      title: Take pre-migration database snapshot
+      command: pg_dump
+      args:
+        - "-h"
+        - "prod-db"
+        - "-Fc"
+        - "-f"
+        - "/backup/pre-migration.dump"
+      capture:
+        snapshot_path: stdout
+
+  # Step 9: Register Rollback Compensation
+  - step:
+      id: register_rollback
+      type: compensate
+      title: Register migration rollback
+      compensate:
+        on: any
+        steps:
+          - step:
+              id: drop_new_column
+              type: cli
+              title: Drop new preferences column
+              command: psql
+              args:
+                - "-h"
+                - "prod-db"
+                - "-c"
+                - "ALTER TABLE users DROP COLUMN IF EXISTS preferences;"
+
+          - step:
+              id: drop_new_index
+              type: cli
+              title: Drop new index
+              command: psql
+              args:
+                - "-h"
+                - "prod-db"
+                - "-c"
+                - "DROP INDEX IF EXISTS idx_users_preferences;"
+
+          - step:
+              id: restore_from_snapshot
+              type: cli
+              title: Restore from snapshot if drops fail
+              command: pg_restore
+              args:
+                - "-h"
+                - "prod-db"
+                - "/backup/pre-migration.dump"
+              on_error: continue
+
+  # Step 10: Execute Production Migration
+  - step:
+      id: execute_migration
+      type: cli
+      title: Execute production database migration
+      command: psql
+      args:
+        - "-h"
+        - "prod-db"
+        - "-f"
+        - "{{ .migration_file }}"
+      timeout: 30m
+      retry:
+        max: 2
+        interval: 5m
+        backoff: linear
+      capture:
+        migration_output: stdout
+        migration_errors: stderr
+      contract:
+        effects: ["db.production.write"]
+
+  # Step 11: Production Validation Queries
+  - step:
+      id: validate_production
+      type: cli
+      title: Validate migration on production
+      command: psql
+      args:
+        - "-h"
+        - "prod-db"
+        - "-c"
+        - "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='preferences';"
+      retry:
+        max: 5
+        interval: 10s
+        backoff: linear
+      capture:
+        prod_validation: stdout
+
+  # Step 12: Smoke Tests (parallel)
+  - step:
+      id: smoke_tests
+      type: parallel
+      title: Run smoke tests in parallel
+      branches:
+        - label: Insert test
+          steps:
+            - step:
+                id: test_insert
+                type: cli
+                title: Test insert with new column
+                command: psql
+                args:
+                  - "-h"
+                  - "prod-db"
+                  - "-c"
+                  - "INSERT INTO users (name, preferences) VALUES ('test_user', '{}') RETURNING id;"
+                capture:
+                  insert_test_result: stdout
+
+        - label: Query with index
+          steps:
+            - step:
+                id: test_query_index
+                type: cli
+                title: Test query using new index
+                command: psql
+                args:
+                  - "-h"
+                  - "prod-db"
+                  - "-c"
+                  - "EXPLAIN SELECT * FROM users WHERE preferences @> '{}' LIMIT 1;"
+                capture:
+                  index_test_result: stdout
+
+        - label: Update test
+          steps:
+            - step:
+                id: test_update
+                type: cli
+                title: Test update on preferences column
+                command: psql
+                args:
+                  - "-h"
+                  - "prod-db"
+                  - "-c"
+                  - "UPDATE users SET preferences='{}' WHERE id=1 RETURNING id;"
+                capture:
+                  update_test_result: stdout
+
+        - label: Foreign key test
+          steps:
+            - step:
+                id: test_fk
+                type: cli
+                title: Verify foreign key constraints
+                command: psql
+                args:
+                  - "-h"
+                  - "prod-db"
+                  - "-c"
+                  - "SELECT conname FROM pg_constraint WHERE conrelid='users'::regclass AND contype='f';"
+                capture:
+                  fk_test_result: stdout
+      join:
+        wait_for: all
+        on_failure: fail
+
+  # Step 13: Application Health Check (iterate with convergence)
+  # GAP: No native convergence condition (N consecutive successes). 
+  #      Workaround: iterate max 30, check each iteration, rely on failure to break early.
+  - iterate:
+      id: app_health_check
+      max: 30
+      over: null
+      steps:
+        - step:
+            id: health_check_iteration
+            type: cli
+            title: "Application health check (iteration {{ .iteration }}/30)"
+            command: curl
+            args:
+              - "-f"
+              - "-s"
+              - "-w"
+              - "%{http_code} %{time_total}"
+              - "https://api.company.com/health"
+            capture:
+              health_response: stdout
+
+        - step:
+            id: wait_interval_health
+            type: cli
+            title: Wait 10 seconds
+            command: sleep
+            args: ["10"]
+
+  # Step 14: DBA Confirmation
+  - step:
+      id: dba_confirmation
+      type: collector
+      title: DBA confirms migration stable
+      prompt: |
+        Migration results:
+        - Output: {{ .migration_output }}
+        - Validation: {{ .prod_validation }}
+        - Health check: passing
+        
+        Confirm migration is stable?
+      fields:
+        - name: confirmed
+          type: text
+          label: "Type 'yes' to confirm"
+          required: true
+      approvals:
+        min: 1
+        roles: [dba-team]
+        timeout: 30m
+        on_timeout: fail # triggers compensation/rollback
+
+  # Step 16: Post-Migration Cleanup
+  - step:
+      id: post_migration_cleanup
+      type: cli
+      title: VACUUM ANALYZE to rebuild statistics
+      command: psql
+      args:
+        - "-h"
+        - "prod-db"
+        - "-c"
+        - "VACUUM ANALYZE users;"
+
+  - step:
+      id: record_migration
+      type: cli
+      title: Record migration in schema_versions
+      command: psql
+      args:
+        - "-h"
+        - "prod-db"
+        - "-c"
+        - "INSERT INTO schema_versions (migration_file, applied_at) VALUES ('{{ .migration_file }}', NOW());"
+
+  # Step 17: Delete Pre-Migration Snapshot (conditional)
+  - step:
+      id: delete_snapshot
+      type: cli
+      title: Delete pre-migration snapshot
+      when: 'confirmed == "yes"'
+      command: rm
+      args:
+        - "-f"
+        - "/backup/pre-migration.dump"
+
+  - step:
+      id: complete
+      type: end
+      title: Database migration complete
+      outcome:
+        category: resolved
+        code: migration_successful

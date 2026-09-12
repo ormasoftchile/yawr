@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "runID": "r-done-002",
+    "state": "completed",
+    "runbookPath": "runbooks/check.yaml",
+    "startedAt": "2026-04-20T09:00:00.000000000Z",
+    "completedAt": "2026-04-20T09:05:32.000000000Z",
+    "currentStep": "step-verify",
+    "currentStepIndex": 3,
+    "vars": {"env": "prod"},
+    "source": "persisted"
+  }
+}

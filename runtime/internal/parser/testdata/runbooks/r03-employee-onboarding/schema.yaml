@@ -1,0 +1,466 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: employee-onboarding
+name: New Employee Onboarding
+kind: reference
+description: |
+  Onboards new employee by provisioning accounts, devices, and access.
+  Includes HR data collection, manager approval, parallel IT provisioning
+  tasks (Okta, GitHub, Slack, laptop), and compliance attestation.
+
+inputs:
+  onboarding_ticket_id:
+    type: string
+    required: true
+    description: Jira ticket ID for onboarding
+    from: prompt
+
+toolRefs:
+  - name: okta
+  - name: github
+  - name: slack
+
+governance:
+  rules:
+    - effects: ["user.create", "access.provision"]
+      action: require-approval
+      min_approvers: 1
+
+flow:
+  # Step 1: Collect Employee Information
+  - step:
+      id: collect_employee_info
+      type: collector
+      title: Collect new employee information
+      prompt: |
+        Provide all required information for new employee onboarding.
+      fields:
+        - name: full_name
+          type: text
+          label: Full name
+          required: true
+        - name: email
+          type: text
+          label: Email address
+          required: true
+          hint: Must be @company.com
+          validation:
+            pattern: "^[a-zA-Z0-9._%+\\-]+@company\\.com$"
+            pattern_hint: "Must be a valid @company.com email address"
+        - name: start_date
+          type: date
+          label: Start date
+          required: true
+        - name: department
+          type: select
+          label: Department
+          required: true
+          options:
+            - value: Engineering
+              label: Engineering
+            - value: Sales
+              label: Sales
+            - value: Marketing
+              label: Marketing
+            - value: Finance
+              label: Finance
+        - name: manager
+          type: autocomplete
+          label: Manager name
+          required: true
+          options_from:
+            provider: hr-directory
+            field: query
+            min_chars: 2
+            debounce_ms: 300
+        - name: job_title
+          type: text
+          label: Job title
+          required: true
+        - name: office_location
+          type: select
+          label: Office location
+          required: true
+          options:
+            - value: SF
+              label: San Francisco
+            - value: NYC
+              label: New York City
+            - value: London
+              label: London
+            - value: Remote
+              label: Remote
+
+  # Step 2: Manager Approval
+  - step:
+      id: manager_approval
+      type: collector
+      title: Manager confirmation of hire
+      prompt: |
+        Confirm new hire details:
+        - Name: {{ .full_name }}
+        - Email: {{ .email }}
+        - Start date: {{ .start_date }}
+        - Department: {{ .department }}
+        - Job title: {{ .job_title }}
+        
+        Approve this hire?
+      fields:
+        - name: manager_approved
+          type: boolean
+          label: Approve this hire?
+          required: true
+      approvals:
+        min: 1
+        roles: [manager]
+        timeout: 48h # GAP: prose says "2 business days" — schema only supports wall-clock duration
+        on_timeout: escalate
+        escalate_to: [hr-director]
+
+  # Step 3: Background Check Verification
+  - step:
+      id: background_check
+      type: collector
+      title: Verify background check
+      prompt: |
+        Verify background check status in HireRight portal for {{ .full_name }}.
+      fields:
+        - name: background_check_completed
+          type: boolean
+          label: Background check completed?
+          required: true
+        - name: no_disqualifying_issues
+          type: boolean
+          label: No disqualifying issues?
+          required: true
+        - name: report_uploaded
+          type: boolean
+          label: Report uploaded to employee folder?
+          required: true
+      approvals:
+        min: 1
+        roles: [hr-coordinator]
+        timeout: 120h # GAP: prose says "5 business days"
+        on_timeout: escalate
+        escalate_to: [hr-manager]
+
+  # Step 4: Parallel Provisioning Tasks
+  - step:
+      id: provision_parallel
+      type: parallel
+      title: Provision accounts and devices
+      branches:
+        # Task 4a: Okta
+        - label: Create Okta account
+          steps:
+            - step:
+                id: create_okta_account
+                type: tool
+                title: "Create Okta user: {{ .email }}"
+                tool:
+                  name: okta
+                  action: create-user
+                  args:
+                    email: "{{ .email }}"
+                    first_name: "{{ .full_name }}"
+                    department: "{{ .department }}"
+                capture:
+                  okta_user_id: json.id
+                contract:
+                  effects: ["user.create"]
+
+        # Task 4b: GitHub
+        - label: Create GitHub account
+          steps:
+            - step:
+                id: create_github_account
+                type: tool
+                title: "Invite to GitHub: {{ .email }}"
+                tool:
+                  name: github
+                  action: invite-user
+                  args:
+                    email: "{{ .email }}"
+                    org: company
+                capture:
+                  github_invitation_id: json.invitation_id
+                contract:
+                  effects: ["user.create"]
+
+        # Task 4c: Slack
+        - label: Create Slack account
+          steps:
+            - step:
+                id: create_slack_account
+                type: tool
+                title: "Invite to Slack: {{ .email }}"
+                tool:
+                  name: slack
+                  action: invite-user
+                  args:
+                    email: "{{ .email }}"
+                    channels: ["#general", "#announcements"]
+                capture:
+                  slack_user_id: json.user_id
+                contract:
+                  effects: ["user.create"]
+
+        # Task 4d: Order Laptop (manual)
+        - label: Order laptop
+          steps:
+            - step:
+                id: order_laptop
+                type: collector
+                title: Order laptop in IT procurement system
+                prompt: |
+                  Order laptop for {{ .full_name }}.
+                  
+                  Department: {{ .department }}
+                  Location: {{ .office_location }}
+                fields:
+                  - name: laptop_model
+                    type: text
+                    label: Laptop model selected
+                    required: true
+                    hint: "MacBook Pro for eng, MacBook Air for others"
+                  - name: shipping_address
+                    type: text
+                    multiline: true
+                    label: Shipping address
+                    required: true
+                    when: 'office_location == "Remote"'
+                  - name: estimated_delivery
+                    type: date
+                    label: Estimated delivery date
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [it-procurement]
+                  timeout: 72h # GAP: prose says "3 business days"
+                  on_timeout: escalate
+                  escalate_to: [it-manager]
+
+        # Task 4e: Schedule IT Onboarding (manual)
+        - label: Schedule IT onboarding call
+          steps:
+            - step:
+                id: schedule_it_call
+                type: collector
+                title: Schedule IT onboarding call
+                prompt: |
+                  Schedule 30-minute IT onboarding call on {{ .full_name }}'s first day.
+                fields:
+                  - name: calendar_invite_sent
+                    type: boolean
+                    label: Calendar invite sent?
+                    required: true
+                  - name: zoom_link_included
+                    type: boolean
+                    label: Zoom link included?
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [it-onboarding-coordinator]
+      join:
+        wait_for: all
+        on_failure: fail
+
+  # Step 6: Security Training
+  # GAP: prose says "assignee: employee (self-service)" — schema has no self-service task type;
+  #       forced to use approval pattern with roles: [employee] which is semantically incorrect
+  - step:
+      id: security_training
+      type: collector
+      title: Complete security training
+      prompt: |
+        {{ .full_name }} must complete security training in the LMS.
+      fields:
+        - name: security_training_completed
+          type: boolean
+          label: Security awareness training completed?
+          required: true
+        - name: phishing_simulation_completed
+          type: boolean
+          label: Phishing simulation completed?
+          required: true
+        - name: aup_signed
+          type: boolean
+          label: Acceptable use policy signed?
+          required: true
+      approvals:
+        min: 1
+        roles: [employee]
+        timeout: 168h # GAP: prose says "7 business days"
+        on_timeout: fail
+
+  # Step 7: Access Provisioning
+  - step:
+      id: provision_access
+      type: branch
+      title: Provision department-specific access
+      branches:
+        - condition: 'department == "Engineering"'
+          label: Engineering access
+          steps:
+            - step:
+                id: provision_eng_access
+                type: extension
+                title: Provision engineering access
+                extension:
+                  name: access-provisioner
+                  action: provision-engineering
+                  args:
+                    user_id: "{{ .okta_user_id }}"
+                    systems: ["github", "aws-dev", "datadog"]
+                retry:
+                  max: 3
+                  interval: 1m
+                  backoff: linear
+
+        - condition: 'department == "Sales"'
+          label: Sales access
+          steps:
+            - step:
+                id: provision_sales_access
+                type: extension
+                title: Provision sales access
+                extension:
+                  name: access-provisioner
+                  action: provision-sales
+                  args:
+                    user_id: "{{ .okta_user_id }}"
+                    systems: ["salesforce", "hubspot"]
+                retry:
+                  max: 3
+                  interval: 1m
+                  backoff: linear
+
+        - condition: 'department == "Marketing"'
+          label: Marketing access
+          steps:
+            - step:
+                id: provision_marketing_access
+                type: extension
+                title: Provision marketing access
+                extension:
+                  name: access-provisioner
+                  action: provision-marketing
+                  args:
+                    user_id: "{{ .okta_user_id }}"
+                    systems: ["google-ads", "mailchimp"]
+                retry:
+                  max: 3
+                  interval: 1m
+                  backoff: linear
+
+        - condition: 'department == "Finance"'
+          label: Finance access
+          steps:
+            - step:
+                id: provision_finance_access
+                type: extension
+                title: Provision finance access
+                extension:
+                  name: access-provisioner
+                  action: provision-finance
+                  args:
+                    user_id: "{{ .okta_user_id }}"
+                    systems: ["netsuite", "billdotcom"]
+                retry:
+                  max: 3
+                  interval: 1m
+                  backoff: linear
+
+  # Step 8: Manager Confirmation
+  - step:
+      id: manager_confirm_access
+      type: collector
+      title: Manager confirms access is appropriate
+      prompt: |
+        Provisioned access for {{ .full_name }}:
+        - Department: {{ .department }}
+        - Systems: (based on department)
+        
+        Confirm access is appropriate for employee's role?
+      fields:
+        - name: access_confirmed
+          type: boolean
+          label: Access is appropriate for employee's role?
+          required: true
+      approvals:
+        min: 1
+        roles: [manager]
+        timeout: 24h # GAP: prose says "1 business day → auto-approve"; on_timeout: approve is not a valid schema value
+        on_timeout: skip # workaround: skip = proceed without approval (closest to auto-approve)
+
+  # Step 9: Welcome Email
+  - step:
+      id: send_welcome_email
+      type: extension
+      title: Send personalized welcome email
+      extension:
+        name: email-sender
+        action: send-template
+        args:
+          to: "{{ .email }}"
+          template: welcome_employee
+          variables:
+            name: "{{ .full_name }}"
+            start_date: "{{ .start_date }}"
+            manager: "{{ .manager }}"
+
+  # Step 10: Compliance Attestation (dual approval)
+  - step:
+      id: compliance_attestation
+      type: collector
+      title: Compliance attestation
+      prompt: |
+        Attest that onboarding completed per company policy.
+        
+        Summary:
+        - Employee: {{ .full_name }}
+        - Manager approved: {{ .manager_approved }}
+        - Background check: {{ .background_check_completed }}
+        - Accounts created: Okta, GitHub, Slack
+        - Security training: {{ .security_training_completed }}
+      fields:
+        - name: attestation
+          type: text
+          label: "Type 'attest' to confirm"
+          required: true
+      approvals:
+        min: 2
+        roles: [hr-director, it-security-officer]
+        timeout: 48h # GAP: prose says "2 business days"
+        on_timeout: fail
+
+  # Step 11: Close Onboarding Ticket
+  - step:
+      id: close_ticket
+      type: extension
+      title: Close onboarding ticket
+      extension:
+        name: jira
+        action: transition-issue
+        args:
+          issue_key: "{{ .onboarding_ticket_id }}"
+          status: Done
+
+  - step:
+      id: notify_completion
+      type: extension
+      title: Notify HR and IT of completion
+      extension:
+        name: slack
+        action: send-message
+        args:
+          channel: "#hr-it"
+          message: "Onboarding complete for {{ .full_name }}"
+
+  - step:
+      id: complete
+      type: end
+      title: Onboarding complete
+      outcome:
+        category: resolved
+        code: onboarding_complete

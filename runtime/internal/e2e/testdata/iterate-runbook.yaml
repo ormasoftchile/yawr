@@ -1,0 +1,18 @@
+apiVersion: yawr.runbook/v1
+id: e2e-iterate
+name: e2e-iterate
+inputs:
+  stop_early:
+    type: string
+flow:
+  - iterate:
+      id: iterate-step
+      over: "a,b,c"
+      as: item
+      until: 'stop_early == "true"'
+      steps:
+        - step:
+            id: process-item
+            type: cli
+            command: echo
+            args: ["processing-${item}"]

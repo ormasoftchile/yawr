@@ -1,0 +1,12 @@
+apiVersion: yawr.runbook/v1
+id: e2e-tool
+name: e2e-tool
+flow:
+  - step:
+      id: invoke-tool
+      type: tool
+      tool:
+        name: test-tool
+        action: run
+        args:
+          message: hello

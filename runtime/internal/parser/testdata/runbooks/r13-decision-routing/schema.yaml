@@ -1,0 +1,97 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r13-decision-routing
+name: r13 Decision Routing
+description: |
+  Demonstrates the decision step for human-driven routing and the
+  branch step for programmatic conditional flow. An operator selects
+  the target environment; the branch step then dispatches based on
+  the captured selection.
+
+flow:
+  # Step 1: Collect environment information
+  - step:
+      id: assess
+      type: cli
+      title: Assess current deployment state
+      command: echo
+      args: ["Gathering deployment context"]
+      capture:
+        context_info: stdout
+
+  # Step 2: Human-driven routing via decision step
+  # Routes must reference valid step IDs in this runbook.
+  - step:
+      id: route
+      type: decision
+      title: Choose deployment target
+      prompt: "Select the target environment for this deployment"
+      variable: chosen_env
+      routes:
+        - label: Production
+          goto: deploy_branch
+          hint: Deploy to the live production environment
+        - label: Staging
+          goto: deploy_branch
+          hint: Deploy to the pre-production staging environment
+        - label: Abort
+          goto: abort
+          hint: Cancel this deployment run
+
+  # Step 3: Branch on chosen environment
+  - step:
+      id: deploy_branch
+      type: branch
+      title: Dispatch by chosen environment
+      branches:
+        - condition: 'chosen_env == "Production"'
+          label: Production path
+          steps:
+            - step:
+                id: deploy_prod
+                type: cli
+                title: Run production deploy script
+                command: echo
+                args: ["Deploying to PRODUCTION"]
+                contract:
+                  effects: ["deploy.production"]
+                  idempotent: false
+
+        - condition: 'chosen_env == "Staging"'
+          label: Staging path
+          steps:
+            - step:
+                id: deploy_staging
+                type: cli
+                title: Run staging deploy script
+                command: echo
+                args: ["Deploying to STAGING"]
+                contract:
+                  effects: ["deploy.staging"]
+                  idempotent: true
+
+        - else: true
+          label: Unknown environment
+          steps:
+            - step:
+                id: deploy_unknown
+                type: cli
+                title: Log unexpected environment selection
+                command: echo
+                args: ["Unexpected environment: {{ .chosen_env }}"]
+
+  # Step 4: Post-deploy notification
+  - step:
+      id: complete
+      type: cli
+      title: Deployment complete
+      command: echo
+      args: ["Deployment pipeline finished for {{ .chosen_env }}"]
+
+  # Step 5: Abort path (reachable via decision goto)
+  - step:
+      id: abort
+      type: cli
+      title: Abort deployment
+      command: echo
+      args: ["Deployment aborted by operator"]

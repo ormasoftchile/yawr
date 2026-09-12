@@ -1,0 +1,737 @@
+(* ============================================================
+   YAWR Expression Language (GXL) — Reference Grammar
+   Version:    1.0.0-draft
+   Date:       2026-06-04T23:56:26-04:00
+   Owner:      Yawr runtime
+   References:
+     - design/yawr/expression-language-proposal.md §1
+     - .squad/decisions/inbox/copilot-directive-gxl-oq1-oq2-ratification.md
+     - .squad/decisions/inbox/barbara-gxl-phase1-plan.md §3
+   
+   Evaluation sites (all boolean-typed fields):
+     when, condition, until, iterate.until,
+     branches[].condition, include.when, collector.fields[].when
+   
+   This file is the SINGLE SOURCE OF TRUTH for both the Go and C#
+   parser implementations. The spec .tex files and conformance
+   corpus (TV-GXL-*) derive from this grammar.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 1 — NOTATION CONVENTIONS
+   ============================================================
+   This grammar uses ISO EBNF with the following conventions:
+     =         rule definition
+     ;         end of rule
+     |         ordered alternation (left to right, first match wins)
+     { A }     zero or more repetitions of A
+     [ A ]     zero or one occurrence of A (optional)
+     ( A | B ) grouping
+     "abc"     terminal string literal (case-sensitive)
+     'a'..'z'  character range (inclusive)
+     UPPER     lexical token (defined in Lexical Grammar section)
+     CamelCase syntactic non-terminal
+
+   PEG semantics apply to alternation: the first matching
+   alternative is chosen. This eliminates all ambiguity.
+   ============================================================ *)
+
+
+(* ============================================================
+   SECTION 2 — LEXICAL GRAMMAR
+   Lexer tokens. Whitespace is insignificant between tokens
+   except inside string literals. Comments are lexer-level.
+   ============================================================ *)
+
+(* --- 2.1 Whitespace and Comments --- *)
+
+WHITESPACE  = { ' ' | '\t' | '\n' | '\r' } ;
+              (* Silently discarded between tokens. *)
+
+LINE_COMMENT = "#" { ANY_CHAR_EXCEPT_NEWLINE } NEWLINE ;
+               (* Shell-style single-line comment. Discarded by lexer.
+                  Note: '#' chosen over '//' for YAML-author familiarity.
+                  Not supported inside string literals. *)
+
+NEWLINE      = '\n' | "\r\n" | '\r' ;
+ANY_CHAR_EXCEPT_NEWLINE = (* any Unicode code point except LF, CR *) ;
+
+
+(* --- 2.2 Keywords (reserved; may not be used as identifiers) --- *)
+
+(* Boolean and null literals *)
+KW_TRUE  = "true" ;
+KW_FALSE = "false" ;
+KW_NULL  = "null" ;
+
+(* Logical operators *)
+KW_AND   = "and" ;
+KW_OR    = "or" ;
+KW_NOT   = "not" ;
+
+(* Top-level builtins *)
+KW_LEN   = "len" ;
+KW_NOW   = "now" ;
+
+(* Reserved namespace prefixes — dual role: Namespace token in NamespaceCall,
+   AND valid GDP root identifier when NOT immediately followed by DOT.
+   See §3 GDP note and IDENT exception below. *)
+KW_STR   = "str" ;
+KW_LIST  = "list" ;
+KW_REGEX = "regex" ;
+KW_MATH  = "math" ;    (* reserved for v2; no methods in v1 *)
+
+KEYWORD  = KW_TRUE | KW_FALSE | KW_NULL
+          | KW_AND  | KW_OR   | KW_NOT | KW_LEN | KW_NOW
+          | KW_STR  | KW_LIST | KW_REGEX | KW_MATH ;
+
+
+(* --- 2.3 Identifiers ---
+   ## Note: ASCII-only identifiers
+   Decision: GXL restricts identifiers to ASCII (a-z, A-Z, 0-9, _).
+   Rationale:
+     (1) Variable names originate from capture path declarations and
+         step IDs, both of which are YAML keys — ASCII by YAML
+         convention and by YAWR authoring practice.
+     (2) Unicode identifiers admit visual-spoofing attacks (Cyrillic
+         look-alike characters). In runbook governance contexts, silent
+         misidentification of a variable name is a compliance risk.
+     (3) ASCII-only is trivially implementable across Go, C#, and any
+         browser runtime without Unicode normalization concerns.
+   If a future version allows Unicode identifiers, it must include
+   normalization to NFC and an allowlist of safe Unicode blocks.
+*)
+
+IDENT_START  = 'a'..'z' | 'A'..'Z' | '_' ;
+IDENT_CONT   = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' ;
+RAW_IDENT    = IDENT_START { IDENT_CONT } ;
+IDENT        = (* RAW_IDENT that is NOT a KEYWORD *) ;
+               (* Parsers MUST reject any keyword used as identifier.
+                  Error: GXL-PARSE-010 (keyword used as identifier).
+                  Note: GXL-PARSE-007 covers a distinct set of forbidden
+                  SYNTAX constructs (&&, ||, ternary, etc.); it does NOT
+                  apply to keyword-as-identifier — that is exclusively
+                  GXL-PARSE-010.
+                  EXCEPTION — Namespace prefix keywords (KW_STR, KW_LIST,
+                  KW_REGEX) serve a dual role: they satisfy IDENT in the
+                  GDP root position ONLY when the immediately following token
+                  is NOT DOT (i.e., when NamespaceCall is not applicable).
+                  When followed by DOT, the namespace keyword is committed to
+                  the NamespaceCall production; if that production fails
+                  (e.g., no LPAREN), all Primary alternatives fail →
+                  GXL-PARSE-001.  This carve-out does NOT extend to KW_MATH,
+                  KW_LEN, KW_NOW, or any other keyword.
+                  See §3 GDP note and conformance vectors TV-GXL-PARSE-028,
+                  TV-GXL-PARSE-048, TV-GXL-PARSE-083. *)
+
+
+(* --- 2.4 String Literals ---
+   Both single- and double-quoted forms are supported.
+   The quote character that opens the literal closes it;
+   the other quote character needs no escaping inside.
+*)
+
+STRING       = DQUOTE_STRING | SQUOTE_STRING ;
+
+DQUOTE_STRING = '"' { DQUOTE_CHAR } '"' ;
+DQUOTE_CHAR   = ESCAPE_SEQ
+               | (* any Unicode code point except '"', '\', LF, CR *) ;
+
+SQUOTE_STRING = "'" { SQUOTE_CHAR } "'" ;
+SQUOTE_CHAR   = ESCAPE_SEQ
+               | (* any Unicode code point except "'", '\', LF, CR *) ;
+
+ESCAPE_SEQ    = '\' ESCAPE_BODY ;
+ESCAPE_BODY   = '\'          (* → U+005C REVERSE SOLIDUS           *)
+              | '"'          (* → U+0022 QUOTATION MARK             *)
+              | "'"          (* → U+0027 APOSTROPHE                 *)
+              | 'n'          (* → U+000A LINE FEED                  *)
+              | 'r'          (* → U+000D CARRIAGE RETURN            *)
+              | 't'          (* → U+0009 CHARACTER TABULATION       *)
+              | '0'          (* → U+0000 NULL                       *)
+              | 'u' HEX HEX HEX HEX
+                             (* → Unicode code point U+XXXX         *)
+              | 'U' HEX HEX HEX HEX HEX HEX HEX HEX
+                             (* → Unicode code point U+XXXXXXXX     *)
+              ;
+              (* Any other character after '\' is error GXL-PARSE-004. *)
+
+HEX  = '0'..'9' | 'a'..'f' | 'A'..'F' ;
+
+
+(* --- 2.5 Number Literals ---
+   ## Note: Integer and float share the NUMBER token.
+   The runtime MUST treat all GXL numbers as IEEE 754 double-precision
+   float64. Integer literals are representable exactly up to 2^53.
+   Overflow of integer representation into double is not an error —
+   the value is the nearest representable double.
+   Negative numbers are produced by the UnaryMinus rule, not by
+   the lexer (so "-3" is UnaryMinus applied to NUMBER "3").
+*)
+
+NUMBER       = INTEGER [ FRAC ] [ EXP ] ;
+INTEGER      = '0' | ( '1'..'9' { '0'..'9' } ) ;
+FRAC         = '.' '0'..'9' { '0'..'9' } ;
+EXP          = ( 'e' | 'E' ) [ '+' | '-' ] '0'..'9' { '0'..'9' } ;
+
+(* ## Note: Number formats
+   Supported: integer (42), decimal (3.14), scientific (1.5e10, 2E-3).
+   Not supported: hexadecimal (0xFF), octal (0o77), binary (0b1010),
+   leading-zero integers (007 is a parse error: GXL-PARSE-003),
+   NaN, Infinity — these are not representable in GXL literal form.
+   Authors needing NaN/Inf detection must use runtime-provided
+   variables typed as null when the value is not a finite number.
+*)
+
+
+(* --- 2.6 Operators and Punctuation --- *)
+
+OP_EQ    = "==" ;
+OP_NEQ   = "!=" ;
+OP_LTE   = "<=" ;
+OP_GTE   = ">=" ;
+OP_LT    = "<" ;
+OP_GT    = ">" ;
+OP_PLUS  = "+" ;
+OP_MINUS = "-" ;
+OP_STAR  = "*" ;
+OP_SLASH = "/" ;
+OP_PCT   = "%" ;
+
+LPAREN   = "(" ;
+RPAREN   = ")" ;
+COMMA    = "," ;
+DOT      = "." ;
+LBRACKET = "[" ;
+RBRACKET = "]" ;
+
+(* ## Forbidden operator tokens — MUST be rejected at lex/parse time
+   '&&' '||' '!' '|' '?' ':' ':=' '=' 'in' 'contains' (infix)
+   Encountering these in an expression field raises GXL-PARSE-007.
+*)
+
+
+(* ============================================================
+   SECTION 3 — SYNTACTIC GRAMMAR
+   
+   Precedence table (lowest → highest binding):
+     Level 1:  or         (left-associative, short-circuit)
+     Level 2:  and        (left-associative, short-circuit)
+     Level 3:  not        (right-associative, unary prefix)
+     Level 4:  Comparison (==, !=, <, <=, >, >=)
+                          NON-associative: chaining is a parse error
+     Level 5:  Addition   (+, −) left-associative
+     Level 6:  Multiply   (*, /, %) left-associative
+     Level 7:  UnaryMinus (−) right-associative, unary prefix
+     Level 8:  Primary    (literals, paths, calls, parentheses)
+
+   Associativity is encoded by whether the recursive call is on
+   the left (LR-iter) or right (recursive) side of the production.
+   No left-recursion exists in this grammar — safe for PEG parsers.
+   ============================================================ *)
+
+Expression   = OrExpr ;
+
+(* --- Level 1: Logical OR --- *)
+OrExpr       = AndExpr { KW_OR AndExpr } ;
+               (* Short-circuit: if left side is true, right side
+                  is NOT evaluated. See Semantics Annex §5.1 (OQ1). *)
+
+(* --- Level 2: Logical AND --- *)
+AndExpr      = NotExpr { KW_AND NotExpr } ;
+               (* Short-circuit: if left side is false, right side
+                  is NOT evaluated. See Semantics Annex §5.1 (OQ1). *)
+
+(* --- Level 3: Logical NOT --- *)
+NotExpr      = KW_NOT NotExpr
+             | Comparison
+             ;
+             (* 'not' binds tighter than 'and'/'or'.
+                'not a and b' parses as '(not a) and b'. *)
+
+(* --- Level 4: Comparison (non-associative) --- *)
+Comparison   = Addition [ CompOp Addition ] ;
+               (* Exactly zero or one CompOp per expression.
+                  'a < b < c' is GXL-PARSE-009 (chained comparison). *)
+
+CompOp       = OP_EQ | OP_NEQ | OP_LTE | OP_GTE | OP_LT | OP_GT ;
+
+(* --- Level 5: Addition and Subtraction --- *)
+Addition     = Multiply { (OP_PLUS | OP_MINUS) Multiply } ;
+
+(* --- Level 6: Multiplication, Division, Modulo --- *)
+Multiply     = UnaryMinus { (OP_STAR | OP_SLASH | OP_PCT) UnaryMinus } ;
+
+(* --- Level 7: Unary Minus --- *)
+UnaryMinus   = OP_MINUS UnaryMinus
+             | Primary
+             ;
+             (* '-' is the only unary arithmetic operator.
+                'not' is handled at level 3.
+                Unary '+' is not supported (GXL-PARSE-007). *)
+
+(* --- Level 8: Primary Expressions --- *)
+Primary      = NowCall
+             | LenCall
+             | NamespaceCall
+             | GDP
+             | Literal
+             | LPAREN Expression RPAREN
+             ;
+             (* PEG ordered alternation: NowCall, LenCall, and NamespaceCall are
+                tried before GDP to resolve the 'now()', 'len(...)' and
+                'str.method(...)' ambiguity with path access. *)
+
+
+(* --- Function Calls --- *)
+
+NowCall      = KW_NOW LPAREN [ ArgList ] RPAREN ;
+               (* now() is a zero-argument top-level builtin.
+                  Returns the current UTC timestamp as a string:
+                  "YYYY-MM-DDTHH:MM:SSZ" (ISO-8601, no fractional seconds,
+                  Z suffix mandatory).
+                  Determinism: per-evaluation — each call site yields an
+                  independent fresh timestamp (consistent with Go's
+                  time.Now()). Implementations requiring a stable snapshot
+                  across a run MUST capture the value once via a capture step.
+                  Arity: exactly zero arguments. If ArgList is non-empty,
+                  GXL-TYPE-004 is raised at parse time (arity is statically
+                  known to be zero).
+                  Bare 'now' without parentheses cannot match NowCall (LPAREN
+                  required) and cannot match GDP ('now' is a KEYWORD, not
+                  IDENT) → GXL-PARSE-001 (unexpected token).
+                  See stdlib reference §4.1b. *)
+
+LenCall      = KW_LEN LPAREN Expression RPAREN ;
+               (* len() is a top-level builtin — not a namespace.
+                  Accepts string or list; returns number.
+                  See stdlib reference §4 for full signature. *)
+
+NamespaceCall = Namespace DOT Method LPAREN ArgList RPAREN ;
+               (* Note on 'str.foo' WITHOUT parentheses:
+                  The expression 'str.foo' (no call parens) does NOT match
+                  NamespaceCall (LPAREN required).  When a namespace keyword
+                  IS followed by DOT, it is committed to the NamespaceCall
+                  production — the GDP dual-role carve-out (see IDENT §2 and
+                  GDP §3) does NOT apply.  All Primary alternatives therefore
+                  fail → GXL-PARSE-001 (unexpected token).
+                  'str.foo()' WITH parens DOES match NamespaceCall structure;
+                  the unknown method is then rejected as GXL-PARSE-006 at
+                  parse time. *)
+Namespace    = KW_STR | KW_LIST | KW_REGEX ;
+               (* KW_MATH is reserved; no methods in v1. *)
+Method       = RAW_IDENT ;
+               (* Method name is an unconstrained RAW_IDENT.
+                  The stdlib function set is CLOSED (§1.6).  All legal
+                  method names are statically enumerated in §4.  Any
+                  method name not in that enumeration MUST be rejected
+                  at parse time with GXL-PARSE-006 (unknown namespace
+                  method).  This is NOT an evaluation-time check. *)
+ArgList      = [ Expression { COMMA Expression } ] ;
+
+
+(* --- YAWR Dotted Path (GDP) Variable Access --- *)
+
+GDP          = IDENT { DOT IDENT | LBRACKET INTEGER RBRACKET } ;
+               (* Resolves against the run variable context map.
+                  First IDENT is the variable name (must exist in scope).
+                  Subsequent segments navigate into the value.
+                  Examples:
+                    hostname            → top-level variable
+                    config.region       → nested field in captured object
+                    items[0].metadata   → array index then field
+                  Missing path segment → GXL-PATH-001 (hard error).
+                  Index out of bounds  → GXL-PATH-002.
+                  Index on non-array   → GXL-PATH-003.
+                  A bare IDENT in boolean position MUST resolve to bool;
+                  a string/number/null raises GXL-TYPE-002 at eval time.
+                  DUAL-ROLE NOTE: The namespace prefix keywords KW_STR,
+                  KW_LIST, and KW_REGEX satisfy the first IDENT in this
+                  production ONLY when the immediately following token is
+                  NOT DOT.  Under PEG ordered alternation, Primary tries
+                  NamespaceCall before GDP; when a namespace keyword is NOT
+                  followed by DOT, NamespaceCall fails and GDP proceeds
+                  treating the keyword token as a valid root identifier
+                  (e.g., 'list[10]' → parse_ok).  When the namespace keyword
+                  IS followed by DOT, NamespaceCall is the sole applicable
+                  production; GDP does NOT receive a fallback in that case.
+                  See §2 IDENT exception note and conformance vectors
+                  TV-GXL-PARSE-028, TV-GXL-PARSE-048, TV-GXL-PARSE-083.
+               *)
+
+INTEGER      = '0' | ( '1'..'9' { '0'..'9' } ) ;
+               (* Re-stated here for clarity in the context of index.
+                  Negative indices are not permitted: GXL-PARSE-007. *)
+
+
+(* --- Literals --- *)
+
+Literal      = STRING | NUMBER | BoolLiteral | NullLiteral ;
+BoolLiteral  = KW_TRUE | KW_FALSE ;
+NullLiteral  = KW_NULL ;
+
+
+(* ============================================================
+   SECTION 4 — STANDARD LIBRARY NAMESPACE REFERENCE
+   
+   All function calls MUST go through a namespace or one of the
+   top-level builtins ('len', 'now'). Bare function calls other
+   than these are GXL-PARSE-007.
+   Signatures use the notation: name(param: type, ...) → return_type.
+   Types: string, number, bool, null, list, scalar (string|number|bool).
+   camelCase method names are mandated by Q3 resolution.
+   ============================================================ *)
+
+(*
+   4.1  len (top-level builtin)
+   ─────────────────────────────
+   len(s: string) → number
+     UTF-8 character count (code points, not bytes).
+     Empty string → 0. Null argument → GXL-TYPE-003.
+
+   len(l: list) → number
+     Element count. Empty list → 0. Null argument → GXL-TYPE-003.
+
+   4.1b now (top-level builtin)
+   ─────────────────────────────
+   now() → string
+     Returns the current UTC timestamp in ISO-8601 format:
+     "YYYY-MM-DDTHH:MM:SSZ" (no fractional seconds; Z suffix mandatory).
+     The format is a strict subset of RFC 3339.
+
+   Arity: exactly zero arguments. Any argument raises GXL-TYPE-004
+   at parse time (arity is statically known).
+
+   Determinism: per-evaluation. Each occurrence of now() in an
+   expression yields an independent fresh timestamp. Implementations
+   that require a stable snapshot timestamp across a run MUST capture
+   the value once via a capture step.
+
+   Portability reference implementations:
+     Go:   time.Now().UTC().Format(time.RFC3339)
+               → "2006-01-02T15:04:05Z" (RFC3339 without sub-seconds when
+                  truncated; note: time.RFC3339 may include sub-seconds if
+                  present — use Format("2006-01-02T15:04:05Z") explicitly)
+     C#:   DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+     JS:   new Date().toISOString().replace(/\.\d+/, '')
+               → strips fractional seconds from ISO string
+
+   Use-case examples:
+     completion_date: "${now()}"   — SOC2 audit completion timestamp
+     created_at: "${now()}"        — evidence record audit field
+
+   4.2  str namespace
+   ──────────────────
+   str.startsWith(s: string, prefix: string) → bool
+     True if s begins with prefix. Empty prefix → always true.
+     Either argument null → GXL-TYPE-003.
+
+   str.endsWith(s: string, suffix: string) → bool
+     True if s ends with suffix. Empty suffix → always true.
+     Either argument null → GXL-TYPE-003.
+
+   str.contains(s: string, substr: string) → bool
+     True if s contains substr as a substring. Empty substr → always true.
+     Either argument null → GXL-TYPE-003.
+
+   str.toLower(s: string) → string
+     Unicode lowercase mapping (full Unicode case folding).
+     Null argument → GXL-TYPE-003.
+
+   str.toUpper(s: string) → string
+     Unicode uppercase mapping.
+     Null argument → GXL-TYPE-003.
+
+   str.trim(s: string) → string
+     Remove leading and trailing Unicode whitespace (U+0009, U+000A,
+     U+000D, U+0020, and Unicode Zs category).
+     Null argument → GXL-TYPE-003.
+
+   str.length(s: string) → number
+     Alias for len(s). Provided for namespace consistency.
+     Null argument → GXL-TYPE-003.
+
+   str.trimPrefix(s: string, prefix: string) → string
+     Remove prefix from s if s starts with prefix; otherwise return s as-is.
+     Null argument → GXL-TYPE-003.
+
+   str.trimSuffix(s: string, suffix: string) → string
+     Remove suffix from s if s ends with suffix; otherwise return s as-is.
+     Null argument → GXL-TYPE-003.
+
+   4.3  list namespace
+   ────────────────────
+   list.contains(l: list, item: scalar) → bool
+     True if l contains an element equal to item under strict equality
+     (same type, same value). Cross-type item → GXL-TYPE-003.
+     Null l → GXL-TYPE-003. Null item → false (null is never in a list).
+
+   list.indexOf(l: list, item: scalar) → number      [OQ4 — ratified]
+     Returns the zero-based index of the first element equal to item,
+     or -1 if item is not found. Cross-type item → GXL-TYPE-003.
+     Null l → GXL-TYPE-003. Null item → always -1.
+
+   list.length(l: list) → number
+     Alias for len(l). Provided for namespace consistency.
+     Null argument → GXL-TYPE-003.
+
+   4.4  regex namespace
+   ─────────────────────
+   regex.match(s: string, pattern: string) → bool
+     True if s matches the RE2 regular expression pattern.
+     Pattern MUST be RE2 syntax (no PCRE, no backreferences).
+     Invalid pattern → GXL-EVAL-003 (evaluation-time error).
+     Null s or pattern → GXL-TYPE-003.
+
+   4.5  math namespace (reserved — v2)
+   ─────────────────────────────────────
+   No functions available in v1. Referencing math.* → GXL-PARSE-005.
+*)
+
+
+(* ============================================================
+   SECTION 5 — SEMANTICS ANNEX
+
+   5.1  Short-Circuit Evaluation  [OQ1 — ratified]
+   ─────────────────────────────────────────────────
+   'and' and 'or' use LAZY (short-circuit) evaluation:
+
+   • false and X  →  false  (X is NOT evaluated)
+   • true  or  X  →  true   (X is NOT evaluated)
+
+   Evaluation order:
+     OrExpr:  evaluate left operand; if true  → return true  immediately
+                                     if false → evaluate right operand.
+     AndExpr: evaluate left operand; if false → return false immediately
+                                     if true  → evaluate right operand.
+   
+   Consequence: a missing variable or type error in the right-hand
+   side of 'and'/'or' DOES NOT raise an error if the left-hand
+   side short-circuits. This is intentional — authors may write
+   defensive guards such as:
+     has_result and result.status == "ok"
+   where 'has_result' prevents evaluation of 'result.status' when
+   the capture did not run.
+
+   Multiple operands chain left-to-right:
+     a and b and c  ≡  (a and b) and c
+     a or  b or  c  ≡  (a or  b) or  c
+   Short-circuit applies at each pairwise step.
+
+   Conformance test category: TV-GXL-EVAL (short-circuit vectors).
+
+   5.2  Type System
+   ─────────────────
+   GXL uses the YAWR Portable JSON Value Model (defined in gis.ebnf
+   §PJVM). Types: null, boolean, number, string, list, object.
+   
+   Strict comparisons — NO implicit coercion:
+     "5" == 5      → GXL-TYPE-001 (cannot compare string to number)
+     true == 1     → GXL-TYPE-001
+     null == ""    → false  (null is distinct from empty string)
+     null == null  → true
+     null == false → false
+
+   Equality operators (== and !=) are defined only for scalar types
+   (number, string, boolean) and null.  Applying == or != to a list or
+   object operand → GXL-TYPE-001.  [TESS-AMBIG-4 — ratified]
+
+   Boolean ordered comparison is forbidden.  Booleans define equality
+   (== and !=) but no total ordering.  Applying <, <=, >, >= to boolean
+   operands → GXL-TYPE-005 (eval time).  [TESS-AMBIG-3 — ratified]
+
+   Comparisons permitted across types:
+     == and !=  may be used with null on EITHER side:
+       x == null  → true if x is null, false otherwise (no error)
+       x != null  → true if x is not null, false otherwise (no error)
+     All other comparison operators with null operand → GXL-EVAL-004.
+   
+   Arithmetic operators (+, -, *, /, %) require number operands.
+   Applying arithmetic to a non-number → GXL-TYPE-003.
+   '+' is numeric addition ONLY — string concatenation is NOT supported.
+   
+   'not' requires a bool operand. 'not string_var' → GXL-TYPE-002.
+   
+   A bare GDP path used in boolean position (as the top-level
+   expression or directly after 'and'/'or'/'not') MUST resolve to
+   bool. A non-bool value in boolean position → GXL-TYPE-002.
+
+   5.3  Missing Path Behavior
+   ───────────────────────────
+   Missing variable (first IDENT in GDP not found in context map):
+     → GXL-PATH-001 (hard error).  
+   This applies UNLESS the expression is on the right-hand side of a
+   short-circuited 'and'/'or' as described in §5.1.
+   
+   Missing intermediate segment (e.g., config.region when config
+   lacks a 'region' field, but config IS an object): → GXL-PATH-001.
+
+   Dot-access on a non-object value (e.g., config.region when config
+   is a number, string, boolean, or null): → GXL-PATH-004.
+   [TESS-AMBIG-5 and TESS-AMBIG-6 — ratified]
+    
+   Index on null or non-array value: → GXL-PATH-003.
+   Index beyond array bounds: → GXL-PATH-002.
+   
+   Silent empty-string/null substitution is FORBIDDEN. Every missing
+   reference is a hard error. Authors must use 'when:' guards or
+   capture defaults (GCP grammar, §OQ2) to handle optional values.
+
+   5.4  Division and Modulo by Zero
+   ──────────────────────────────────
+   x / 0 and x % 0 → GXL-EVAL-002 (hard evaluation error).
+   No IEEE 754 Infinity or NaN is ever produced as a GXL result.
+   Integer division semantics: GXL uses float64 always; 5/2 = 2.5.
+
+   5.5  Null Propagation Rules (summary)
+   ───────────────────────────────────────
+   null == null          → true   (OK)
+   null != null          → false  (OK)
+   x    == null          → true/false depending on x (OK)
+   x    != null          → true/false depending on x (OK)
+   null <  x             → GXL-EVAL-004 (null in ordered comparison)
+   null >  x             → GXL-EVAL-004
+   null <= x             → GXL-EVAL-004
+   null >= x             → GXL-EVAL-004
+   null +  x             → GXL-TYPE-003 (arithmetic on null)
+   null in boolean pos   → GXL-TYPE-002 ('when: null_var' is an error)
+   not null              → GXL-TYPE-002
+
+   5.6  No Side Effects
+   ─────────────────────
+   GXL expressions are pure: no I/O, no variable mutation, no dynamic
+   dispatch. The same expression evaluated twice with the same context
+   map MUST produce the same result.
+*)
+
+
+(* ============================================================
+   SECTION 6 — ERROR CLASS CATALOG
+   
+   Format: CODE — trigger condition — timing
+   
+   Parse errors are raised at plan time (runbook load) before any
+   step executes. Evaluation errors are raised at runtime when the
+   expression is evaluated for a specific step context.
+   ============================================================
+
+   6.1  Parse Errors  (raised at load/plan time)
+   ──────────────────────────────────────────────
+   GXL-PARSE-001  Unexpected token: token does not fit any production.
+   GXL-PARSE-002  Unterminated string literal: EOF or newline before
+                  closing quote.
+   GXL-PARSE-003  Invalid number literal: leading zeros (007), NaN,
+                  Infinity, or other malformed numeric token.
+   GXL-PARSE-004  Invalid escape sequence: '\x' where x is not a
+                  recognized escape character.
+   GXL-PARSE-005  Unknown namespace: namespace prefix is not in the
+                  allowlist (str, list, regex) or refers to math in v1.
+   GXL-PARSE-006  Unknown namespace method: e.g., str.explode() is not
+                  a known method of the str namespace.
+   GXL-PARSE-007  Forbidden syntax: &&, ||, !, |, ternary (?:),
+                  infix 'contains'/'startsWith'/'matches', assignment,
+                  string concatenation, array/object construction,
+                  negative array index, bare function call (other than len).
+                  SCOPE NOTE: GXL-PARSE-007 does NOT cover keyword used as
+                  identifier — that case is exclusively GXL-PARSE-010.
+   GXL-PARSE-008  Unmatched parenthesis.
+   GXL-PARSE-009  Chained comparison: e.g., a < b < c. Use
+                  'a < b and b < c' instead.
+   GXL-PARSE-010  Keyword used as identifier: e.g., variable named 'and',
+                  'or', 'not', 'true', 'false', 'null', or any reserved
+                  namespace prefix (str, list, regex, math).  This is the
+                  ONLY code for keyword-misuse-as-identifier; do not use
+                  GXL-PARSE-007 for this case.
+
+   6.2  Type Errors  (raised at plan time where inferrable;
+                      otherwise at evaluation time)
+   ──────────────────────────────────────────────────────
+   GXL-TYPE-001  Type mismatch in comparison: comparing values of
+                 incompatible types (e.g., string == number), or applying
+                 == / != to a list or object operand.
+   GXL-TYPE-002  Non-bool in boolean position: a non-bool value used as
+                 the final result of an expression that must be bool
+                 (e.g., a bare string variable in 'when:').
+   GXL-TYPE-003  Argument type mismatch: wrong type passed to stdlib
+                 function, or arithmetic applied to non-number.
+   GXL-TYPE-004  Wrong argument count: function called with wrong number
+                 of arguments.
+   GXL-TYPE-005  Ordered comparison on boolean operands: <, <=, >, >=
+                 applied to boolean values.  Booleans define equality only.
+
+   6.3  Path Errors  (raised at evaluation time)
+   ────────────────────────────────────────────────
+   GXL-PATH-001  Variable or path segment not found: first IDENT not
+                 in context map, or named field not present in an object.
+   GXL-PATH-002  Array index out of bounds: index >= array length.
+   GXL-PATH-003  Index applied to non-array: e.g., "hello"[0] or
+                 bracket traversal through a null or non-array intermediate.
+   GXL-PATH-004  Field access on non-object: dotted segment applied to a
+                 value that is not an object (number, string, boolean, or
+                 null).  E.g., foo.bar where foo = 7, or foo.bar where
+                 foo = null.
+
+   6.4  Evaluation Errors  (raised at evaluation time)
+   ──────────────────────────────────────────────────────
+   GXL-EVAL-001  Variable resolution failure not covered by PATH codes.
+   GXL-EVAL-002  Division or modulo by zero (x/0, x%0).
+   GXL-EVAL-003  Invalid regex pattern: regex.match called with a
+                 pattern string that is not valid RE2 syntax.
+   GXL-EVAL-004  Null in ordered comparison: null used with <, >, <=, >=.
+*)
+
+
+(* ============================================================
+   SECTION 7 — STREAM A OPEN ISSUES
+   These are discovered during grammar production. They are NOT
+   blockers for Stream A completion but must be resolved before
+   Phase 2 parser implementation begins.
+
+   OI-GXL-01: String mutability and interning
+     The semantics do not specify whether string values are
+     interned or copied. Go and C# may differ. For now, GXL
+     strings are immutable value types (no observable difference),
+     but this should be explicit in the conformance corpus.
+
+   OI-GXL-02: Integer overflow in arithmetic
+     If two large numbers are multiplied and the result exceeds
+     float64 precision, the value silently loses precision (IEEE 754
+     round-to-nearest). This is not an error. Authors relying on
+     exact integer arithmetic beyond 2^53 must use string-based
+     capture paths and string comparison, not arithmetic. A warning
+     could be emitted but is not specified here.
+
+   OI-GXL-03: Modulo operator semantics for negative operands
+     '%' follows IEEE 754 floating-point remainder (fmod) semantics:
+     result has the sign of the dividend. -7 % 3 = -1. This matches
+     Go's behavior but differs from Python's (which always returns a
+     non-negative result when divisor is positive). Conformance corpus
+     must include negative-operand modulo vectors.
+
+   OI-GXL-04: 'not null' behavior
+     §5.5 defines 'not null' as GXL-TYPE-002. However, authors may
+     want to test for non-null variables. The pattern 'x != null'
+     should be preferred and documented in the authoring guide.
+     Consider adding a 'defined(x)' builtin in v2 for this use case.
+
+   OI-GXL-05: GDP path in function argument
+     The grammar allows 'str.contains(config.key, "value")' where
+     config.key is a GDP path. This is intentional but the resolution
+     semantics (resolve GDP in argument position, then pass value to
+     function) should be explicitly in a conformance test vector.
+
+   OI-GXL-06: Empty argument list vs. no-argument call
+     'len()' with no arguments must raise GXL-TYPE-004. The grammar
+     allows 'LenCall = KW_LEN LPAREN Expression RPAREN', which
+     structurally requires one argument. But 'ArgList' allows empty.
+     Clarify: LenCall has exactly one required argument (the grammar
+     above is correct; empty ArgList applies only to NamespaceCall).
+
+   OI-GXL-07: Multiline expressions in YAML
+     YAML block scalars (|, >) will preserve newlines in the expression
+     string. The GXL lexer treats newlines as whitespace (insignificant),
+     so multiline expressions are valid. Runbook authors should use
+     YAML literal block scalar for long conditions. This should be
+     documented in the authoring guide.
+*)

@@ -1,0 +1,58 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: r11-iterate-loop
+name: r11 Iterate Loop
+description: |
+  Demonstrates the iterate FlowNode with cli steps.
+  Loops over a list of services, printing each one and
+  capturing the last processed item via collect.
+
+inputs:
+  services:
+    type: array
+    description: List of service names to process
+    default: ["svc-alpha", "svc-beta", "svc-gamma"]
+
+flow:
+  # Step 1: Announce start of loop
+  - step:
+      id: init
+      type: cli
+      title: Announce iteration start
+      command: echo
+      args: ["Starting service health sweep"]
+      capture:
+        init_msg: stdout
+
+  # Step 2: Iterate over each service
+  - iterate:
+      id: service_loop
+      over: "$.services"
+      as: svc
+      max: 100
+      collect:
+        last_service: "{{ .svc }}"
+      steps:
+        - step:
+            id: log_service
+            type: cli
+            title: "Log service: {{ .svc }}"
+            command: echo
+            args: ["Checking service: {{ .svc }}"]
+
+        - step:
+            id: check_health
+            type: cli
+            title: "Check health endpoint for {{ .svc }}"
+            command: echo
+            args: ["Health OK for {{ .svc }}"]
+            capture:
+              health_status: stdout
+
+  # Step 3: Report completion
+  - step:
+      id: done
+      type: cli
+      title: Report sweep complete
+      command: echo
+      args: ["Service sweep complete. Last checked: {{ .last_service }}"]

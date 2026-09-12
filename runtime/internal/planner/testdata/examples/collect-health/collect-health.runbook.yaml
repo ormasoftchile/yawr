@@ -1,0 +1,101 @@
+# Pre-install machine health check.
+#
+# Iterates over required hosts, runs DNS lookup (nslookup) and ping for each.
+# Both checks always run — neither failure aborts the loop.
+# Ends with Go/No-Go: clean display if all pass, error report if any fail.
+#
+# Shows: iterate + include + capture + accumulation + branch + display
+apiVersion: yawr.runbook/v1
+
+id: collect-health
+name: collect-health
+kind: mitigation
+description: >
+  Pre-install connectivity check. Runs nslookup and ping for each required
+  host. Reports Go/No-Go at the end with details of any failures.
+
+imports:
+  check: check-service.runbook.yaml
+
+vars:
+  hosts: "registry.npmjs.org,github.com"
+  errors: ""
+  report: ""
+
+flow:
+  - iterate:
+      id: check_loop
+      over: hosts
+      as: svc
+      steps:
+        - step:
+            id: check_host
+            type: include
+            title: "Check {{ .svc }}"
+            include:
+              runbook: check-service.runbook.yaml
+              with:
+                service_host: "{{ .svc }}"
+            capture:
+              last_host: checked_host
+              last_ok: host_ok
+              last_errors: host_errors
+              last_summary: host_summary
+
+        - step:
+            id: accumulate
+            type: noop
+            title: "Record {{ .svc }}"
+            capture:
+              errors: "{{ .errors }}{{ .last_errors }}"
+              report: "{{ .report }}  {{ .last_host }}: {{ .last_summary }}\n"
+
+  - step:
+      id: show_result
+      type: branch
+      branches:
+        - condition: 'errors == ""'
+          label: All checks passed
+          steps:
+            - step:
+                id: go_ahead
+                type: display
+                title: "Go ahead"
+                display:
+                  content: |
+                    ✅  PRE-INSTALL CHECK: GO AHEAD
+                    ================================
+
+                    All connectivity checks passed.
+
+                    {{ .report }}
+                    You are clear to install.
+                  format: text
+
+        - condition: 'errors != ""'
+          label: Checks failed
+          steps:
+            - step:
+                id: no_go
+                type: display
+                title: "Check failures"
+                display:
+                  content: |
+                    ❌  PRE-INSTALL CHECK: NOT OK
+                    ==============================
+
+                    The following checks failed:
+
+                    {{ .errors }}
+                    Full results:
+                    {{ .report }}
+                    Resolve the issues above before proceeding.
+                  format: text
+
+  - step:
+      id: done
+      type: end
+      title: Pre-install check complete
+      outcome:
+        category: resolved
+        code: precheck_complete

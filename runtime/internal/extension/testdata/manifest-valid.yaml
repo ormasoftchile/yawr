@@ -1,0 +1,5 @@
+name: hello-ext
+version: "0.1.0"
+entrypoint: hello-ext
+capabilities:
+  - capability/tool-registration

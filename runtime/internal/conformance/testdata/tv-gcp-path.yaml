@@ -1,0 +1,429 @@
+# tv-gcp-path.yaml
+# Category:    GCP-PATH
+# Grammar ref: spec/grammar/gcp.ebnf §3 (CapturePath), §4 (GDP), §5 (capture semantics), §6 (defaults), §7 (errors)
+# Spec ref:    design/yawr/sections/03c-capture-paths.tex
+# Schema ref:  design/yawr/conformance/vector.schema.json
+# Owner:       Yawr runtime
+# Date:        2026-06-05T09:25:14.584-07:00
+#
+# Authority:
+#   - Grammar source: spec/grammar/gcp.ebnf (CapturePath, LocalCapture,
+#     StepCapture, HttpCapture, EventCapture, GDP, PathSegment, error catalog)
+#   - Semantic source: design/yawr/sections/03c-capture-paths.tex
+#   - Ratification: .squad/decisions/inbox/copilot-phase2-day1-open-questions-resolved.md Q1
+#   - Phase 2 dependency: design/yawr/phase2-go-runtime-plan.md Day 8 GCP parser/resolver
+#
+# Purpose: Pin down YAWR Capture Path parsing and black-box resolution for local,
+# cross-step, HTTP, and event sources. Source data is encoded in `variables` as
+# the synthetic source environment supplied to the resolver: stdout/stderr/
+# exit_code, steps, http, event, and capture_default where default policy is under test.
+
+vectors:
+
+  - id: TV-GCP-PATH-001
+    category: GCP-RESOLVE
+    description: "stdout with no GDP suffix captures the full stdout text as a string."
+    input: "stdout"
+    variables: {stdout: "plain output\n"}
+    expected:
+      value: "plain output\n"
+    tags: [local, stdout, scalar]
+
+  - id: TV-GCP-PATH-002
+    category: GCP-RESOLVE
+    description: "stderr with no GDP suffix captures the full stderr text as a string."
+    input: "stderr"
+    variables: {stderr: "warning: disk high"}
+    expected:
+      value: "warning: disk high"
+    tags: [local, stderr, scalar]
+
+  - id: TV-GCP-PATH-003
+    category: GCP-RESOLVE
+    description: "exit_code captures the numeric process status."
+    input: "exit_code"
+    variables: {exit_code: 7}
+    expected:
+      value: 7
+    tags: [local, exit-code, scalar, snake-case]
+
+  - id: TV-GCP-PATH-004
+    category: GCP-PARSE
+    description: "exitCode camelCase is rejected; only exit_code is legal."
+    input: "exitCode"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-001
+    note: "gcp.ebnf §3.4 and §9 OI-GCP-01: exitCode is not a recognized source prefix."
+    tags: [parse-error, exit-code, camel-case, OI-GCP-01]
+
+  - id: TV-GCP-PATH-005
+    category: GCP-RESOLVE
+    description: "json.foo resolves a top-level JSON object field from stdout."
+    input: "json.foo"
+    variables: {stdout: '{"foo":"bar","other":1}'}
+    expected:
+      value: "bar"
+    tags: [local, json, dot-segment, scalar]
+
+  - id: TV-GCP-PATH-006
+    category: GCP-RESOLVE
+    description: "json.foo.bar resolves a nested JSON object field."
+    input: "json.foo.bar"
+    variables: {stdout: '{"foo":{"bar":42}}'}
+    expected:
+      value: 42
+    tags: [local, json, dot-segment, nested]
+
+  - id: TV-GCP-PATH-007
+    category: GCP-RESOLVE
+    description: "json.items[0] resolves the first element of a JSON array field."
+    input: "json.items[0]"
+    variables: {stdout: '{"items":["alpha","beta"]}'}
+    expected:
+      value: "alpha"
+    tags: [local, json, index-segment, array]
+
+  - id: TV-GCP-PATH-008
+    category: GCP-RESOLVE
+    description: "json.items[0].name resolves an object field after array indexing."
+    input: "json.items[0].name"
+    variables: {stdout: '{"items":[{"name":"svc-a"},{"name":"svc-b"}]}'}
+    expected:
+      value: "svc-a"
+    tags: [local, json, mixed, index-then-dot]
+
+  - id: TV-GCP-PATH-009
+    category: GCP-RESOLVE
+    description: "json.deeply.nested.path[2].x resolves a deep mixed path."
+    input: "json.deeply.nested.path[2].x"
+    variables: {stdout: '{"deeply":{"nested":{"path":[{"x":0},{"x":1},{"x":"target"}]}}}'}
+    expected:
+      value: "target"
+    tags: [local, json, mixed, deep-nesting]
+
+  - id: TV-GCP-PATH-010
+    category: GCP-RESOLVE
+    description: "yaml.foo resolves a top-level YAML mapping field from stdout."
+    input: "yaml.foo"
+    variables:
+      stdout: |
+        foo: bar
+        other: 1
+    expected:
+      value: "bar"
+    tags: [local, yaml, dot-segment, scalar]
+
+  - id: TV-GCP-PATH-011
+    category: GCP-RESOLVE
+    description: "yaml.foo.bar resolves a nested YAML mapping field."
+    input: "yaml.foo.bar"
+    variables:
+      stdout: |
+        foo:
+          bar: 42
+    expected:
+      value: 42
+    tags: [local, yaml, dot-segment, nested]
+
+  - id: TV-GCP-PATH-012
+    category: GCP-RESOLVE
+    description: "Bare json captures the entire parsed JSON root object as PJVM."
+    input: "json"
+    variables: {stdout: '{"foo":"bar","items":[1,2]}' }
+    expected:
+      value: {foo: "bar", items: [1, 2]}
+    note: "OI-GCP-02: LocalStructured permits [ GDP ]; absent GDP captures the whole parsed root."
+    tags: [local, json, bare-root, subtree, OI-GCP-02]
+
+  - id: TV-GCP-PATH-013
+    category: GCP-RESOLVE
+    description: "Bare yaml captures the entire parsed YAML root object as PJVM."
+    input: "yaml"
+    variables:
+      stdout: |
+        foo: bar
+        items:
+          - 1
+          - 2
+    expected:
+      value: {foo: "bar", items: [1, 2]}
+    note: "OI-GCP-02 applies to yaml as well as json."
+    tags: [local, yaml, bare-root, subtree, OI-GCP-02]
+
+  - id: TV-GCP-PATH-014
+    category: GCP-RESOLVE
+    description: "Bare json captures an array root as a PJVM subtree."
+    input: "json"
+    variables: {stdout: '[{"id":"a"},{"id":"b"}]'}
+    expected:
+      value: [{id: "a"}, {id: "b"}]
+    tags: [local, json, bare-root, subtree, array-root, OI-GCP-02]
+
+  - id: TV-GCP-PATH-015
+    category: GCP-RESOLVE
+    description: "stdout.incident.id parses stdout as JSON."
+    input: "stdout.incident.id"
+    variables: {stdout: '{"incident":{"id":"INC-123"}}'}
+    expected:
+      value: "INC-123"
+    note: "gcp.ebnf §3.4 and §9 preserve stdout.incident.id as equivalent to json.incident.id."
+    tags: [local, stdout, dot-path, json]
+
+  - id: TV-GCP-PATH-016
+    category: GCP-RESOLVE
+    description: "json.config resolves to an object subtree, not a serialized string."
+    input: "json.config"
+    variables: {stdout: '{"config":{"region":"us-east-1","retries":3}}'}
+    expected:
+      value: {region: "us-east-1", retries: 3}
+    tags: [local, json, subtree, object]
+
+  - id: TV-GCP-PATH-017
+    category: GCP-RESOLVE
+    description: "json.services resolves to an array subtree for iterate.over consumers."
+    input: "json.services"
+    variables: {stdout: '{"services":["svc-a","svc-b"]}'}
+    expected:
+      value: ["svc-a", "svc-b"]
+    note: "gcp.ebnf §5.1.3: subtree captures of array type may feed iterate.over."
+    tags: [local, json, subtree, array, iterate]
+
+  - id: TV-GCP-PATH-018
+    category: GCP-RESOLVE
+    description: "json.missing is parse-valid but fails when a DotSegment key is absent."
+    input: "json.missing"
+    variables: {stdout: '{"present":true}'}
+    expected:
+      error_class: GCP-RESOLVE
+      error_code: GCP-RESOLVE-002
+    tags: [local, json, path-missing, runtime-error]
+
+  - id: TV-GCP-PATH-019
+    category: GCP-RESOLVE
+    description: "json.items[9] is parse-valid but fails when the array index is out of bounds."
+    input: "json.items[9]"
+    variables: {stdout: '{"items":[1,2,3]}'}
+    expected:
+      error_class: GCP-RESOLVE
+      error_code: GCP-RESOLVE-003
+    tags: [local, json, out-of-bounds, runtime-error]
+
+  - id: TV-GCP-PATH-020
+    category: GCP-RESOLVE
+    description: "json.foo against non-JSON stdout fails the structured-source type assertion."
+    input: "json.foo"
+    variables: {stdout: "not json at all"}
+    expected:
+      error_class: GCP-RESOLVE
+      error_code: GCP-RESOLVE-004
+    tags: [local, json, parse-failure, runtime-error, type-assertion]
+
+  - id: TV-GCP-PATH-021
+    category: GCP-PARSE
+    description: "json.foo? is rejected because '?' is not legal in a GCP path segment."
+    input: "json.foo?"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-001
+    note: "No catalog code names arbitrary illegal path characters; classify as unrecognized token/source syntax."
+    tags: [parse-error, invalid-character]
+
+  - id: TV-GCP-PATH-022
+    category: GCP-PARSE
+    description: "json.foo. is rejected as a trailing-dot empty path segment."
+    input: "json.foo."
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-004
+    tags: [parse-error, trailing-dot, empty-segment]
+
+  - id: TV-GCP-PATH-023
+    category: GCP-PARSE
+    description: "json.items[-1] is rejected because negative indices are forbidden."
+    input: "json.items[-1]"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-003
+    tags: [parse-error, negative-index]
+
+  - id: TV-GCP-PATH-024
+    category: GCP-PARSE
+    description: "json.items[abc] is rejected because IndexSegment requires INTEGER."
+    input: "json.items[abc]"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-001
+    note: "Malformed bracket content is not an INTEGER; use the generic syntax rejection code."
+    tags: [parse-error, malformed-bracket]
+
+  - id: TV-GCP-PATH-025
+    category: GCP-PARSE
+    description: "exit_code.status is rejected because exit_code permits no GDP suffix."
+    input: "exit_code.status"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-002
+    tags: [parse-error, invalid-suffix, exit-code]
+
+  - id: TV-GCP-PATH-026
+    category: GCP-RESOLVE
+    description: "http.status captures the HTTP status code as a number."
+    input: "http.status"
+    variables: {http: {status: 202}}
+    expected:
+      value: 202
+    tags: [http, status, scalar]
+
+  - id: TV-GCP-PATH-027
+    category: GCP-PARSE
+    description: "http.status.extra is rejected because http.status permits no GDP suffix."
+    input: "http.status.extra"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-002
+    tags: [parse-error, invalid-suffix, http]
+
+  - id: TV-GCP-PATH-028
+    category: GCP-RESOLVE
+    description: "http.body.data.id parses the HTTP body as JSON and resolves the nested id."
+    input: "http.body.data.id"
+    variables: {http: {body: '{"data":{"id":"req-7"}}'}}
+    expected:
+      value: "req-7"
+    tags: [http, body, json, nested]
+
+  - id: TV-GCP-PATH-029
+    category: GCP-RESOLVE
+    description: "http.headers.content-type captures a present HTTP header string."
+    input: "http.headers.content-type"
+    variables: {http: {headers: {content-type: "application/json"}}}
+    expected:
+      value: "application/json"
+    tags: [http, header, scalar, hyphen]
+
+  - id: TV-GCP-PATH-030
+    category: GCP-RESOLVE
+    description: "An absent http.headers path resolves to null, not a hard resolve error."
+    input: "http.headers.x-request-id"
+    variables: {http: {headers: {content-type: "application/json"}}}
+    expected:
+      value: null
+    note: "gcp.ebnf §3.2 and §7.2: absent HTTP headers are a soft resolve to null."
+    tags: [http, header, missing, "null", soft-resolve]
+
+  - id: TV-GCP-PATH-031
+    category: GCP-PARSE
+    description: "http.headers.content:type is rejected because ':' is not legal in HEADER_NAME."
+    input: "http.headers.content:type"
+    variables: {}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-005
+    tags: [parse-error, header, invalid-header-name]
+
+  - id: TV-GCP-PATH-032
+    category: GCP-RESOLVE
+    description: "event.id captures the triggering event id as a string."
+    input: "event.id"
+    variables: {event: {id: "evt-001"}}
+    expected:
+      value: "evt-001"
+    tags: [event, id, scalar]
+
+  - id: TV-GCP-PATH-033
+    category: GCP-RESOLVE
+    description: "event.body.type parses the event body as JSON and resolves a field."
+    input: "event.body.type"
+    variables: {event: {body: '{"type":"push","repository":"yawr"}'}}
+    expected:
+      value: "push"
+    tags: [event, body, json, scalar]
+
+  - id: TV-GCP-PATH-034
+    category: GCP-RESOLVE
+    description: "event.headers.x-github-event captures a present event header string."
+    input: "event.headers.x-github-event"
+    variables: {event: {headers: {x-github-event: "push"}}}
+    expected:
+      value: "push"
+    tags: [event, header, scalar, hyphen]
+
+  - id: TV-GCP-PATH-035
+    category: GCP-RESOLVE
+    description: "step.run_scan.json.result resolves JSON output from a named peer step."
+    input: "step.run_scan.json.result"
+    variables: {steps: {run_scan: {stdout: '{"result":"clean"}', exit_code: 0}}}
+    expected:
+      value: "clean"
+    tags: [step, cross-step, json, scalar]
+
+  - id: TV-GCP-PATH-036
+    category: GCP-RESOLVE
+    description: "step.run_scan.stdout.result uses the stdout JSON dot-path form cross-step."
+    input: "step.run_scan.stdout.result"
+    variables: {steps: {run_scan: {stdout: '{"result":"clean"}', exit_code: 0}}}
+    expected:
+      value: "clean"
+    tags: [step, cross-step, stdout, dot-path]
+
+  - id: TV-GCP-PATH-037
+    category: GCP-RESOLVE
+    description: "step.run_scan.exit_code captures a peer step exit status as a number."
+    input: "step.run_scan.exit_code"
+    variables: {steps: {run_scan: {stdout: "ok", exit_code: 0}}}
+    expected:
+      value: 0
+    tags: [step, cross-step, exit-code, scalar]
+
+  - id: TV-GCP-PATH-038
+    category: GCP-PARSE
+    description: "step.missing.stdout is rejected at plan time when the StepId is absent."
+    input: "step.missing.stdout"
+    variables: {steps: {run_scan: {stdout: "ok"}}}
+    expected:
+      error_class: GCP-PARSE
+      error_code: GCP-PARSE-006
+    note: "This is semantic plan-time validation, not lexical parsing; gcp.ebnf still catalogs it under GCP-PARSE."
+    tags: [step, cross-step, missing-step, plan-error]
+
+  - id: TV-GCP-PATH-039
+    category: GCP-RESOLVE
+    description: "YAML 1.2 treats an ISO date-looking scalar as a string, not a timestamp type."
+    input: "yaml.released_on"
+    variables:
+      stdout: |
+        released_on: 2026-06-04
+    expected:
+      value: "2026-06-04"
+    note: "gcp.ebnf §9 OI-GCP-06: YAML 1.2 core schema has no timestamp PJVM type; date-like scalars stay strings."
+    tags: [local, yaml, PJVM, scalar, OI-GCP-06]
+
+  - id: TV-GCP-PATH-040
+    category: GCP-DEFAULT
+    description: "A capture.default on an object subtree is rejected with GCP-DEFAULT-SUBTREE."
+    input: "json.config"
+    variables: {stdout: '{"config":{"region":"us-east-1"}}', capture_default: {}}
+    expected:
+      error_class: GCP-DEFAULT
+      error_code: GCP-DEFAULT-SUBTREE
+    note: "gcp.ebnf §6.3 / 03c capture.default policy: defaults are scalar-only."
+    tags: [default, subtree, object, policy-error, OQ2]
+
+  - id: TV-GCP-PATH-041
+    category: GCP-DEFAULT
+    description: "A capture.default type mismatch for exit_code is rejected with GCP-TYPE-001."
+    input: "exit_code"
+    variables: {exit_code: 3, capture_default: "not_run"}
+    expected:
+      error_class: GCP-TYPE
+      error_code: GCP-TYPE-001
+    note: "gcp.ebnf §6.2 and §7.4: exit_code is numeric; a string default is incompatible."
+    tags: [default, type-mismatch, exit-code, policy-error]

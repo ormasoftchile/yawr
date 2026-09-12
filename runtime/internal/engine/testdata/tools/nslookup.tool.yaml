@@ -1,0 +1,61 @@
+apiVersion: yawr.tool/v1
+transport:
+  command: nslookup
+  mode: native
+actions:
+  - name: lookup
+    description: Look up a hostname or IP using default DNS server
+    argv:
+      - "{{ .name }}"
+    args:
+      name:
+        type: string
+        required: true
+        description: Hostname or IP address to query
+    returns: text
+  - name: lookup-server
+    description: Look up a hostname using a specific DNS server
+    argv:
+      - "{{ .name }}"
+      - "{{ .server }}"
+    args:
+      name:
+        type: string
+        required: true
+        description: Hostname or IP address to query
+      server:
+        type: string
+        required: true
+        description: DNS server to query
+    returns: text
+  - name: reverse
+    description: Perform reverse DNS lookup (PTR record)
+    argv:
+      - -type=PTR
+      - "{{ .ip }}"
+    args:
+      ip:
+        type: string
+        required: true
+        description: IP address to reverse lookup
+    returns: text
+  - name: query-type
+    description: Query a specific DNS record type
+    argv:
+      - -type={{ .type }}
+      - "{{ .name }}"
+    args:
+      name:
+        type: string
+        required: true
+        description: Domain name to query
+      type:
+        type: string
+        required: false
+        default: A
+        description: DNS record type (A, AAAA, MX, TXT, etc.)
+    returns: text
+meta:
+  name: nslookup
+  version: "1.0"
+  description: Query DNS name servers for domain name or IP address mapping

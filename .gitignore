@@ -1,0 +1,60 @@
+# Squad: ignore runtime state (logs, inbox, sessions)
+# Note: .squad/casting/* is identity and MUST be committed to main, not ignored
+.squad/orchestration-log/
+.squad/log/
+.squad/decisions/inbox/
+.squad/sessions/
+.squad/.scratch/
+.squad/.cache/
+# Squad: SubSquad activation file (local to this machine)
+.squad-workstream
+.copilot/
+.tools/
+
+# Node and extension build artifacts
+node_modules/
+apps/vscode/out/
+apps/vscode/dist/
+apps/vscode/.vscode-test/
+apps/vscode/coverage/
+apps/vscode/test-results/
+apps/vscode/*.vsix
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Go build, test, profiling, and local runtime data
+/yawr
+/yawr.exe
+/apps/yawr-*.exe
+/execution-progress-fix/
+runtime/yawr
+runtime/yawr.exe
+runtime/*.test
+runtime/coverage.out
+runtime/*.cover
+runtime/*.prof
+runtime/*.pprof
+runtime/.cache/
+runtime/.yawr/runs/
+runtime/.runbook/runs/
+runtime/**/.yawr/runs/
+runtime/**/.runbook/runs/
+runtime/**/adapter-test-*/
+runtime/**/resume-test-*/
+runtime/cmd/serve/traces/
+
+# Yawr release artifacts
+apps/vscode/yawr-preview*.vsix
+
+# General local caches and run output
+.cache/
+.test-data/
+coverage/
+test-results/
+*.vsix
+/.yawr/
+/.runbook/

@@ -1,0 +1,4 @@
+apiVersion: yawr.kit/v1
+kits:
+  - name: yawr-mobile-platform
+    version: ">=1.0.0"

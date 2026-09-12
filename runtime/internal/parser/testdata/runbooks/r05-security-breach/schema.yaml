@@ -1,0 +1,682 @@
+$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
+apiVersion: yawr.runbook/v1
+id: security-breach-containment
+name: Security Breach Containment and Forensics
+kind: mitigation
+description: |
+  Responds to detected security breach. Assesses severity, executes
+  containment (isolate, revoke credentials), runs forensics, notifies
+  stakeholders, and initiates remediation. Includes rollback compensation.
+
+inputs:
+  alert_id:
+    type: string
+    required: true
+    description: SIEM alert ID
+    from: webhook.alert_id
+  affected_systems:
+    type: string
+    required: true
+    description: Comma-separated list of affected systems
+    from: webhook.affected_systems
+  alert_description:
+    type: string
+    required: true
+    description: Alert description from SIEM
+    from: webhook.description
+
+toolRefs:
+  - name: aws
+  - name: okta
+  - name: palo-alto
+  - name: auth-service
+  - name: internal-api
+  - name: credential-revoker
+  - name: log-exporter
+  - name: splunk
+  - name: email-notify
+  - name: pagerduty-notify
+  - name: slack-notify
+  - name: incident-tracker
+
+governance:
+  rules:
+    - effects: ["security.read"]
+      action: allow
+    - effects: ["security.isolate", "credentials.revoke"]
+      action: require-approval
+      min_approvers: 1
+      roles: [ciso]
+
+flow:
+  # Step 1: Receive Security Alert
+  # INTENT: Pause execution until the SIEM fires a webhook for this incident.
+  # Previously: type: extension (incorrect)
+  - step:
+      id: receive_alert
+      type: wait_for_event
+      title: Receive SIEM security alert
+      event:
+        source: webhook
+        id: siem.alert.security_breach
+      capture:
+        alert_timestamp: json.timestamp
+        incident_id: json.incidentId
+      timeout: 1h
+      on_timeout: fail
+      contract:
+        effects: []
+        reads: []
+        writes: [alert_timestamp, incident_id]
+
+  # Step 2: Security Officer Triage
+  - step:
+      id: triage_severity
+      type: choice
+      title: Security officer severity assessment
+      prompt: |
+        Security alert received: {{ .alert_description }}
+        Affected systems: {{ .affected_systems }}
+        
+        Assess breach severity:
+      options:
+        - label: "Critical — Active data exfiltration, ransomware, or RCE"
+          value: critical
+        - label: "High — Compromised credentials, unauthorized access to production"
+          value: high
+        - label: "Medium — Suspicious activity, potential phishing"
+          value: medium
+        - label: "Low — False positive, benign anomaly"
+          value: low
+      variable: severity
+      default: high # On 10-minute timeout, default to High
+      approvals:
+        min: 1
+        roles: [security-oncall]
+        timeout: 10m
+        on_timeout: skip # Proceed with default value on timeout
+
+  # Step 3: Branch by Severity
+  - step:
+      id: branch_by_severity
+      type: branch
+      title: Route by severity
+      branches:
+        # Branch: Critical
+        - condition: 'severity == "critical"'
+          label: Critical Containment
+          steps:
+            # Step 4a: Executive approval for full lockdown
+            - step:
+                id: exec_approval_lockdown
+                type: collector
+                title: CISO approval for full lockdown
+                prompt: |
+                  ⚠️ WARNING: This will cause a PRODUCTION OUTAGE ⚠️
+                  
+                  Alert: {{ .alert_description }}
+                  Affected systems: {{ .affected_systems }}
+                  
+                  Approve full system lockdown?
+                fields:
+                  - name: lockdown_approved
+                    type: text
+                    label: "Type 'lockdown' to approve"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [ciso]
+                  timeout: 5m
+                  on_timeout: escalate
+                  escalate_to: [ceo]
+
+            # Step 4b: Register rollback compensation
+            - step:
+                id: register_rollback
+                type: compensate
+                title: Register containment rollback
+                compensate:
+                  on: failure
+                  steps:
+                    - step:
+                        id: restore_network_access
+                        type: tool
+                        title: Restore network access
+                        tool:
+                          name: aws
+                          action: restore-security-groups
+                        contract:
+                          effects: [security.restore]
+                    - step:
+                        id: unsuspend_accounts
+                        type: tool
+                        title: Unsuspend accounts
+                        tool:
+                          name: okta
+                          action: unsuspend-all-users
+                        contract:
+                          effects: [credentials.restore]
+
+            # Step 4c: Isolate affected systems (parallel)
+            - step:
+                id: isolate_systems
+                type: parallel
+                title: Isolate affected systems
+                branches:
+                  - label: Disable AWS security groups
+                    steps:
+                      - step:
+                          id: disable_sg_ingress
+                          type: tool
+                          title: Disable AWS security group ingress
+                          tool:
+                            name: aws
+                            action: revoke-sg-ingress
+                            args:
+                              systems: "{{ .affected_systems }}"
+                          contract:
+                            effects: ["security.isolate"]
+                            reads: [affected_systems]
+
+                  - label: Shutdown EC2 instances
+                    steps:
+                      - step:
+                          id: shutdown_instances
+                          type: tool
+                          title: Shut down compromised EC2 instances
+                          tool:
+                            name: aws
+                            action: stop-instances
+                            args:
+                              systems: "{{ .affected_systems }}"
+                          contract:
+                            effects: ["security.isolate"]
+                            reads: [affected_systems]
+
+                  - label: Block IPs at firewall
+                    steps:
+                      - step:
+                          id: block_ips
+                          type: tool
+                          title: Block attacker IPs at firewall
+                          tool:
+                            name: palo-alto
+                            action: block-ips
+                            args:
+                              alert_id: "{{ .alert_id }}"
+                          contract:
+                            effects: ["security.isolate"]
+                            reads: [alert_id]
+
+                  - label: Disable VPN access
+                    steps:
+                      - step:
+                          id: disable_vpn
+                          type: tool
+                          title: Disable VPN access via Okta
+                          tool:
+                            name: okta
+                            action: disable-vpn-policy
+                          contract:
+                            effects: ["security.isolate"]
+                join:
+                  wait_for: all
+                  on_failure: fail
+
+            # Step 4d: Revoke all production credentials (parallel)
+            - step:
+                id: revoke_credentials
+                type: parallel
+                title: Revoke all production credentials
+                branches:
+                  - label: Rotate AWS IAM keys
+                    steps:
+                      - step:
+                          id: rotate_iam
+                          type: tool
+                          title: Rotate AWS IAM keys
+                          tool:
+                            name: aws
+                            action: rotate-iam-keys
+                          contract:
+                            effects: ["credentials.revoke"]
+                  - label: Invalidate JWT tokens
+                    steps:
+                      - step:
+                          id: invalidate_jwt
+                          type: tool
+                          title: Invalidate JWT tokens
+                          tool:
+                            name: auth-service
+                            action: invalidate-all-tokens
+                          contract:
+                            effects: ["credentials.revoke"]
+                  - label: Force password reset
+                    steps:
+                      - step:
+                          id: force_password_reset
+                          type: tool
+                          title: Force password reset for all users
+                          tool:
+                            name: okta
+                            action: force-password-reset-all
+                          contract:
+                            effects: ["credentials.revoke"]
+                  - label: Revoke API keys
+                    steps:
+                      - step:
+                          id: revoke_api_keys
+                          type: tool
+                          title: Revoke all API keys
+                          tool:
+                            name: internal-api
+                            action: revoke-all-keys
+                          contract:
+                            effects: ["credentials.revoke"]
+                join:
+                  wait_for: all
+                  on_failure: fail
+
+            # Step 4e: Snapshot for forensics (parallel)
+            - step:
+                id: forensics_snapshots
+                type: parallel
+                title: Snapshot affected systems for forensics
+                branches:
+                  - label: EBS snapshots
+                    steps:
+                      - step:
+                          id: ebs_snapshots
+                          type: tool
+                          title: Create EBS snapshots
+                          tool:
+                            name: aws
+                            action: create-ebs-snapshots
+                            args:
+                              systems: "{{ .affected_systems }}"
+                          contract:
+                            effects: [aws.snapshot]
+                            reads: [affected_systems]
+                  - label: CloudTrail export
+                    steps:
+                      - step:
+                          id: export_cloudtrail
+                          type: tool
+                          title: Export CloudTrail logs (7 days)
+                          tool:
+                            name: aws
+                            action: export-cloudtrail
+                            args:
+                              days: 7
+                          contract:
+                            effects: [aws.export]
+                  - label: Application logs
+                    steps:
+                      - step:
+                          id: export_app_logs
+                          type: tool
+                          title: Export application logs (24h)
+                          tool:
+                            name: log-exporter
+                            action: export
+                            args:
+                              hours: 24
+                          contract:
+                            effects: [logs.export]
+                join:
+                  wait_for: all
+                  on_failure: continue # continue even if some snapshots fail
+
+            # Step 4f: Verify production health
+            - step:
+                id: verify_production_health
+                type: cli
+                title: Verify production health post-containment
+                command: curl
+                args:
+                  - "-f"
+                  - "-s"
+                  - "https://api.company.com/health"
+                retry:
+                  max: 5
+                  interval: 30s
+                  backoff: linear
+
+        # Branch: High
+        - condition: 'severity == "high"'
+          label: High Containment
+          steps:
+            - step:
+                id: suspend_accounts_high
+                type: tool
+                title: Suspend compromised accounts
+                tool:
+                  name: okta
+                  action: suspend-accounts
+                  args:
+                    alert_id: "{{ .alert_id }}"
+                contract:
+                  effects: [credentials.revoke]
+                  reads: [alert_id]
+
+            - step:
+                id: revoke_creds_high
+                type: tool
+                title: Revoke credentials for affected users
+                tool:
+                  name: credential-revoker
+                  action: revoke-for-alert
+                  args:
+                    alert_id: "{{ .alert_id }}"
+                contract:
+                  effects: [credentials.revoke]
+                  reads: [alert_id]
+
+            - step:
+                id: isolate_hosts_high
+                type: tool
+                title: Isolate affected hosts (block external traffic only)
+                tool:
+                  name: aws
+                  action: restrict-sg-egress
+                  args:
+                    systems: "{{ .affected_systems }}"
+                contract:
+                  effects: ["security.isolate"]
+                  reads: [affected_systems]
+
+        # Branch: Medium
+        - condition: 'severity == "medium"'
+          label: Medium Containment
+          steps:
+            - step:
+                id: investigate_medium
+                type: collector
+                title: Investigate suspicious activity in SIEM
+                prompt: |
+                  Investigate the suspicious activity: {{ .alert_description }}
+                fields:
+                  - name: login_history_reviewed
+                    type: text
+                    label: Reviewed user login history? (yes/no)
+                    required: true
+                  - name: lateral_movement_checked
+                    type: text
+                    label: Checked for lateral movement? (yes/no)
+                    required: true
+                  - name: compromise_confirmed
+                    type: text
+                    label: Compromise confirmed? (yes/no)
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [security-analyst]
+                  timeout: 1h
+                  on_timeout: escalate
+                  escalate_to: [senior-security-analyst]
+
+            # GAP: Step 6b requires routing back to "High Containment" branch from within
+            #      "Medium Containment" branch. Cross-branch goto is not expressible in schema.
+            #      Workaround: inline the High Containment steps here if compromise_confirmed == yes.
+            - step:
+                id: medium_escalate_if_confirmed
+                type: branch
+                title: Escalate if compromise confirmed
+                branches:
+                  - condition: 'compromise_confirmed == "yes"'
+                    label: Compromise confirmed — escalate
+                    steps:
+                      - step:
+                          id: suspend_accounts_medium_escalated
+                          type: tool
+                          title: Suspend compromised accounts (escalated from medium)
+                          tool:
+                            name: okta
+                            action: suspend-accounts
+                            args:
+                              alert_id: "{{ .alert_id }}"
+                          contract:
+                            effects: [credentials.revoke]
+                            reads: [alert_id]
+
+        # Branch: Low
+        - condition: 'severity == "low"'
+          label: Low Containment
+          steps:
+            - step:
+                id: log_false_positive
+                type: cli
+                title: Log false positive
+                command: bash
+                args:
+                  - "-c"
+                  - "echo 'FALSE_POSITIVE alert_id={{ .alert_id }} timestamp={{ .alert_timestamp }}' >> /var/log/yawr/false_positives.log"
+
+            - step:
+                id: close_pagerduty_low
+                type: tool
+                title: Close PagerDuty incident
+                tool:
+                  name: pagerduty-notify
+                  action: resolve-alert
+                  args:
+                    incident_id: "{{ .incident_id }}"
+                contract:
+                  effects: [pagerduty.write]
+                  reads: [incident_id]
+
+            - step:
+                id: end_low
+                type: end
+                title: False positive — runbook complete
+                outcome:
+                  category: resolved
+                  code: false_positive
+
+  # Step 8: Forensics Investigation
+  # GAP: Prose says forensics runs IN PARALLEL WITH containment branches (4, 5, 6).
+  #      Cross-branch parallelism is not expressible. Forensics runs AFTER containment here.
+  - step:
+      id: forensics_investigation
+      type: parallel
+      title: Forensics investigation
+      branches:
+        - label: IOC analysis
+          steps:
+            - step:
+                id: analyze_iocs
+                type: tool
+                title: Analyze logs for IOCs
+                tool:
+                  name: splunk
+                  action: search-iocs
+                  args:
+                    alert_id: "{{ .alert_id }}"
+                capture:
+                  ioc_report: json.report_path
+                contract:
+                  effects: [splunk.read]
+                  reads: [alert_id]
+
+        - label: Malware analysis
+          steps:
+            - step:
+                id: malware_analysis
+                type: collector
+                title: Submit suspicious files to VirusTotal and sandbox
+                prompt: |
+                  Submit suspicious files for malware analysis.
+                fields:
+                  - name: virustotal_submitted
+                    type: text
+                    label: VirusTotal submission complete? (yes/no)
+                    required: true
+                  - name: sandbox_analysis_complete
+                    type: text
+                    label: Sandbox analysis complete? (yes/no)
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [malware-analyst]
+
+        - label: Timeline reconstruction
+          steps:
+            - step:
+                id: timeline_reconstruction
+                type: collector
+                title: Build attack timeline from logs
+                prompt: |
+                  Reconstruct the attack timeline from collected logs.
+                fields:
+                  - name: timeline_complete
+                    type: text
+                    label: Attack timeline complete? (yes/no)
+                    required: true
+                  - name: timeline_document
+                    type: file
+                    label: Upload timeline document
+                    required: false
+                approvals:
+                  min: 1
+                  roles: [forensics-lead]
+      join:
+        wait_for: all
+        on_failure: continue
+
+  # Step 9: Stakeholder Notification
+  - step:
+      id: stakeholder_notification
+      type: tool
+      title: Notify stakeholders
+      tool:
+        name: email-notify
+        action: send
+        args:
+          alert_id: "{{ .alert_id }}"
+          severity: "{{ .severity }}"
+          recipients: ["ciso-id", "cto-id", "ceo-id", "legal-id"]
+      contract:
+        effects: [email.write]
+        reads: [alert_id, severity]
+
+  # Step 10: Legal/Compliance Assessment
+  - step:
+      id: legal_assessment
+      type: collector
+      title: Legal breach notification assessment
+      prompt: |
+        Severity: {{ .severity }}
+        Affected systems: {{ .affected_systems }}
+        
+        Is breach notification required (GDPR, CCPA, state laws)?
+      fields:
+        - name: notification_required
+          type: text
+          label: Notification required? (yes/no)
+          required: true
+        - name: legal_notes
+          type: multiline
+          label: Legal notes and jurisdictions affected
+          required: false
+          when: 'notification_required == "yes"'
+      approvals:
+        min: 1
+        roles: [legal-counsel]
+        timeout: 4h
+        on_timeout: escalate
+        escalate_to: [outside-counsel]
+
+  # Step 11: Customer Notification (conditional)
+  - step:
+      id: customer_notification
+      type: collector
+      title: Approve customer notification
+      when: 'notification_required == "yes"'
+      prompt: |
+        Draft customer notification email:
+        [Template based on severity and affected data types]
+        
+        Approve sending to affected customers?
+      fields:
+        - name: customer_notification_approved
+          type: text
+          label: "Type 'approve' to send notification"
+          required: true
+      approvals:
+        min: 2
+        roles: [ceo, legal-counsel]
+        timeout: 24h
+        on_timeout: fail
+
+  # Step 12: Remediation Planning
+  - step:
+      id: remediation_planning
+      type: collector
+      title: Remediation planning
+      prompt: |
+        Document the remediation plan for this incident.
+      fields:
+        - name: root_cause
+          type: text
+          label: Root cause
+          required: true
+        - name: remediation_steps
+          type: multiline
+          label: Remediation steps
+          required: true
+        - name: responsible_team
+          type: text
+          label: Responsible team
+          required: true
+          hint: "Options: security, infrastructure, engineering, compliance" # GAP: no dropdown
+          validation:
+            pattern: "^(security|infrastructure|engineering|compliance)$"
+            pattern_hint: "Must be one of: security, infrastructure, engineering, compliance"
+        - name: target_completion_date
+          type: text
+          label: Target completion date (YYYY-MM-DD)
+          required: true
+          validation:
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            pattern_hint: "Must be in YYYY-MM-DD format (e.g. 2026-04-30)"
+      approvals:
+        min: 1
+        roles: [security-oncall]
+
+  # Step 13: Close Incident
+  - step:
+      id: close_incident
+      type: tool
+      title: Close incident and archive evidence
+      tool:
+        name: incident-tracker
+        action: close
+        args:
+          incident_id: "{{ .incident_id }}"
+          status: contained
+          create_followup: true
+      contract:
+        effects: [incident-tracker.write]
+        reads: [incident_id]
+
+  - step:
+      id: notify_security_team
+      type: tool
+      title: Notify security team of containment
+      tool:
+        name: slack-notify
+        action: send-message
+        args:
+          channel: "#security-incidents"
+          message: "Incident {{ .alert_id }} contained. Severity: {{ .severity }}"
+      contract:
+        effects: [slack.write]
+        reads: [alert_id, severity]
+
+  - step:
+      id: complete
+      type: end
+      title: Security breach contained
+      outcome:
+        category: resolved
+        code: breach_contained

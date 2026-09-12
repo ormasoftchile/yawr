@@ -1,0 +1,10 @@
+# Fixture: tests the logical-name fallback when neither the action nor the
+# transport declares a vscode_tool.
+meta: {name: fallback-tool}
+transport:
+  mode: vscode-mcp
+  # No vscode_tool at transport level → logical tool name is the fallback.
+actions:
+  - name: fallback-action
+    # No vscode_tool at action level either.
+    outputs: {}
