@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ormasoftchile/yawr/runtime/internal/resultsdelivery"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 )
 
@@ -58,16 +59,19 @@ func TestY1RuntimeContractsHelper(t *testing.T) {
 		}
 		fmt.Print(`{"ok":true}`)
 		os.Exit(0)
+	case "large":
+		fmt.Print(strings.Repeat("á😀", 200000))
+		os.Exit(0)
 	default:
 		os.Exit(2)
 	}
 }
 
 type y1DirectSummary struct {
-	RunID              string             `json:"run_id"`
-	Status             string             `json:"status"`
-	Results            *engine.RunResults `json:"results"`
-	ResultsUnavailable map[string]any     `json:"results_unavailable"`
+	RunID              string                       `json:"run_id"`
+	Status             string                       `json:"status"`
+	Results            *engine.RunResults           `json:"results"`
+	ResultsUnavailable *resultsdelivery.Unavailable `json:"results_unavailable"`
 }
 
 func y1Fixture(t *testing.T, name string) string {
@@ -321,7 +325,7 @@ func TestY1RuntimeContractsChildForwardingAndBlockedNoData(t *testing.T) {
 	if err := json.Unmarshal(blockedOut, &blocked); err != nil {
 		t.Fatal(err)
 	}
-	if blocked.Results != nil || blocked.ResultsUnavailable["reason"] != "no-publication" {
+	if blocked.Results != nil || blocked.ResultsUnavailable == nil || blocked.ResultsUnavailable.Reason() != "no-publication" {
 		t.Fatalf("blocked child fabricated parent publication: %s", blockedOut)
 	}
 	if _, err := os.Stat(downstream); !os.IsNotExist(err) {

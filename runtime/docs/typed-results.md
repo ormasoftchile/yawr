@@ -243,10 +243,21 @@ strict UTF-8, canonical serialization and the record digest excluding `digest`.
 Missing/conflicting/overlapping transport is unavailable, not a rerun request.
 Do not validate the reference by hashing wire bytes including the digest field.
 
+Independent fixed digest vectors are published in
+`runtime/specs/run-results-digest-v1.json`, described by
+`runtime/specs/run-results-digest-v1.schema.json`. They fix source UTF-8,
+canonical UTF-8, base64, SHA-256, canonical-with-digest bytes, ordering
+equivalence, presence distinctions, and root/parent/child identity for eleven
+named cases. Tests verify those literals with the standard library before
+comparing the runtime canonicalizer, sealing, and validation behavior.
+
 For a feature run without deliverable publication, terminal has `results: null`
 and `results_unavailable: {status, reason}`. Status is `unavailable` or `redacted`;
-reasons include `no-publication`, `execution-not-completed`,
-`invalid-publication`, `protected-content`. Execution `status` remains authoritative;
+the closed reason vocabulary is exactly `no-publication`, `invalid-publication`,
+`protected-content`, `execution-not-completed`, and `protection-unavailable`.
+`protected-content` is paired only with `redacted`; every other reason is paired
+only with `unavailable`. Construction and strict JSON decoding reject unknown,
+missing, extra, trailing, duplicate, or mismatched values. Execution `status` remains authoritative;
 the original execution error is retained separately as `error`.
 Its message uses the existing step-error preview bound, with
 `messageTruncated: true` when shortened; this never changes execution status
@@ -276,6 +287,10 @@ returned as Results. The same unavailability object is additive when needed;
 Protected canonical values are withheld as a whole, never replaced under their
 original digest. Protected Vars in typed runs are withheld with
 `vars_unavailable`, rather than creating a second leak through that field.
+Missing run state remains the existing JSON-RPC `Run not found` error. A corrupt
+or unreadable run-state snapshot is an internal protocol error, not a missing run
+and not a Results availability reason. Missing or unreadable frozen protection
+for an otherwise readable run uses `protection-unavailable`.
 
 The existing HTTP `writeRPC` uses a JSON encoder and has **no response frame-byte
 ceiling**; the existing server write timeout defaults to 60 seconds. Therefore
@@ -291,6 +306,8 @@ inline stored value 64 KiB, expanded checkpoint/value 256 MiB, compressed blob
 256 MiB before allocating an oversized escaped string or terminal frame.
 Ordinary direct stdio's 1 MiB protocol is **not** investigation-session stdio's
 8 MiB frame / 4 MiB projection protocol.
+The served `run.get` response has no global byte ceiling (**NOT SUPPORTED**);
+clients or proxies must bound the complete response and reject truncation.
 
 ## Capability and editor protocol
 

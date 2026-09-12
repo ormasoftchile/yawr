@@ -1,0 +1,5 @@
+apiVersion: yawr.runbook/v1
+id: y2-no-publication
+name: Y2 completed execution without Results
+flow:
+  - step: {id: complete, type: noop}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -585,6 +586,33 @@ func TestRPC_RunGet_NotFound(t *testing.T) {
 	})
 	if resp.Error == nil || resp.Error.Code != rpcRunNotFound {
 		t.Fatalf("expected rpcRunNotFound, got %+v", resp.Error)
+	}
+}
+
+type runGetErrorStore struct {
+	engine.RunStore
+	err error
+}
+
+func (s runGetErrorStore) LoadState(context.Context, string) (engine.RunState, error) {
+	return engine.RunState{}, s.err
+}
+
+func TestRPC_RunGet_CorruptOrUnreadableStoreIsInternalError(t *testing.T) {
+	for _, err := range []error{errors.New("corrupt state snapshot"), os.ErrPermission} {
+		t.Run(err.Error(), func(t *testing.T) {
+			h := newTestServerHarness(t)
+			h.server.store = runGetErrorStore{RunStore: h.store, err: err}
+			resp := doRPC(t, h.server, map[string]any{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "run.get",
+				"params":  map[string]any{"runID": "unreadable"},
+			})
+			if resp.Error == nil || resp.Error.Code != rpcInternalError || resp.Error.Message != "Internal error" {
+				t.Fatalf("store failure was presented as availability/not-found: %+v", resp.Error)
+			}
+		})
 	}
 }
 

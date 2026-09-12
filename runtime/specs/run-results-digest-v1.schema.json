@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yawr.dev/specs/run-results-digest-v1.schema.json",
+  "title": "Yawr run Results digest vectors v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "algorithm",
+    "canonicalization",
+    "generated_by",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "yawr.run-results-digest-v1/v1"
+    },
+    "algorithm": {
+      "const": "sha256"
+    },
+    "canonicalization": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "semantic_record",
+        "source_utf8",
+        "source_base64",
+        "canonical_utf8",
+        "canonical_base64",
+        "sha256_hex",
+        "digest",
+        "canonical_with_digest_utf8",
+        "canonical_with_digest_base64",
+        "metadata"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "semantic_record": {
+          "type": "object"
+        },
+        "source_utf8": {
+          "type": "string"
+        },
+        "source_base64": {
+          "type": "string"
+        },
+        "canonical_utf8": {
+          "type": "string"
+        },
+        "canonical_base64": {
+          "type": "string"
+        },
+        "sha256_hex": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "canonical_with_digest_utf8": {
+          "type": "string"
+        },
+        "canonical_with_digest_base64": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "description",
+            "source_order",
+            "equivalence_group",
+            "distinct_from"
+          ],
+          "properties": {
+            "description": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_order": {
+              "const": "deliberate"
+            },
+            "equivalence_group": {
+              "type": "string"
+            },
+            "distinct_from": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

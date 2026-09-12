@@ -597,6 +597,14 @@ func (s *Server) handleRunGet(w http.ResponseWriter, r *http.Request, req rpcReq
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: normalizeID(req.ID), Result: result})
 			return
 		}
+		if !errors.Is(err, os.ErrNotExist) {
+			writeRPC(w, rpcResponse{
+				JSONRPC: "2.0",
+				ID:      normalizeID(req.ID),
+				Error:   &rpcError{Code: rpcInternalError, Message: "Internal error"},
+			})
+			return
+		}
 	}
 
 	writeRPC(w, rpcResponse{
