@@ -15,6 +15,28 @@
 
 ---
 
+### Bounded Execution Contract (required before every spawn)
+
+Freeze the work item before execution: concrete scope and exclusions, exact authorized files,
+and finite measurable acceptance criteria. Also record the task's budgets and stop behavior.
+Do not expand this contract after work starts. New discoveries become separately tracked
+follow-up work and are never new completion gates.
+
+- Default task/agent timeout: **20 minutes**. Every spawn receives an explicit timeout; any
+  override must be explicit and may not exceed **30 minutes**.
+- Maximum **3 total execution cycles**, **2 review rounds**, and **1 replacement implementer**.
+- Maximum **4 concurrent agents**. Queue overflow until a slot is available.
+- Only current-roster agents may be spawned. Do not invent roles or create recursive
+  implementer/replacement/reviewer chains.
+- Timeout, stall, or cap exhaustion returns `status: needs-decision` with attempted actions,
+  evidence, unmet criteria, and the decision required. Stop all further automatic spawning
+  for that work item.
+
+If the platform exposes a tool-level timeout, set it consistently with the prompt deadline.
+If it does not, enforce the deadline in the prompt and coordinator collection logic.
+
+---
+
 ### Sub-Sessions (Copilot App Mode)
 
 When `create_session` is available, spawn commit-producing agents as **sub-sessions** instead of tasks. Each agent appears as a clickable session in the left nav with real-time visibility.
@@ -33,7 +55,7 @@ When `create_session` is available, spawn commit-producing agents as **sub-sessi
 
 **Constraints:**
 - **Max depth:** 1 — no sub-sub-sessions. If an agent needs to delegate, it uses `task` tool.
-- **Concurrency cap:** Maximum 4-5 simultaneous sub-sessions. Queue additional spawns.
+- **Concurrency cap:** Maximum 4 simultaneous sub-sessions. Queue additional spawns.
 - **Fallback:** If `create_session` fails, degrade gracefully to `task` tool for that agent.
 
 **Sub-session template:**
@@ -157,6 +179,21 @@ prompt: |
   INPUT ARTIFACTS: {list exact file paths to review/modify}
 
   The user says: "{message}"
+
+  ## Frozen execution contract
+  Scope: {concrete deliverable and explicit exclusions}
+  Authorized files: {exact files/directories this agent may modify}
+  Acceptance criteria:
+  - [ ] {finite measurable criterion}
+  Timeout: {explicit duration; default 20 minutes, maximum 30 minutes}
+  Execution cycle: {N of 3 total}
+  Review round budget: {remaining of 2 total}
+  Replacement implementer budget: {remaining of 1 total}
+  Concurrency slot: {1-4; queue instead of spawning when unavailable}
+  Stop behavior: On timeout, stall, ambiguity, or cap exhaustion, return
+  `status: needs-decision` with attempted actions, evidence, unmet criteria, and the
+  decision required. Do not spawn another agent. Record new discoveries only as
+  separately tracked follow-up work; do not add them to this task's completion gates.
 
   Do the work. Respond as {Name}.
 

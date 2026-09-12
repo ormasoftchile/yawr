@@ -3,6 +3,7 @@
     "lead": {"persistent_name": "Lead", "universe": "descriptive", "status": "active"},
     "runtime": {"persistent_name": "Runtime", "universe": "descriptive", "status": "active"},
     "tooling": {"persistent_name": "Tooling", "universe": "descriptive", "status": "active"},
+    "automation": {"persistent_name": "Automation", "universe": "descriptive", "status": "active"},
     "tester": {"persistent_name": "Tester", "universe": "descriptive", "status": "active"},
     "scribe": {"persistent_name": "Scribe", "universe": "descriptive", "status": "active"},
     "ralph": {"persistent_name": "Ralph", "universe": "descriptive", "status": "active"},

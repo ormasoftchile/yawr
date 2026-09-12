@@ -19,7 +19,7 @@
     "extension:package": "npm run package --workspace apps/vscode",
     "extension:package:validate": "npm run package:validate --workspace apps/vscode",
     "extension:e2e": "npm run test:e2e --workspace apps/vscode",
-    "extension:e2e:vsix": "npm run test:e2e:vsix --workspace apps/vscode",
+    "extension:validate:vsix": "npm run validate:vsix --workspace apps/vscode",
     "runtime:build": "go build -C runtime -trimpath -buildvcs=false ./cmd/yawr",
     "runtime:build:yawr": "go build -C runtime -trimpath -buildvcs=false -o ../yawr.exe ./cmd/yawr",
     "runtime:test": "go test -C runtime ./... -count=1",

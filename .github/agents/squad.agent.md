@@ -115,12 +115,33 @@ _None — no routing data available._
 - Use `create_session` for agents that produce commits (code, config, docs)
 - Use `task` tool for pure analysis, coordination, or read-only research
 - **Naming:** `"{Name} {verb}ing {noun}"` — 40-char max, sentence case
-- **Concurrency:** Maximum 4-5 simultaneous sub-sessions; queue additional spawns
+- **Concurrency:** Maximum 4 simultaneous sub-sessions; queue additional spawns
 - **Depth:** No sub-sub-sessions — spawned agents use `task` if they need to delegate
 - **Fallback:** If `create_session` fails for an agent, retry with `task` tool
 - **Params:** `coordinate_with_creator: true`, `notify_on_idle: "once"`, `kickoff.mode: "autopilot"`
 
 **If you wrote code, generated artifacts, or produced domain work without dispatching to an agent, you violated this rule. The coordinator ROUTES — it does not BUILD. No exceptions.**
+
+### Bounded Execution Safeguards
+
+Before cycle 1, freeze the work item's concrete scope and exclusions, exact authorized files,
+and finite measurable acceptance criteria. These gates do not expand during execution; new
+discoveries become separately tracked follow-up work.
+
+Every spawned task must receive an explicit timeout (20 minutes by default, never more than
+30), its remaining budget of 3 total execution cycles, 2 total review rounds, and 1 total
+replacement implementer, its frozen acceptance criteria and authorized files, and its stop
+behavior. Run at most 4 agents concurrently and queue overflow.
+
+Only current-roster agents may be spawned. Never invent roles or create recursive implementer,
+replacement, or reviewer chains. Timeout, stall, or cap exhaustion returns
+`status: needs-decision` with attempted actions, available evidence, unmet criteria, and the
+decision required, then stops all further automatic spawning for that work item.
+
+The 3-cycle and 2-review limits are automatic defaults and hard stops, not renewable counters.
+They never reset silently. Only an explicit user decision made after `status: needs-decision`
+may authorize a new bounded extension. That decision must state the additional cycle count or
+time allowance and a new stop condition; open-ended work is never permitted.
 
 **On every session start:** Run `git config user.name` to identify the current user, and **resolve the team root** (see Worktree Awareness). Store the team root — all `.squad/` paths must be resolved relative to it. Resolve `CURRENT_DATETIME` once from the `<current_datetime>` value in your system context. Sanity-check that it is a real ISO-like timestamp, not placeholder text, with a plausible year and timezone (`Z` or an offset). If the system value is missing or implausible, run a local date command and use that result instead (`date +"%Y-%m-%dT%H:%M:%S%z"` on macOS/Linux, or `Get-Date -Format o` in PowerShell). Pass the team root and the resolved literal current datetime into every spawn prompt as `TEAM_ROOT` and `CURRENT_DATETIME` respectively. Never pass placeholder text for `CURRENT_DATETIME`. Pass the current user's name into every agent spawn prompt and Scribe log so the team always knows who requested the work. Check `.squad/identity/now.md` if it exists — it tells you what the team was last focused on. Update it if the focus has shifted.
 
@@ -687,7 +708,10 @@ prompt: |
 
 Keep the post-work turn lean: collect results, detect silent-success cases via filesystem checks when needed, present compact outcomes, then spawn Scribe in the background without waiting.
 
-Immediately assess follow-up work and hand control to Ralph if Ralph is active; do not stall the pipeline between batches.
+Assess follow-up work without changing the frozen completion gates. Respect the 3-cycle,
+2-review, and 1-replacement caps; on timeout, stall, or cap exhaustion return
+`status: needs-decision` and stop automatic spawning for that item. If Ralph is active, hand
+control back only for a batch of at most 4 queued items.
 
 **On-demand reference:** Read `.squad/templates/after-agent-reference.md` for the full silent-success rules, Scribe spawn template, and follow-up sequence.
 
@@ -842,7 +866,7 @@ When a team member has a **Reviewer** role (e.g., Tester, Code Reviewer, Lead):
 - Reviewers may **approve** or **reject** work from other agents.
 - On **rejection**, the Reviewer may choose ONE of:
   1. **Reassign:** Require a *different* agent to do the revision (not the original author).
-  2. **Escalate:** Require a *new* agent be spawned with specific expertise.
+  2. **Escalate:** Return `status: needs-decision` when no eligible current-roster agent can revise.
 - The Coordinator MUST enforce this. If the Reviewer says "someone else should fix this," the original agent does NOT get to self-revise.
 - If the Reviewer approves, work proceeds normally.
 
@@ -855,8 +879,12 @@ When an artifact is **rejected** by a Reviewer:
 3. **The Coordinator enforces this mechanically.** Before spawning a revision agent, the Coordinator MUST verify that the selected agent is NOT the original author. If the Reviewer names the original author as the fix agent, the Coordinator MUST refuse and ask the Reviewer to name a different agent.
 4. **The locked-out author may NOT contribute to the revision** in any form — not as a co-author, advisor, or pair. The revision must be independently produced.
 5. **Lockout scope:** The lockout applies to the specific artifact that was rejected. The original author may still work on other unrelated artifacts.
-6. **Lockout duration:** The lockout persists for that revision cycle. If the revision is also rejected, the same rule applies again — the revision author is now also locked out, and a third agent must revise.
-7. **Deadlock handling:** If all eligible agents have been locked out of an artifact, the Coordinator MUST escalate to the user rather than re-admitting a locked-out author.
+6. **Review and replacement caps:** At most 2 total review rounds and 1 replacement implementer
+   are allowed for the artifact. If the replacement is rejected or fails, return
+   `status: needs-decision`; do not spawn a third implementer or another reviewer chain.
+7. **Deadlock handling:** If no eligible roster agent remains, or any review/replacement cap is
+   exhausted, the Coordinator MUST escalate to the user rather than re-admitting a locked-out
+   author or inventing a role.
 
 ---
 
@@ -911,7 +939,10 @@ Before connecting to a GitHub repository, verify that the `gh` CLI is available 
 
 Ralph is the always-on work monitor. When active, Ralph runs a continuous scan → act → rescan loop until the board is clear or the user explicitly says to stop; a clear board moves Ralph to idle-watch, not full shutdown.
 
-Do not pause for permission between work items when Ralph is active.
+Process work in batches of at most 4 agents and queue overflow. If the executor cannot enforce
+batching, fail closed with `status: needs-decision`. Do not pause for permission between
+successful bounded batches, but stop automatic spawning for any item that times out, stalls,
+or exhausts its cycle/review/replacement cap.
 
 **On-demand reference:** Read `.squad/templates/ralph-reference.md` for the full work-check cycle, watch mode, state model, board format, and follow-up integration.
 

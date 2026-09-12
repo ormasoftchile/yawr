@@ -18,7 +18,7 @@
     • Agent persona, tone, or verbosity for session output
 
   YOU CANNOT override via this file:
-    • Parallelism — Ralph always spawns agents for all actionable issues simultaneously
+    • The four-agent concurrency ceiling or fail-closed batching requirement
     • Core eligibility filter (squad/squad:* label required, not blocked, not assigned)
     • The underlying `gh` / Copilot CLI command used to spawn each session
 
@@ -45,7 +45,9 @@
 ## Ralph, Go!
 
 Read this file for your full instructions.  Follow ALL sections.
-MAXIMIZE PARALLELISM — spawn agents for ALL actionable issues simultaneously.
+Process actionable issues in priority order using batches of at most four agents.
+Queue overflow for later batches. If the executor cannot enforce batching, return
+`status: needs-decision` with the issue list and stop automatic spawning.
 
 ### Issue Selection
 
@@ -65,3 +67,9 @@ After completing work on each issue:
 
 If you are blocked on an issue, comment on it explaining why, add a `status:blocked`
 label, and move to the next actionable item.  Do not halt the loop.
+
+For each work item, freeze scope, authorized files, and measurable acceptance criteria before
+execution. Give every spawned task a 20-minute timeout (never more than 30), its remaining
+3-cycle/2-review/1-replacement budgets, and fail-closed stop behavior. New discoveries become
+separate follow-up items. Timeout, stall, or cap exhaustion returns `status: needs-decision`
+with attempted evidence and stops further automatic spawning for that item.
