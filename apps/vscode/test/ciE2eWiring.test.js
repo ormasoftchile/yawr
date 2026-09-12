@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const yaml = require('js-yaml');
 
 const root = path.join(__dirname, '..');
 
@@ -86,6 +87,25 @@ test('root, task, and CI wiring expose the bounded installed-VSIX validator', ()
   assert.match(workflow, /extension-installed-vsix:[\s\S]*timeout-minutes:\s*15/);
   assert.match(workflow, /xvfb-run -a npm run extension:validate:vsix/);
   assert.doesNotMatch(workflow, /extension-installed-vsix:[\s\S]*npm run extension:e2e:vsix/);
+
+  const workflowDocument = yaml.load(workflow);
+  for (const jobName of ['extension-source-host', 'extension-installed-vsix']) {
+    const job = workflowDocument.jobs?.[jobName];
+    assert.ok(job, `CI job ${jobName} must exist`);
+    const commands = job.steps
+      .map((step) => step.run)
+      .filter((command) => typeof command === 'string');
+    const compileIndex = commands.findIndex((command) => command.includes('npm run extension:compile'));
+    const packageHelperIndex = commands.findIndex(
+      (command) => command.includes('npm run extension:package-helper'),
+    );
+    assert.ok(compileIndex >= 0, `${jobName} must compile the extension before helper packaging`);
+    assert.ok(packageHelperIndex >= 0, `${jobName} must package the matching runtime helper`);
+    assert.ok(
+      compileIndex < packageHelperIndex,
+      `${jobName} must compile required extension output before package-helper.mjs can run`,
+    );
+  }
 });
 
 test('component wiring uses the monorepo runtime without a second checkout', () => {

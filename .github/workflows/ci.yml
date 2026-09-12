@@ -116,22 +116,6 @@ jobs:
           YAWR_AUTHORING_HELPER: ${{ runner.temp }}\yawr-authoring.exe
         run: npm run extension:test:authoring:core
 
-  extension-authoring-native:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5b # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Compile extension for native authoring proof
-        run: npm run extension:compile
-      - name: Run native authoring proof (requires authoritative external evidence bundle)
-        env:
-          YAWR_AUTHORING_NATIVE_CONFIG: ${{ github.workspace }}\external-authoring-evidence\native-config.json
-        run: npm run extension:test:authoring:native
-
   extension-source-host:
     # The authoritative extension workflow runs Electron E2E on Linux under
     # Xvfb. Keep that supported host instead of claiming unproven OS coverage.
@@ -149,6 +133,8 @@ jobs:
           go-version: '1.25.7'
           cache-dependency-path: runtime/go.sum
       - run: npm ci
+      - name: Compile extension for helper packaging
+        run: npm run extension:compile
       - name: Build and package matching runtime helper
         shell: bash
         run: |
@@ -177,11 +163,15 @@ jobs:
           go-version: '1.25.7'
           cache-dependency-path: runtime/go.sum
       - run: npm ci
+      - name: Compile extension for helper packaging
+        run: npm run extension:compile
       - name: Build and package matching runtime helper
         shell: bash
         run: |
           (cd runtime && go build -trimpath -buildvcs=false -o "$RUNNER_TEMP/yawr-vsix" ./cmd/yawr)
           npm run extension:package-helper -- "$RUNNER_TEMP/yawr-vsix"
           npm run extension:verify-authoring-parity -- "$RUNNER_TEMP/yawr-vsix"
+      - name: Validate extension package
+        run: npm run extension:package:validate
       - name: Validate the installed VSIX lifecycle
         run: xvfb-run -a npm run extension:validate:vsix

@@ -197,13 +197,13 @@ func TestRouteTest_BoundaryErrorCannotContinueToTarget(t *testing.T) {
 
 func TestRouteTest_ParallelBoundaryDominatesJoinRecovery(t *testing.T) {
 	registry := newFakeExecutorRegistry()
-	ordinaryStarted := make(chan struct{})
+	boundaryStarted := make(chan struct{})
 	registry.Register("ordinary", stepExecutorFunc(func(context.Context, enginepkg.ResolvedStep, map[string]any) (*enginepkg.StepResult, error) {
-		close(ordinaryStarted)
+		<-boundaryStarted
 		return nil, errors.New("ordinary branch failure")
 	}))
 	registry.Register("boundary", stepExecutorFunc(func(ctx context.Context, _ enginepkg.ResolvedStep, _ map[string]any) (*enginepkg.StepResult, error) {
-		<-ordinaryStarted
+		close(boundaryStarted)
 		<-ctx.Done()
 		return nil, enginepkg.NewRouteTestBoundaryError(errors.New("missing reviewed fixture"))
 	}))

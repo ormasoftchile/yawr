@@ -191,8 +191,9 @@ Uninstall: `code --uninstall-extension ormasoftchile.yawr-preview`
 Marketplace publication and coexistence validation are deferred; this repository
 only produces the local `ormasoftchile.yawr-preview` package identity.
 
-The CI workflow `.github/workflows/ci.yml` runs `npm run package` on every PR
-and uploads the resulting `.vsix` as a build artifact.
+The CI workflow `.github/workflows/ci.yml` validates packaging in disposable
+state and then installs and exercises the resulting VSIX in an isolated
+Extension Host profile.
 
 ## See also
 
