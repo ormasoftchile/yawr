@@ -217,6 +217,11 @@ yawr run --stdio --require-capabilities yawr.typed-results/v1,yawr.run-results-c
   --run-dir <isolated-run-store> --profile <authorized-profile> <runbook>
 ```
 
+With `--output json`, the direct CLI envelope includes `run_id`, `status`,
+`steps`, and the same complete canonical `results` record. If no record is
+deliverable it includes `results: null` and `results_unavailable`, using the
+same availability reasons as stdio and served reads.
+
 Keep stdin open until the single actual **`run.finished`** frame. There is no
 `run.completed`. Existing interaction/event streams drain before result chunks
 and terminal output. Terminal payloads without the feature retain their defined fields.

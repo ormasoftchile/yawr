@@ -1,0 +1,37 @@
+apiVersion: yawr.runbook/v1
+id: y1-native-values
+name: Y1 native values and durable publication
+inputs:
+  helper_path: {type: string, required: true}
+  counter_path: {type: string, required: true}
+bindings:
+  - {name: flag, type: boolean, value: false}
+  - {name: zero, type: integer, value: 0}
+  - {name: empty_text, type: string, value: ""}
+  - {name: empty_list, type: array, value: []}
+  - {name: empty_map, type: object, value: {}}
+  - {name: present_null, type: any, value: null}
+outputs:
+  flag: {type: boolean, value_expr: flag}
+  zero: {type: integer, value_expr: zero}
+  empty_text: {type: string, value_expr: empty_text}
+  empty_list: {type: array, value_expr: empty_list}
+  empty_map: {type: object, value_expr: empty_map}
+  result:
+    type: object
+    value_tree:
+      unicode: "Español 😀"
+      nested:
+        present_null: '${present_null}'
+        values: [false, 0, "", [], {}]
+flow:
+  - step:
+      id: produce
+      type: cli
+      command: '${helper_path}'
+      args:
+        - -test.run=^TestY1RuntimeContractsHelper$
+        - --
+        - counter
+        - '${counter_path}'
+  - step: {id: publish, type: results, title: Results}

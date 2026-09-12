@@ -1,0 +1,11 @@
+apiVersion: yawr.runbook/v1
+id: y1-child-blocked
+name: Y1 intentionally unpublished blocked child
+kind: composable
+outputs:
+  result: {type: object, optional: true, value_tree: {must_not: appear}}
+flow:
+  - step:
+      id: blocked
+      type: end
+      outcome: {category: blocked, code: intentional-no-result}

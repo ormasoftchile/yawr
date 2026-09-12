@@ -1,0 +1,27 @@
+apiVersion: yawr.runbook/v1
+id: y1-parent-blocked
+name: Y1 blocked child prevents capture publication and dispatch
+inputs:
+  helper_path: {type: string, required: true}
+  downstream_counter_path: {type: string, required: true}
+outputs:
+  result: {type: object, optional: true, value_expr: child_result}
+flow:
+  - step:
+      id: child
+      type: include
+      capture: {child_result: outputs.result}
+      include:
+        runbook: child-blocked.runbook.yaml
+        expand: eager
+        gate: {stop_if: [blocked]}
+  - step:
+      id: must_not_dispatch
+      type: cli
+      command: '${helper_path}'
+      args:
+        - -test.run=^TestY1RuntimeContractsHelper$
+        - --
+        - counter
+        - '${downstream_counter_path}'
+  - step: {id: must_not_publish, type: results, title: Results}

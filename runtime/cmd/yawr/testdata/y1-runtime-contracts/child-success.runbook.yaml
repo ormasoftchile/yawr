@@ -1,0 +1,10 @@
+apiVersion: yawr.runbook/v1
+id: y1-child-success
+name: Y1 child success
+kind: composable
+bindings:
+  - {name: child_value, type: object, value: {flag: false, zero: 0, empty: "", list: [], map: {}, nested: {"null": null}, unicode: "Niño 😀"}}
+outputs:
+  result: {type: object, value_expr: child_value}
+flow:
+  - step: {id: child_publish, type: results, title: Results}

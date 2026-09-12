@@ -1,0 +1,288 @@
+{
+  "schema": "yawr.capability-evidence/v1",
+  "milestone": "Y1",
+  "status": "PASS",
+  "executed_at": "2026-09-12T08:28:03.0126144-07:00",
+  "scope": {
+    "repository": "Yawr",
+    "branch": "milestone/y1-runtime-contracts",
+    "accepted_baseline": "992759fa918c05c6e452c116fbd5c3acd23cc757",
+    "head": "992759fa918c05c6e452c116fbd5c3acd23cc757",
+    "baseline_is_ancestor_of_head": true,
+    "head_equals_baseline": true,
+    "candidate_is_uncommitted_worktree": true,
+    "caller_acceptance_claimed": false,
+    "runrail_accessed": false
+  },
+  "candidate": {
+    "identity_kind": "git-write-tree-with-isolated-index",
+    "tree": "32c82f5938196e0bc7a58007280eb317ad99d920",
+    "tracked_implementation_diff_sha1": "0a457cfdf387ea5c5dde4d049b9303e6c4e367a9",
+    "tracked_implementation_diff_basis": "git diff --binary --full-index 992759fa918c05c6e452c116fbd5c3acd23cc757 -- runtime/cmd/yawr/run.go runtime/internal/serve/rpc.go runtime/docs/typed-results.md | git hash-object --stdin",
+    "changed_files_at_test_time": [
+      "runtime/cmd/yawr/run.go",
+      "runtime/docs/typed-results.md",
+      "runtime/internal/serve/rpc.go",
+      "runtime/cmd/yawr/testdata/y1-runtime-contracts/child-blocked.runbook.yaml",
+      "runtime/cmd/yawr/testdata/y1-runtime-contracts/child-success.runbook.yaml",
+      "runtime/cmd/yawr/testdata/y1-runtime-contracts/native-values-served.runbook.yaml",
+      "runtime/cmd/yawr/testdata/y1-runtime-contracts/native-values.runbook.yaml",
+      "runtime/cmd/yawr/testdata/y1-runtime-contracts/parent-blocked.runbook.yaml",
+      "runtime/cmd/yawr/testdata/y1-runtime-contracts/parent-success.runbook.yaml",
+      "runtime/cmd/yawr/y1_runtime_contracts_integration_test.go"
+    ]
+  },
+  "environment": {
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "architecture": "AMD64",
+    "go": {
+      "version": "go1.25.7 windows/amd64",
+      "source": "official pre-provisioned disposable Go tree in session state",
+      "initially_on_path": false
+    },
+    "node": "v24.21.0",
+    "npm": "11.19.0",
+    "git": "2.55.0.windows.5",
+    "runtime_prerequisites": [
+      "loopback TCP available for served JSON-RPC tests",
+      "filesystem temporary directories available to Go testing",
+      "current Go test binary executable as the direct/stdio/serve helper"
+    ]
+  },
+  "commands": [
+    {
+      "id": "y1-integration",
+      "command": "go test -C runtime ./cmd/yawr -run '^TestY1RuntimeContracts(DirectPersistedResume|OpenStdinAndServedExecution|ChildForwardingAndBlockedNoData|UnsupportedCapabilityHasNoSideEffects)$' -count=1 -v",
+      "exit_code": 0,
+      "duration_ms": 3904,
+      "summary": "Four named Y1 integration tests passed; package reported ok in 1.645s."
+    },
+    {
+      "id": "directly-relevant-packages",
+      "command": "go test -C runtime ./internal/engine ./internal/runstore ./internal/serve ./internal/resultsdelivery ./pkg/engine -count=1",
+      "exit_code": 0,
+      "duration_ms": 9408,
+      "summary": "All engine, runstore, serve, results-delivery, and public engine contract tests passed uncached."
+    },
+    {
+      "id": "canonical-results-controls",
+      "command": "go test -C runtime ./pkg/engine -run '^TestRunResults(CanonicalMatchesHistoricalSerialization|RejectInvalidUTF8AndRecursiveData|CanonicalNativeRecord)$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "All three canonical Results tests passed, including tamper and invalid-value rejection."
+    },
+    {
+      "id": "budget-controls",
+      "command": "go test -C runtime ./internal/runstore -run '^Test(CheckpointBudgetPendingTraceBoundary|DirRunStore_RejectsTooManyValuesBeforeWritingBlobs)$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "Both checkpoint boundary variants and the pre-blob rejection control passed."
+    },
+    {
+      "id": "availability-controls",
+      "command": "go test -C runtime ./internal/resultsdelivery ./internal/serve -run '^Test(PrepareInvalidProtectedAndNoPublication|PublicResultsHTTPUnavailableProtection|PublicResultsUnpublishedProtectionParity)$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "No-publication, invalid-publication, protected-content, execution-failure, and protection-unavailable paths passed across active and reopened reads."
+    },
+    {
+      "id": "full-runtime",
+      "command": "npm run runtime:test",
+      "effective_command": "go test -C runtime ./... -count=1",
+      "exit_code": 0,
+      "duration_ms": 82611,
+      "summary": "Every runtime package passed or reported no test files; cmd/yawr passed in 75.839s."
+    }
+  ],
+  "capabilities": {
+    "C1": {
+      "status": "PASS",
+      "boundary": "Required-capability admission precedes runbook read, execution, run-store creation, trace creation, and dispatch.",
+      "tests": [
+        "TestY1RuntimeContractsUnsupportedCapabilityHasNoSideEffects"
+      ],
+      "evidence": "The command used a nonexistent runbook and unsupported yawr.unsupported/v9 capability, required unsupported-capability failure, and asserted both run directory and trace remained absent."
+    },
+    "C2": {
+      "status": "PASS",
+      "boundary": "Native JSON values retain presence and type across parse, execution, publication, CLI/stdio/HTTP delivery, and persistence.",
+      "tests": [
+        "TestY1RuntimeContractsDirectPersistedResume",
+        "TestY1RuntimeContractsOpenStdinAndServedExecution",
+        "TestRunResultsCanonicalNativeRecord"
+      ],
+      "evidence": "false, zero, empty string, empty array, empty object, present nested null, and Unicode Español/Niño plus emoji were asserted with json.Number-preserving decoders."
+    },
+    "C3": {
+      "status": "PASS",
+      "boundary": "Named typed Results are sealed and validated as one canonical record with origin, publication ID, plan-snapshot digest, checkpoint sequence, and digest integrity.",
+      "tests": [
+        "TestRunResultsCanonicalNativeRecord",
+        "TestRunResultsCanonicalMatchesHistoricalSerialization",
+        "TestRunResultsRejectInvalidUTF8AndRecursiveData",
+        "TestY1RuntimeContractsDirectPersistedResume"
+      ],
+      "evidence": "Validation accepted the sealed canonical record, rejected a post-seal output mutation, rejected invalid UTF-8/recursive values, and delivered the same record after resume and persisted run.get."
+    },
+    "C4": {
+      "status": "PASS",
+      "boundary": "A composable child's published output is captured and republished without truthiness loss or structural rewriting.",
+      "tests": [
+        "TestY1RuntimeContractsChildForwardingAndBlockedNoData"
+      ],
+      "evidence": "The parent result exactly equaled the child's false, zero, empty string/list/map, nested null, and Unicode object."
+    },
+    "C5": {
+      "status": "PASS",
+      "boundary": "An intentional blocked child with no Results publication cannot fabricate parent data or dispatch downstream work.",
+      "tests": [
+        "TestY1RuntimeContractsChildForwardingAndBlockedNoData"
+      ],
+      "evidence": "Parent results was null with reason no-publication and the downstream counter file did not exist."
+    },
+    "C6": {
+      "status": "PASS",
+      "boundary": "Execution outcome/status remains distinct from public result availability and protection.",
+      "tests": [
+        "TestPrepareInvalidProtectedAndNoPublication",
+        "TestPublicResultsHTTPUnavailableProtection",
+        "TestPublicResultsUnpublishedProtectionParity",
+        "TestY1RuntimeContractsChildForwardingAndBlockedNoData"
+      ],
+      "evidence": "Tests distinguish no-publication, invalid-publication, protected-content, and protection-unavailable while preserving running/completed/failed/blocked execution state."
+    },
+    "C7": {
+      "status": "PASS",
+      "boundary": "Direct CLI JSON, open-stdin stdio run.finished, served active run.get, persisted run.get, and resume expose equivalent canonical Results without re-execution.",
+      "tests": [
+        "TestY1RuntimeContractsDirectPersistedResume",
+        "TestY1RuntimeContractsOpenStdinAndServedExecution",
+        "TestPublicResultsHTTPActiveReopenedNoRepeat"
+      ],
+      "evidence": "Direct, resumed, active served, and reopened persisted records compared equal; direct/stdio producer counters remained exactly one; persisted reads did not rerun the producer."
+    },
+    "C8": {
+      "status": "PASS",
+      "boundary": "Checkpoint budget rejection occurs before publication and preserves the prior valid checkpoint without adding a snapshot or blob.",
+      "tests": [
+        "TestCheckpointBudgetPendingTraceBoundary/frame-false",
+        "TestCheckpointBudgetPendingTraceBoundary/frame-true",
+        "TestDirRunStore_RejectsTooManyValuesBeforeWritingBlobs"
+      ],
+      "evidence": "A 4097th value was rejected; the loaded prior checkpoint remained deeply equal, blob count did not change, checkpoint sequence 2 was absent, and a first oversized save created no blob directory."
+    }
+  },
+  "negative_controls": [
+    {
+      "control": "unsupported admission",
+      "result": "PASS",
+      "reason": "A nonexistent runbook plus absent run/trace paths proves rejection occurred before read, run, store, trace, or dispatch."
+    },
+    {
+      "control": "no mocks or caller substitution",
+      "result": "PASS",
+      "reason": "The integration tests spawn the current Go test executable but route into production runRun/runServe, parse real YAML fixtures, execute the production engine, and use real filesystem persistence. No Runrail or caller project was accessed."
+    },
+    {
+      "control": "no direct Results shortcut",
+      "result": "PASS",
+      "reason": "Integration fixtures contain actual results steps; evidence is read from direct JSON, the actual run.finished frame, and run.get. The tests do not call RunResults constructors or sendFinished to manufacture success."
+    },
+    {
+      "control": "no cached binary",
+      "result": "PASS",
+      "reason": "All Go commands used -count=1 and the helper was os.Executable() for the just-built current-package test binary. The pre-existing root yawr.exe was neither invoked nor modified."
+    },
+    {
+      "control": "transport not skipped",
+      "result": "PASS",
+      "reason": "Stdio scanned newline-delimited frames with stdin held open; served tests bound loopback TCP and sent HTTP JSON-RPC run.start/run.next/run.get requests, including restart/reopen."
+    },
+    {
+      "control": "budget non-vacuity",
+      "result": "PASS",
+      "reason": "Tests first persisted and reloaded a valid boundary checkpoint, then crossed the limit and asserted exact prior-state, blob-count, and snapshot-absence invariants."
+    }
+  ],
+  "artifacts": [
+    {"path": "runtime/cmd/yawr/run.go", "sha256": "416a7dee9240a74dfe9ca971cc008e146955a8c98833b4622d3ad42bd8751bbe"},
+    {"path": "runtime/internal/serve/rpc.go", "sha256": "c859e55afb4cfbb63b7f2ac3dfbe460127e490fb59a49a9794cc775c57c00de5"},
+    {"path": "runtime/docs/typed-results.md", "sha256": "b6353058ce0e17855b61b3256e880b8bfdd3ba819e507a68b349b6876d7d901d"},
+    {"path": "runtime/cmd/yawr/y1_runtime_contracts_integration_test.go", "sha256": "50a322d797fc64ea2d8e27816559a55acc71ebd40e154c17c8657e2460c3ff9d"},
+    {"path": "runtime/cmd/yawr/testdata/y1-runtime-contracts/child-blocked.runbook.yaml", "sha256": "c24a5e81b810c3ff0e4641975308df0392f730d2c81704c304ae614d1c10edea"},
+    {"path": "runtime/cmd/yawr/testdata/y1-runtime-contracts/child-success.runbook.yaml", "sha256": "344deabcd3dfbc5ddee2310e0b56f1cfb28652ef8a76383894930e340f290518"},
+    {"path": "runtime/cmd/yawr/testdata/y1-runtime-contracts/native-values-served.runbook.yaml", "sha256": "457ac2d5922e96807b8e4d12a2eeccff5d536bdcb4a755123c76c3d8d3776c9a"},
+    {"path": "runtime/cmd/yawr/testdata/y1-runtime-contracts/native-values.runbook.yaml", "sha256": "0c46b732766b598024714c8b43c7c094df3ecb4cbf75b8fe9618c1c6919fece9"},
+    {"path": "runtime/cmd/yawr/testdata/y1-runtime-contracts/parent-blocked.runbook.yaml", "sha256": "0c7608b3bed56571b773077e59c7394eae2eddae19a29115803c24dfc70e65b6"},
+    {"path": "runtime/cmd/yawr/testdata/y1-runtime-contracts/parent-success.runbook.yaml", "sha256": "a21117d941b31206e1b14dc0b2c5957c3033d133021d145b9a8bc2de53e6f994"},
+    {"path": "runtime/internal/runstore/budget_test.go", "sha256": "8fbbbdc95e3a280b67ed98d5217d049717c0369a82307aa3cf3990dc6a08d61b"},
+    {"path": "runtime/internal/runstore/dir_store_test.go", "sha256": "959efb2c54f0ba7c241b3aa539db31f61c8022a7b7bb6f789de9412605d98444"},
+    {"path": "runtime/internal/serve/results_test.go", "sha256": "89437e6fba9f431e4cc7ce35927c2d94f65087c784d13a89d5c83821a99b70e2"},
+    {"path": "runtime/internal/resultsdelivery/results_test.go", "sha256": "0d9b3ce428274fd387ae7a531981b02a2719407c3de811ec1f43e0c1e699efec"},
+    {"path": "runtime/pkg/engine/results.go", "sha256": "b9504851a0b3768e8c69a5c5d93cc50810b4b7115b4d3dd0b9d80017c56baf3b"},
+    {"path": "runtime/pkg/engine/results_test.go", "sha256": "c77e14bd800fb57d25cff5dd8f1680cdd20a1d3329f96e9e08ad1be9963666f9"}
+  ],
+  "cleanup": {
+    "status": "PASS",
+    "details": [
+      "All integration stores, counters, listeners, and subprocesses were owned by testing.T temporary directories and cleanup hooks.",
+      "The isolated candidate index was removed after git write-tree.",
+      "No new repository-local binary, store, counter, trace, or tool installation remained.",
+      "A root yawr.exe dated before this execution was pre-existing; it was not invoked, changed, or removed."
+    ]
+  },
+  "native_authoring": {
+    "status": "EXTERNALLY GATED — NOT RUN — NOT PASSED",
+    "checkout_evidence_accepted": false,
+    "caller_acceptance_claimed": false
+  },
+  "residuals": [
+    "Native authoring remains externally gated and unexecuted.",
+    "This evidence proves Windows AMD64 only.",
+    "No caller, Runrail, release, publication, signing, or distribution behavior was tested or claimed.",
+    "The candidate is an uncommitted worktree identified by a Git tree, not a commit."
+  ],
+  "review": {
+    "status": "PASS",
+    "reviewer": "Tester",
+    "role": "Conformance Tester",
+    "reviewed_at": "2026-09-12T08:30:11.613-07:00",
+    "verdict": "PASS",
+    "findings": [
+      "Every changed source, fixture, test, and evidence file is within the frozen Y1 scope.",
+      "Production runRun and runServe paths reproduce the HTTP request-context cancellation defect and guard direct, stdio, served, persisted, resume, child-forwarding, blocked-no-publication, and capability-admission boundaries.",
+      "No compatibility shim, caller-specific behavior, duplicate Results format, fake implementation, direct Results shortcut, unrelated source change, or caller acceptance inference was found.",
+      "C1-C8 passed independent source review and uncached execution; native authoring remains externally gated."
+    ],
+    "reruns": [
+      {
+        "command": "go test -C runtime ./cmd/yawr -run '^TestY1RuntimeContracts(DirectPersistedResume|OpenStdinAndServedExecution|ChildForwardingAndBlockedNoData|UnsupportedCapabilityHasNoSideEffects)$' -count=1 -v",
+        "exit_code": 0,
+        "duration_ms": 4591,
+        "summary": "All four Y1 production-boundary integration tests passed."
+      },
+      {
+        "command": "go test -C runtime ./internal/engine ./internal/runstore ./internal/serve ./internal/resultsdelivery ./pkg/engine -count=1",
+        "exit_code": 0,
+        "duration_ms": 10625,
+        "summary": "All directly relevant engine, runstore, serve, resultsdelivery, and public engine tests passed."
+      },
+      {
+        "command": "go test -C runtime ./internal/parser ./cmd/yawr -run '^Test(Parser_(MissingAPIVersion|WrongAPIVersion)|StdioResults(UnavailableAndTransportFailure|MissingAndInvalid)|Y1RuntimeContractsUnsupportedCapabilityHasNoSideEffects)$' -count=1 -v",
+        "exit_code": 0,
+        "duration_ms": 3742,
+        "summary": "Strict runbook/capability admission and absent, malformed, failed, cancelled, pending, and protected/unavailable Results controls passed."
+      },
+      {
+        "command": "npm run runtime:test",
+        "effective_command": "go test -C runtime ./... -count=1",
+        "exit_code": 0,
+        "duration_ms": 82329,
+        "summary": "The full uncached runtime suite passed; cmd/yawr reported 74.999s."
+      }
+    ],
+    "identity_verification": {
+      "artifact_sha256_matches": 16,
+      "candidate_tree": "32c82f5938196e0bc7a58007280eb317ad99d920",
+      "tracked_implementation_diff_sha1": "0a457cfdf387ea5c5dde4d049b9303e6c4e367a9"
+    },
+    "native_authoring": "EXTERNALLY GATED — NOT RUN — NOT PASSED"
+  }
+}
