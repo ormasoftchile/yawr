@@ -4,7 +4,7 @@
 
 Ralph is a built-in squad member whose job is keeping tabs on work. **Ralph tracks and drives the work queue.** Always on the roster, one job: make sure the team never sits idle.
 
-**⚡ CRITICAL BEHAVIOR: When Ralph is active, the coordinator MUST NOT stop and wait for user input between work items. Ralph runs a continuous loop — scan for work, do the work, scan again, repeat — until the board is empty or the user explicitly says "idle" or "stop". This is not optional. If work exists, keep going. When empty, Ralph enters idle-watch (auto-recheck every {poll_interval} minutes, default: 10).**
+**⚡ CRITICAL BEHAVIOR: When Ralph is active, the coordinator MUST NOT stop and wait for user input between successful bounded batches. Ralph runs a continuous loop — scan for work, do the work in batches of at most 4 agents, scan again, repeat — until the board is empty, the user explicitly says "idle" or "stop", or an item returns `status: needs-decision`. Queue overflow. If the executor cannot enforce batching, fail closed instead of spawning. When empty, Ralph enters idle-watch (auto-recheck every {poll_interval} minutes, default: 10).**
 
 **Between checks:** Ralph's in-session loop runs while work exists. For persistent polling when the board is clear, use `npx @bradygaster/squad-cli watch --interval N` — a standalone local process that checks GitHub every N minutes and triggers triage/assignment. See [Watch Mode](#watch-mode-squad-watch).
 
@@ -60,9 +60,16 @@ gh pr list --state open --draft --json number,title,author,labels,checks --limit
 
 **Step 3 — Act on highest-priority item:**
 - Process one category at a time, highest priority first (untriaged > assigned > CI failures > review feedback > approved PRs)
-- Spawn agents as needed, collect results
+- Freeze each item's scope, authorized files, and measurable acceptance criteria before execution.
+- Spawn at most 4 agents per batch and queue overflow. Every spawn receives a 20-minute
+  timeout (never over 30), remaining 3-cycle/2-review/1-replacement budgets, acceptance
+  criteria, and fail-closed stop behavior.
 - **⚡ CRITICAL: After results are collected, DO NOT stop. DO NOT wait for user input. IMMEDIATELY go back to Step 1 and scan again.** This is a loop — Ralph keeps cycling until the board is clear or the user says "idle". Each cycle is one "round".
-- If multiple items exist in the same category, process them in parallel (spawn multiple agents)
+- If multiple items exist in the same category, process them in batches of at most 4.
+- New discoveries become separately tracked follow-up items, never new completion gates.
+- Timeout, stall, or cap exhaustion returns `status: needs-decision` with attempted evidence
+  and stops automatic spawning for that item. Do not create recursive replacement/reviewer
+  chains or invent roles outside the roster.
 
 **Step 4 — Periodic check-in** (every 3-5 rounds):
 
@@ -131,9 +138,9 @@ After the coordinator's step 6 ("Immediately assess: Does anything trigger follo
 
 1. User activates Ralph → work-check cycle runs
 2. Work found → agents spawned → results collected
-3. Follow-up work assessed → more agents if needed
+3. Follow-up work assessed against frozen gates → bounded agents if budgets remain
 4. Ralph scans GitHub again (Step 1) → IMMEDIATELY, no pause
-5. More work found → repeat from step 2
+5. More work found → repeat from step 2 in batches of at most 4
 6. No more work → "📋 Board is clear. Ralph is idling." (suggest `npx @bradygaster/squad-cli watch` for persistent polling)
 
 **Ralph does NOT ask "should I continue?" — Ralph KEEPS GOING.** Only stops on explicit "idle"/"stop" or session end. A clear board → idle-watch, not full stop. For persistent monitoring after the board clears, use `npx @bradygaster/squad-cli watch`.

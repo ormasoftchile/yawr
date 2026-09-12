@@ -13,6 +13,7 @@
 | Lead | Product & Runtime Architect | Product boundaries, execution model, architecture, and review | active |
 | Runtime | Runtime Engineer | Workflow evaluator, state transitions, and persistence interfaces | active |
 | Tooling | Developer Experience Engineer | CLI, SDK surface, diagnostics, and packaging | active |
+| Automation | Automation Security Engineer | Test harnesses, Extension Host orchestration, CI reliability, bounded execution, and diagnostic artifact security | active |
 | Tester | Conformance Tester | Executable specifications, adversarial cases, and non-vacuity | active |
 | Scribe | Project Context Maintainer | Current decisions and concise project context | active |
 | Ralph | Work Monitor | Backlog and continuous work coordination | active |

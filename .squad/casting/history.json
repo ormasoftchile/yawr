@@ -1,0 +1,19 @@
+{
+  "assignments": [
+    {
+      "assigned_at": "2026-09-11T18:57:41.055-07:00",
+      "universe": "descriptive",
+      "agents": [
+        "Lead",
+        "Runtime",
+        "Tooling",
+        "Automation",
+        "Tester",
+        "Scribe",
+        "Ralph",
+        "Rai",
+        "Fact Checker"
+      ]
+    }
+  ]
+}

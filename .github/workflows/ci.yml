@@ -163,6 +163,7 @@ jobs:
   extension-installed-vsix:
     # Installed Electron acceptance follows the authoritative Linux/Xvfb path.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       YAWR_CORE_ROOT: ${{ github.workspace }}/runtime
     steps:
@@ -182,7 +183,5 @@ jobs:
           (cd runtime && go build -trimpath -buildvcs=false -o "$RUNNER_TEMP/yawr-vsix" ./cmd/yawr)
           npm run extension:package-helper -- "$RUNNER_TEMP/yawr-vsix"
           npm run extension:verify-authoring-parity -- "$RUNNER_TEMP/yawr-vsix"
-      - name: Validate VSIX packaging without retaining an artifact
-        run: npm run extension:package:validate
-      - name: Run installed VSIX tests
-        run: xvfb-run -a npm run extension:e2e:vsix
+      - name: Validate the installed VSIX lifecycle
+        run: xvfb-run -a npm run extension:validate:vsix

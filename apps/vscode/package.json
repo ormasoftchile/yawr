@@ -179,6 +179,7 @@
     "test:e2e": "node scripts/extension-lifecycle.mjs source",
     "test:e2e:only": "vscode-test",
     "test:e2e:vsix": "node scripts/extension-lifecycle.mjs installed",
+    "validate:vsix": "node scripts/extension-lifecycle.mjs validate-vsix",
     "watch": "tsc -w -p ./",
     "vscode:prepublish": "npm run compile && node scripts/verify-packaged-helper.mjs",
     "package": "node scripts/extension-lifecycle.mjs package yawr-preview.vsix",

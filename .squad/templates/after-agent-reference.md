@@ -13,12 +13,15 @@
 
 After each batch of agent work:
 
-1. **Collect results** via `read_agent` (wait: true, timeout: 300).
+1. **Collect results** against each task's frozen execution contract. The task deadline is
+   20 minutes by default and never more than 30 minutes. A shorter `read_agent` wait may be
+   repeated only while the task remains within that deadline; collection does not reset it.
 
 2. **Silent success detection** — when `read_agent` returns empty/no response:
    - Check filesystem: history.md modified? New decision inbox files? Output files created?
    - Files found → `"⚠️ {Name} completed (files verified) but response lost."` Treat as DONE.
-   - No files → `"❌ {Name} failed — no work product."` Consider re-spawn.
+   - No files → `"❌ {Name} failed — no work product."` Retry only if the work item remains
+     within its 3-cycle and single-replacement budgets.
 
 3. **Show compact results:** `{emoji} {Name} — {1-line summary of what they did}`
 
@@ -37,6 +40,17 @@ prompt: |
   STATE_BACKEND: {state_backend}
 
   SPAWN MANIFEST: {spawn_manifest}
+
+  FROZEN EXECUTION CONTRACT:
+  - Scope: Record this completed batch only; do not expand or initiate follow-up work.
+  - Authorized files: Runtime-managed Scribe state paths listed in the tasks below.
+  - Acceptance criteria: Complete the measured tasks below, report counts, and make no
+    unverified archival deletion.
+  - Timeout: 20 minutes.
+  - Execution cycle: 1 of 3 total. Review budget: 0 of 2 used.
+    Replacement implementer budget: 0 of 1 used.
+  - Stop behavior: On timeout, stall, ambiguity, or cap exhaustion, return
+    `status: needs-decision` with attempted actions and evidence. Do not spawn another agent.
 
   Tasks (in order):
   0. PRE-CHECK: Run `squad_state_health` when available. If state tools are unavailable,
@@ -79,6 +93,14 @@ prompt: |
   Never speak to user. ⚠️ End with plain text summary after all tool calls.
 ```
 
-5. **Immediately assess:** Does anything trigger follow-up work? Launch it NOW.
+5. **Assess bounded follow-up:** Validate only against the frozen acceptance criteria.
+   New discoveries become separately tracked follow-up work and never new gates for the current
+   item. Spawn a retry/replacement/reviewer only when all applicable budgets remain:
+   maximum 3 execution cycles, 2 review rounds, and 1 replacement implementer. Never create
+   recursive replacement/reviewer chains or use a role outside the current roster.
 
-6. **Ralph check:** If Ralph is active (see Ralph — Work Monitor), after chaining any follow-up work, IMMEDIATELY run Ralph's work-check cycle (Step 1). Do NOT stop. Do NOT wait for user input. Ralph keeps the pipeline moving until the board is clear.
+6. **Stop or continue:** Timeout, stall, or cap exhaustion returns
+   `status: needs-decision` with attempted actions, available evidence, unmet criteria, and the
+   decision required. Stop all further automatic spawning for that item. Otherwise, if Ralph is
+   active, run the next work-check cycle in batches of at most 4. Queue overflow; if the executor
+   cannot batch, fail closed with `status: needs-decision`.

@@ -15,13 +15,51 @@ requires the coordinator to validate agent output before closing an issue.
 
 ---
 
+## Frozen Execution Contract
+
+Before cycle 1, the coordinator MUST freeze and record:
+
+- **Scope:** the concrete deliverable and explicit exclusions.
+- **Authorized files:** the exact files or directories the agent may modify.
+- **Acceptance criteria:** finite, measurable checks that determine completion.
+- **Budgets:** timeout, remaining execution cycles, review rounds, replacement implementers,
+  and concurrency slot.
+- **Stop behavior:** the evidence to return and the condition that produces
+  `status: needs-decision`.
+
+The contract does not expand during execution. New discoveries are recorded as separately
+tracked follow-up work; they are never added as completion gates for the current task.
+
+### Hard Limits
+
+| Limit | Rule |
+|-------|------|
+| Task/agent timeout | 20 minutes by default; an explicit override may never exceed 30 minutes |
+| Execution cycles | 3 total, including the initial attempt |
+| Review rounds | 2 total |
+| Replacement implementers | 1 total |
+| Concurrent agents | 4; queue overflow until a slot is available |
+
+Timeout, stall, or exhaustion of any applicable cap returns `status: needs-decision` with the
+attempted actions, available evidence, unmet acceptance criteria, and the decision required.
+After that status, stop all further automatic spawning for the work item.
+
+Only agents in the current roster may be spawned. Replacement implementers and reviewers may
+not recursively spawn successors, create replacement/reviewer chains, or invent new roles.
+
+---
+
 ## Spawn Prompt Template
 
-Every agent spawn must include the following four sections. Copy and fill in the template:
+Every agent spawn must include the following sections. Copy and fill in the template:
 
 ```
 ## Task
 {What you need done — concrete and bounded}
+
+## Frozen scope and authorized files
+Scope: {deliverable and explicit exclusions}
+Authorized files: {exact files/directories the agent may modify}
 
 ## WHY this matters
 {The motivation and context. What system or user goal does this serve? What breaks if skipped?}
@@ -33,12 +71,20 @@ Example:
 - [ ] No regressions in existing tests
 - [ ] PR is open targeting main with description matching the issue
 
+## Execution limits
+Timeout: {20 minutes by default; explicit value, never over 30 minutes}
+Cycle: {N of 3 total}
+Review round budget: {remaining of 2 total}
+Replacement implementer budget: {remaining of 1 total}
+Concurrency: {one of 4 active slots; otherwise queued}
+
 ## Escalation path
 {What the agent should do if uncertain or stuck. "Stop and ask me" is valid.}
 Example:
-- If requirements are ambiguous → stop, comment on the issue, set label status:needs-decision
+- If requirements are ambiguous, timeout/stall occurs, or a cap is exhausted → stop,
+  return `status: needs-decision` with attempted evidence, and do not spawn more agents
 - If blocked by a dependency → label status:blocked, explain in a comment
-- If 3 cycles exhausted without resolution → write a summary to inbox and surface to coordinator
+- Record new discoveries as separately tracked follow-up work; do not expand this task's gates
 ```
 
 ---
@@ -57,8 +103,13 @@ Example:
    before accepting it or spawning the next cycle.
 2. **Objective context forward**: each subsequent spawn includes a summary of what was tried
    and what is still missing — not just a repeat of the original task.
-3. **Cycle 3 exhausted** → escalate: write a summary to `.squad/decisions/inbox/`, label the
-   issue `status:needs-decision`, and notify the user.
+3. **Cycle 3 exhausted** → return `status: needs-decision`, write a summary to
+   `.squad/decisions/inbox/`, label the issue `status:needs-decision`, notify the user, and
+   stop all automatic spawning for the item.
+4. **Review and replacement caps**: at most 2 review rounds and 1 replacement implementer.
+   A second rejection or failed replacement escalates; it does not create another chain.
+5. **Concurrency cap**: never run more than 4 agents at once. Queue overflow in original
+   priority order.
 
 ---
 
@@ -73,6 +124,7 @@ Before accepting agent output and closing an issue, the coordinator must check:
 - [ ] If the agent reported uncertainty — was it resolved or escalated?
 
 If any item fails → do **not** accept. Spawn cycle N+1 (up to cycle 3) with specific deltas.
+Do not change the frozen scope, authorized files, or acceptance criteria to make the cycle pass.
 
 ---
 
@@ -86,6 +138,8 @@ If any item fails → do **not** accept. Spawn cycle N+1 (up to cycle 3) with sp
 **Escalate** when:
 - Requirements are fundamentally unclear (decision needed)
 - 3 cycles complete without convergence
+- 2 review rounds or the single replacement implementer are exhausted
+- A task times out, stalls, or cannot be run within the 4-agent concurrency cap
 - Agent returned conflicting results across cycles
 - Task requires elevated permissions or external action
 - The work depends on another issue that isn't done yet
@@ -128,6 +182,10 @@ If no action is warranted, the agent must explicitly state why and get coordinat
 - **Spawning without WHY** — agents can't prioritise trade-offs without motivation context.
 - **Accepting output without validating** — one failed check avoids merging broken work.
 - **Cycle 4+** — if 3 cycles haven't converged, the problem is in the requirements, not the agent.
+- **Recursive replacement/reviewer chains** — one replacement and two reviews are the hard stop.
+- **Invented roles** — every implementer and reviewer must exist in the current roster.
+- **Scope expansion during execution** — discoveries become follow-up work, not new gates.
+- **Unbounded spawn prompts** — timeout, budgets, criteria, and stop behavior are mandatory.
 - **Vague success criteria** — "looks good" is not a criterion. Use checkboxes.
 - **Forwarding WHAT without delta** — cycle 2+ prompts must include what cycle 1 got wrong.
 - **Creating issues without dedup check** — always search before creating.
