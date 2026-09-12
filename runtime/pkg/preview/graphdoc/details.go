@@ -81,18 +81,17 @@ type StepDetails struct {
 }
 
 type CommonStepDetails struct {
-	Subtitle       string            `json:"subtitle,omitempty"`
-	When           string            `json:"when,omitempty"`
-	Timeout        string            `json:"timeout,omitempty"`
-	Delay          string            `json:"delay,omitempty"`
-	Retry          *RetryDetails     `json:"retry,omitempty"`
-	OnError        string            `json:"on_error,omitempty"`
-	ContinueOnFail bool              `json:"continue_on_fail,omitempty"`
-	Scope          string            `json:"scope,omitempty"`
-	Exports        []string          `json:"exports,omitempty"`
-	Captures       []CaptureDetails  `json:"captures,omitempty"`
-	Contract       *ContractDetails  `json:"contract,omitempty"`
-	Evidence       []EvidenceDetails `json:"evidence,omitempty"`
+	Subtitle string            `json:"subtitle,omitempty"`
+	When     string            `json:"when,omitempty"`
+	Timeout  string            `json:"timeout,omitempty"`
+	Delay    string            `json:"delay,omitempty"`
+	Retry    *RetryDetails     `json:"retry,omitempty"`
+	OnError  string            `json:"on_error,omitempty"`
+	Scope    string            `json:"scope,omitempty"`
+	Exports  []string          `json:"exports,omitempty"`
+	Captures []CaptureDetails  `json:"captures,omitempty"`
+	Contract *ContractDetails  `json:"contract,omitempty"`
+	Evidence []EvidenceDetails `json:"evidence,omitempty"`
 }
 
 type RetryDetails struct {
@@ -203,7 +202,7 @@ func DetailsForResolvedStep(step engine.ResolvedStep) *StepDetails {
 	authored := &schema.Step{
 		ID: step.ID, Type: schema.StepType(step.Kind), Title: step.Name, Subtitle: step.Subtitle,
 		When: step.When, Timeout: step.Timeout, Delay: step.Delay, Retry: step.Retry,
-		ContinueOnFail: step.ContinueOnFail, Scope: step.Scope, Export: step.Export,
+		Scope: step.Scope, Export: step.Export,
 		Capture: step.Capture, CaptureDefaults: step.CaptureDefaults, Contract: step.Contract,
 		RequiredEvidence: step.RequiredEvidence, OnError: step.OnError,
 	}
@@ -403,7 +402,7 @@ func detailsForParallel(parallel *schema.ParallelNode) *StepDetails {
 func commonDetails(step *schema.Step) *CommonStepDetails {
 	common := &CommonStepDetails{
 		Subtitle: safeText(step.Subtitle), When: safeText(step.When), Timeout: step.Timeout, Delay: step.Delay,
-		OnError: step.OnError, ContinueOnFail: step.ContinueOnFail, Scope: step.Scope,
+		OnError: step.OnError, Scope: step.Scope,
 		Exports: append([]string(nil), step.Export...),
 	}
 	if step.Retry != nil {
@@ -424,7 +423,7 @@ func commonDetails(step *schema.Step) *CommonStepDetails {
 	for _, evidence := range step.RequiredEvidence {
 		common.Evidence = append(common.Evidence, EvidenceDetails{Kind: string(evidence.Kind), Name: evidence.Name, Label: safeText(evidence.Label), Items: safeTexts(evidence.Items)})
 	}
-	if common.Subtitle == "" && common.When == "" && common.Timeout == "" && common.Delay == "" && common.Retry == nil && common.OnError == "" && !common.ContinueOnFail && common.Scope == "" && len(common.Exports) == 0 && len(common.Captures) == 0 && common.Contract == nil && len(common.Evidence) == 0 {
+	if common.Subtitle == "" && common.When == "" && common.Timeout == "" && common.Delay == "" && common.Retry == nil && common.OnError == "" && common.Scope == "" && len(common.Exports) == 0 && len(common.Captures) == 0 && common.Contract == nil && len(common.Evidence) == 0 {
 		return nil
 	}
 	return common

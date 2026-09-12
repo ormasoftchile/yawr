@@ -120,7 +120,6 @@ flow:
                       title: Mark incident as acknowledged
                       command: echo
                       args: ["Incident acknowledged"]
-                      continue_on_fail: false
 
   - iterate:
       id: try_secondary
@@ -174,7 +173,6 @@ flow:
                       title: Mark acknowledged
                       command: echo
                       args: ["Acknowledged by {{ .acknowledger }}"]
-                      continue_on_fail: false
 
   - iterate:
       id: try_manager
@@ -228,7 +226,6 @@ flow:
                       title: Mark acknowledged
                       command: echo
                       args: ["Acknowledged by manager"]
-                      continue_on_fail: false
 
   - iterate:
       id: try_director
@@ -282,7 +279,6 @@ flow:
                       title: Mark acknowledged
                       command: echo
                       args: ["Acknowledged by director"]
-                      continue_on_fail: false
 
   # Step 7: Emergency Broadcast to All
   - step:
@@ -363,7 +359,6 @@ flow:
                       title: Mark acknowledged
                       command: echo
                       args: ["Acknowledged by {{ .acknowledger }}"]
-                      continue_on_fail: false
 
   # Step 9: Executive Escalation
   - step:

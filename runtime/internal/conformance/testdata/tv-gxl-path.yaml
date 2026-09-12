@@ -2,7 +2,7 @@
 # Category:    GXL-PATH
 # Grammar ref: spec/grammar/gxl.ebnf §3 (GDP production), §5.3 (Missing Path Behavior)
 # Schema ref:  design/yawr/conformance/vector.schema.json
-# Author:      Tess (Conformance Tester)
+# Owner:       Yawr runtime
 # Date:        2026-06-05T00:27:12-04:00
 #
 # Purpose: Pin down every GDP (YAWR Dotted Path) resolution behaviour:
@@ -120,9 +120,9 @@ vectors:
     category: GXL-PATH
     description: "records[0].name.first — real-world-style path through an array of objects."
     input: "records[0].name.first"
-    variables: {records: [{name: {first: "Alice", last: "Smith"}, active: true}]}
+    variables: {records: [{name: {first: "Example", last: "User"}, active: true}]}
     expected:
-      value: "Alice"
+      value: "Example"
     tags: [gdp, mixed, realistic]
 
   # --- Subtree captures (OQ5) ---
@@ -261,7 +261,7 @@ vectors:
     expected:
       error_class: GXL-PATH
       error_code: GXL-PATH-004
-    note: "TESS-AMBIG-5 resolved 2026-06-05 (Barbara). New code GXL-PATH-004 introduced: 'Field access on non-object value.' Separates the type-mismatch case (foo is a number — cannot have fields) from the not-found case (GXL-PATH-001, foo is an object but lacks the field). See gxl.ebnf §5.3, 03a §Path Access."
+    note: "GXL-PATH-004 distinguishes field access on a non-object from a missing field in an object (GXL-PATH-001)."
     tags: [gdp, field, non-object, path-error, TESS-AMBIG-5]
 
   - id: TV-GXL-PATH-023
@@ -272,7 +272,7 @@ vectors:
     expected:
       error_class: GXL-PATH
       error_code: GXL-PATH-004
-    note: "TESS-AMBIG-6 resolved 2026-06-05 (Barbara). Null is not an object; GXL-PATH-004 ('field access on non-object value') covers null as well as scalars. This mirrors GXL-PATH-003's handling of null for bracket indexing. GXL-PATH-001 would imply 'segment not found in an object' which is wrong — nullFoo is not an object at all. See gxl.ebnf §5.3, 03a §Path Access."
+    note: "Null is not an object; GXL-PATH-004 covers null and scalars, while GXL-PATH-001 is reserved for missing object fields."
     tags: [gdp, field, "null", path-error, TESS-AMBIG-6]
 
   # --- Bracket vs dot: syntax classification ---

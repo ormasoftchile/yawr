@@ -178,7 +178,7 @@ func TestRouteTest_BoundaryErrorCannotContinueToTarget(t *testing.T) {
 		return enginepkg.RouteTestContinue, nil
 	})
 	plan := enginepkg.ValidatedForTest(&enginepkg.ExecutionPlan{Steps: []enginepkg.ResolvedStep{
-		{ID: "fixture", Kind: "unsafe", Spec: &schema.NoopSpec{}, ContinueOnFail: true},
+		{ID: "fixture", Kind: "unsafe", Spec: &schema.NoopSpec{}, OnError: "continue"},
 		{ID: "target", Kind: "unsafe", Spec: &schema.NoopSpec{}},
 	}})
 	handle, err := New(config).Start(context.Background(), plan, enginepkg.RunOptions{

@@ -447,7 +447,7 @@ type StepResult struct {
 	// Status is the final state of this step.
 	Status StepStatus
 
-	// Outcome describes the semantic result (deprecated: use Status).
+	// Outcome describes the semantic result associated with Status.
 	Outcome StepOutcome
 
 	// Output holds step-produced data (e.g., CLI stdout, tool response).
@@ -609,7 +609,6 @@ type ResolvedStep struct {
 	DisplayOrder     int // Pre-order index for correct display ordering (parents before children)
 	Origin           string
 	OnError          string // Error routing: "continue", "stop", or "goto:<step_id>"
-	ContinueOnFail   bool   // Legacy field - treated as on_error: continue
 	Timeout          string // Execution timeout duration from the runbook common step field.
 	Delay            string // Pre-execution delay duration (e.g. "3s"); honored by the engine before invoking the step's executor.
 	When             string // GXL condition from the runbook common step field.

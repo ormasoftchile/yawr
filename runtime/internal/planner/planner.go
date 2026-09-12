@@ -568,7 +568,6 @@ func (v *planVisitor) makeStep(ctx flowwalk.Ctx, s *schema.Step, includeAlias st
 		DisplayOrder:     v.nextDisplayOrder(),
 		Origin:           ctx.Origin,
 		OnError:          s.OnError,
-		ContinueOnFail:   s.ContinueOnFail,
 		Timeout:          s.Timeout,
 		Delay:            s.Delay,
 		ParentID:         ctx.ParentID,

@@ -2,7 +2,7 @@
    YAWR Capture Path (GCP) — Reference Grammar
    Version:    1.0.0-draft
    Date:       2026-06-04T23:56:26-04:00
-   Author:     Barbara — Lead / Architect
+   Owner:      Yawr runtime
    References:
      - design/yawr/expression-language-proposal.md §3.3
      - design/yawr/expression-evaluation-audit.md §Capture path surface
@@ -227,7 +227,7 @@ EventHeader    = "headers" "." HEADER_NAME ;
      json.items[0].metadata.name    → path into JSON-parsed stdout
      yaml.config.region             → path into YAML-parsed stdout
      stdout.incident.id             → path into JSON-parsed stdout
-                                      (legacy form; equivalent to json.incident.id)
+                                      (equivalent to json.incident.id)
 *)
 LocalCapture   = LocalScalar
                | LocalText
@@ -249,7 +249,7 @@ LocalStructured = ( "json" | "yaml" ) [ GDP ] ;
                      'json' and 'yaml' parse stdout as the named format. *)
 
 (* --- 3.4a Substituted Tool Action Output Capture ---
-   Added per Barbara's tool-packages gate review R3
+   Package-qualified capture path
    (.squad/decisions/inbox/barbara-tool-packages-gate-review.md) and
    design/yawr/sections/06-tool-runtime.tex §Action Substitution,
    §Output contract. A tool step whose bound action is
@@ -586,7 +586,7 @@ IndexSegment   = "[" INTEGER "]" ;
      ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
      Bare 'json' or 'yaml' (no GDP path) is ALLOWED and captures the
      entire parsed root as a subtree. Grammar updated: StepStructured
-     and LocalStructured now have [ GDP ] (optional). Tess must write
+     and LocalStructured now have [ GDP ] (optional). Conformance includes
      TV-GCP-PARSE-ROOT-* conformance vectors for this case.
 
    OI-GCP-03: Capture path validation against step scope

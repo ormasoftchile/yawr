@@ -167,7 +167,7 @@ suite('HAB-11 — end-to-end yawr.host-action/v1 round-trip (no XTS)', () => {
       type: 'yawr.test.inject',
       payload: request({
         capability: 'xts.open-view',
-        request: { environment: 'LocalSterlingOnebox', parameters: {}, focus: true },
+        request: { environment: 'LocalTestEnvironment', parameters: {}, focus: true },
       }),
     });
     assert.ok(delivered);

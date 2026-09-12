@@ -3,14 +3,6 @@
   "displayName": "Yawr Runbook Preview",
   "description": "Preview Yawr runbooks (.runbook.yaml) as a structural graph in VS Code.",
   "version": "0.2.8",
-  "yawrCandidate": {
-    "label": "p0-blocked-child-forwarding-review",
-    "promotion": "not-approved",
-    "runtimeBuild": "p0-typed-results-rc.2",
-    "runtimeSourceID": "sha256:139e545180c569644c4d744604426ebd6646576aa361b8bd3c71437e22421921",
-    "runtimeSHA256": "a640f1b4189f8cdb7d711fae475163ee1925fddcfc4f20406bb58aa3f6be84e2",
-    "markdown": "paused"
-  },
   "publisher": "ormasoftchile",
   "license": "MIT",
   "repository": {

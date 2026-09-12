@@ -27,7 +27,7 @@
 
 2. **Step 9 (Compensation):** Used `type: compensate` with three rollback steps (DROP COLUMN,
    DROP INDEX, pg_restore). The multi-step compensation with fallback logic is correctly
-   expressed. The `continue_on_fail: true` on pg_restore is a workaround for "try DROP first,
+   expressed. The `on_error: continue` on pg_restore is a workaround for "try DROP first,
    restore only if DROP fails".
 
 3. **Step 10 (Execute Migration):** Used `timeout: 30m` and `retry: max: 2, interval: 5m`.

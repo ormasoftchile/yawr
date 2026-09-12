@@ -399,7 +399,6 @@ flow:
                       title: Mark deletion as verified
                       command: echo
                       args: ["All deletions verified"]
-                      continue_on_fail: false # exit iterate
 
         - step:
             id: wait_one_hour

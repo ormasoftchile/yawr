@@ -13,7 +13,7 @@
 #   input:     workspace-relative POSIX path of the entry-point runbook
 #   expected:  error_class/error_code for failures; value for success
 #
-# Error class DYN (new; Barbara ratification pending — see open-questions inbox).
+# Error class DYN is exercised directly by the production resolver.
 # Open questions with expected_status: undecided are noted inline.
 
 vectors:

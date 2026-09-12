@@ -93,15 +93,15 @@ test('actual literal argument semantics preserve comparator composition, RE2 cla
   }
   assert.ok(wire.expressionTextMatches(value.text, value.expression, value.expression.text_digest));
 });
-test('actual caller UTC anchor maps exact pattern classes, not merely decorations, while alias remains YAML', async () => {
-  const source = fs.readFileSync('C:\\One\\yawr-sqllivesite\\packages\\database-info\\runbooks\\get-db-info.runbook.yaml', 'utf8');
+test('neutral authored fixture maps exact pattern classes while an alias remains YAML', async () => {
+  const source = fs.readFileSync(path.join(__dirname, 'fixtures', 'expression-regex-authored.yaml'), 'utf8');
   const { reply, mapped } = await resolve(source);
-  const value = mapped.find(value => value.expression.yaml_path === '/flow/2/step/assert/3/expected');
+  const value = mapped.find(value => value.expression.yaml_path === '/flow/0/step/assert/0/expected');
   assert.ok(value); assert.equal(value.expression.mode, 'regex');
-  for (const [cls, text] of [['keyword', '^'], ['keyword', '$'], ['operator', '|'], ['number', '4']]) token(value.expression, value.text, cls, text);
-  assert.ok(!reply.regions.some(value => value.yaml_path === '/flow/2/step/assert/4/expected'));
-  const node = parseDocument(source, { keepSourceTokens: true }).getIn(['flow', 2, 'step', 'assert', 3, 'expected'], true);
+  for (const [cls, text] of [['keyword', '^'], ['keyword', '$'], ['number', '0'], ['number', '62']]) token(value.expression, value.text, cls, text);
+  assert.ok(!reply.regions.some(value => value.yaml_path === '/flow/0/step/assert/1/expected'));
+  const node = parseDocument(source, { keepSourceTokens: true }).getIn(['flow', 0, 'step', 'assert', 0, 'expected'], true);
   assert.equal(value.expression.range.start, node.range[0]);
   assert.equal(value.expression.range.end, node.range[1]);
-  assert.ok(value.expression.range.start > source.indexOf('&db_utc') + '&db_utc'.length);
+  assert.ok(value.expression.range.start > source.indexOf('&db_name') + '&db_name'.length);
 });

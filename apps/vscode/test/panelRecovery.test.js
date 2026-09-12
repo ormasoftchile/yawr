@@ -40,7 +40,7 @@ test('resolveRunbookPath: active .runbook.yaml editor takes precedence over save
 // ─── 2: workspace state fallback ─────────────────────────────────────────────
 
 test('resolveRunbookPath: falls back to saved path when no qualifying editor is focused (post-restart recovery)', () => {
-  const saved = 'C:\\work\\sterling.runbook.yaml';
+  const saved = 'C:\\work\\release-readiness.runbook.yaml';
 
   assert.strictEqual(
     resolveRunbookPath(undefined, saved),

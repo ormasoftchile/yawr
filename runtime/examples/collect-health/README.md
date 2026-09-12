@@ -25,5 +25,4 @@ yawr run collect-health.runbook.yaml
 - **Result capture**: Capturing outputs from included runbooks with `capture:` on the include step
 - **Accumulation pattern**: Building a running report by capturing and appending to a variable
 - **Noop steps**: Using `type: noop` for variable manipulation without side effects
-- **Continue on fail**: Using `continue_on_fail: true` to tolerate failures in child runbooks
-
+- **Continue on error**: Using `on_error: continue` to tolerate failures in child runbooks

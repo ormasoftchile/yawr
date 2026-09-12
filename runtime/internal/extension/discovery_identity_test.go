@@ -9,7 +9,7 @@ import (
 
 func TestDiscoverYawrDirectoryAndDuplicateRules(t *testing.T) {
 	manifest := func(name, entrypoint string) string {
-		return "name: " + name + "\nversion: 0.2.0\nentrypoint: " + entrypoint + "\ncapabilities: []\ncompatibility:\n  yawr_min_version: 0.2.0\n"
+		return "name: " + name + "\nversion: 0.2.0\nentrypoint: " + entrypoint + "\ncapabilities: []\n"
 	}
 	t.Run("discovers yawr extensions", func(t *testing.T) {
 		root := t.TempDir()

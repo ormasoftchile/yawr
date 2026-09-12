@@ -206,9 +206,9 @@ func TestIterateExecutor_ConcurrentFailFast(t *testing.T) {
 		mu.Unlock()
 
 		// Simulate a fatal engine-level error for item "5".
-		// In the real engine, a fatal failure (non-continue_on_fail step failing) bubbles
+		// In the real engine, a fatal failure without on_error: continue bubbles
 		// up as a runner error, not just a StepStatusFailed result. Step-level failures with
-		// continue_on_fail return results with StepStatusFailed but no runner error.
+		// continuing failures return results with StepStatusFailed but no runner error.
 		if item == "5" {
 			return nil, fmt.Errorf("fatal iteration failure on item 5")
 		}

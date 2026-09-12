@@ -2,7 +2,7 @@
    YAWR Interpolation Syntax (GIS) — Reference Grammar
    Version:    1.0.0-draft
    Date:       2026-06-06T01:40:00-04:00
-   Author:     Barbara — Lead / Architect
+   Owner:      Yawr runtime
    Arbitration: 2026-06-06 — GIS miss semantics (Option A ratified)
                 Mandatory path miss is hard error; optional chaining
                 (?./?.[N]) is opt-in soft-miss. Legacy zero-value-on-miss
@@ -10,7 +10,7 @@
    References:
      - design/yawr/expression-language-proposal.md §2
      - .squad/decisions/inbox/copilot-directive-gxl-oq1-oq2-ratification.md
-       (OQ3: Portable JSON Value Model — Barbara to spec in Stream A)
+       (OQ3: Portable JSON Value Model)
      - .squad/decisions/inbox/barbara-gxl-phase1-plan.md §3 (TV-GIS-*)
      - .squad/decisions/inbox/barbara-gis-miss-arbitration.md (Phase G SPEC-AMBIG)
      - gxl.ebnf (embedded expression grammar)

@@ -25,9 +25,8 @@ test('XTS uses the canonical yawr.host-action/v1 wire version', () => {
 test('XTS bridge exposes one generic open-view capability with no product-owned view', () => {
   const source = compiledExtension();
   assert.match(source, /xts\.open-view/);
-  assert.doesNotMatch(source, /xts\.open-sterling-servers-and-databases/);
-  assert.doesNotMatch(source, /makeXtsOpenSterlingHandler/);
-  assert.doesNotMatch(source, /chongliu\/sterling servers and databases\.xts/);
+  assert.doesNotMatch(source, /xts\.open-(?!view\b)[\w.-]+/);
+  assert.equal((source.match(/\[['"]xts\.open-view['"],\s*\{\s*handler:/g) ?? []).length, 2);
 });
 
 test('generic XTS handler maps wire fields to the public XTS command without changing parameters', () => {

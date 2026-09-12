@@ -3,7 +3,7 @@
 # Grammar ref: spec/grammar/gcp.ebnf §3 (CapturePath), §4 (GDP), §5 (capture semantics), §6 (defaults), §7 (errors)
 # Spec ref:    design/yawr/sections/03c-capture-paths.tex
 # Schema ref:  design/yawr/conformance/vector.schema.json
-# Author:      Tess (Conformance Tester)
+# Owner:       Yawr runtime
 # Date:        2026-06-05T09:25:14.584-07:00
 #
 # Authority:
@@ -163,13 +163,13 @@ vectors:
 
   - id: TV-GCP-PATH-015
     category: GCP-RESOLVE
-    description: "stdout.incident.id is the legacy stdout dot-path form and parses stdout as JSON."
+    description: "stdout.incident.id parses stdout as JSON."
     input: "stdout.incident.id"
     variables: {stdout: '{"incident":{"id":"INC-123"}}'}
     expected:
       value: "INC-123"
     note: "gcp.ebnf §3.4 and §9 preserve stdout.incident.id as equivalent to json.incident.id."
-    tags: [local, stdout, legacy-dot-path, json]
+    tags: [local, stdout, dot-path, json]
 
   - id: TV-GCP-PATH-016
     category: GCP-RESOLVE
@@ -367,12 +367,12 @@ vectors:
 
   - id: TV-GCP-PATH-036
     category: GCP-RESOLVE
-    description: "step.run_scan.stdout.result uses the legacy stdout JSON dot-path form cross-step."
+    description: "step.run_scan.stdout.result uses the stdout JSON dot-path form cross-step."
     input: "step.run_scan.stdout.result"
     variables: {steps: {run_scan: {stdout: '{"result":"clean"}', exit_code: 0}}}
     expected:
       value: "clean"
-    tags: [step, cross-step, stdout, legacy-dot-path]
+    tags: [step, cross-step, stdout, dot-path]
 
   - id: TV-GCP-PATH-037
     category: GCP-RESOLVE

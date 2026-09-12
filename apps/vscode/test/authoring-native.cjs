@@ -14,6 +14,7 @@ const digest = text => createHash('sha256').update(text).digest('hex');
 const yawrItems = list => list?.items.filter(item => item.detail?.startsWith('Yawr · ')) ?? [];
 exports.run = async () => {
   const config = JSON.parse(fs.readFileSync(value('AUTHORING_NATIVE_CONFIG'), 'utf8'));
+  assert.equal(typeof config.callerToolID, 'string', 'Native caller configuration must declare its neutral tool identity');
   const root = value('AUTHORING_TEST_ROOT'), workspace = path.join(root, 'workspace');
   const extension = vscode.extensions.getExtension('ormasoftchile.yawr-preview');
   assert.ok(extension); await extension.activate();
@@ -23,7 +24,7 @@ exports.run = async () => {
   const { captureAuthoringContext, setPresentationEntrypoint } = require('../out/authoringContext');
   const client = new AuthoringClient();
   const evidence = { helperSHA256: digest(fs.readFileSync(config.helper)),
-    callerFixture: config.callerFixture ?? 'actual-read-only-caller', cases: [] };
+    callerFixture: config.callerFixture ?? 'external-read-only-caller', cases: [] };
   let sequence = 0;
   const buffers = [];
   const until = async (fn, name) => {
@@ -319,7 +320,7 @@ exports.run = async () => {
     assert.equal(callerContext.entrypoint_path, config.callerRunbook);
     assert.equal(existingReply.status, 'resolved', 'Complete real caller source admits its bound query action');
     assert.equal(existingReply.site?.kind, 'action');
-    assert.equal(existingReply.site?.tool_id, config.callerToolID ?? 'query-sterling-kusto');
+    assert.equal(existingReply.site?.tool_id, config.callerToolID);
     assert.ok(existingReply.items.some(i => i.name === 'query'));
     assert.ok(existingNative.some(i => label(i) === 'query'), 'Actual caller action reaches native completion');
     evidence.cases.push({ name: 'caller-existing', status: existingReply.status, reason: existingReply.reason,
@@ -345,7 +346,7 @@ exports.run = async () => {
     const argsReply = await rawReply(args, 'complete');
     assert.equal(argsReply.status, 'resolved');
     assert.equal(argsReply.site?.kind, 'argument');
-    assert.equal(argsReply.site?.tool_id, config.callerToolID ?? 'query-sterling-kusto');
+    assert.equal(argsReply.site?.tool_id, config.callerToolID);
     const timeoutItem = yawrItems(await completion(args)).find(i => label(i) === 'timeout');
     assert.ok(timeoutItem, 'Real bound query argument metadata reaches native completion');
     assert.equal(args.doc.getText(timeoutItem.range), 'ti');

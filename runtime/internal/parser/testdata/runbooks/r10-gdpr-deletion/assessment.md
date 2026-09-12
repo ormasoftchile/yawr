@@ -31,7 +31,7 @@
    No native date-range iterate exists. Marked with `# GAP:` comments.
 
 4. **Step 8 (Verification Loop):** Used `iterate` with `max: 5` and 1-hour wait between
-   attempts. The convergence check uses a branch with `continue_on_fail: false` to exit
+   attempts. The convergence check uses the default fail-stop behavior to exit
    iterate when both DB and analytics deletions are confirmed.
 
 5. **Step 9 (Certificate):** The extension call generates the PDF but cryptographic signing

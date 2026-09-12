@@ -1,0 +1,15 @@
+{
+  "name": "@yawr/runbook-previsualization-experiment",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "typescript": "5.9.2",
+    "vite": "7.1.5"
+  }
+}

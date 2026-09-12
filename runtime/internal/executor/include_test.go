@@ -362,7 +362,7 @@ func TestIncludeExecutor_InfraError_Propagates(t *testing.T) {
 
 func TestIncludeExecutor_FailedChildNilError_ReportsCompleted(t *testing.T) {
 	// When the sub-runner returns a failed child result alongside nil error,
-	// that means the failure was tolerated (continue_on_fail). The include
+	// that means the failure was tolerated (on_error: continue). The include
 	// must report Completed, not Failed.
 	exec := NewIncludeExecutor(nil, stubRunner([]*engine.StepResult{
 		{Status: engine.StepStatusCompleted},

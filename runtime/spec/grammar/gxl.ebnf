@@ -2,7 +2,7 @@
    YAWR Expression Language (GXL) — Reference Grammar
    Version:    1.0.0-draft
    Date:       2026-06-04T23:56:26-04:00
-   Author:     Barbara — Lead / Architect
+   Owner:      Yawr runtime
    References:
      - design/yawr/expression-language-proposal.md §1
      - .squad/decisions/inbox/copilot-directive-gxl-oq1-oq2-ratification.md

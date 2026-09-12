@@ -54,7 +54,6 @@ type Step struct {
 	Timeout          string                `yaml:"timeout,omitempty"          json:"timeout,omitempty"`
 	Delay            string                `yaml:"delay,omitempty"            json:"delay,omitempty"`
 	Retry            *RetryConfig          `yaml:"retry,omitempty"            json:"retry,omitempty"`
-	ContinueOnFail   bool                  `yaml:"continue_on_fail,omitempty" json:"continue_on_fail,omitempty"`
 	Scope            string                `yaml:"scope,omitempty"            json:"scope,omitempty"`
 	Export           []string              `yaml:"export,omitempty"           json:"export,omitempty"`
 	Capture          map[string]string     `yaml:"capture,omitempty"          json:"capture,omitempty"`

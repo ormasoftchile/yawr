@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://yawr.internal/conformance/yawr.vector-schema/v1",
   "title": "YAWR Conformance Test Vector Schema",
-  "description": "Validates every file in design/yawr/conformance/tv-*.yaml. This schema IS the contract between the corpus author (Tess) and Phase 2 implementers (Go parser, C# parser). Any vector that does not validate against this schema MUST NOT be executed by a conformance harness. See spec/grammar/gxl.ebnf §6 for error code definitions.",
+  "description": "Single canonical schema for executable Yawr conformance vectors. Invalid vectors must not be executed.",
   "type": "object",
   "required": ["vectors"],
   "additionalProperties": false,
@@ -31,7 +31,7 @@
 
         "category": {
           "type": "string",
-          "description": "Coverage category from Barbara's Phase 1 plan §3 (barbara-gxl-phase1-plan.md), one of the PKG-* categories added per Barbara's tool-packages ruling (.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md, AR-TP-9b §10) for design/yawr/conformance/tv-pkg-resolve.yaml, or one of the ENUM-* categories added per Barbara's enum-constraint ruling (.squad/decisions/inbox/barbara-enum-constraint-mvp-architecture-ruling.md, AR-ENUM-14/§Handoff) for design/yawr/conformance/tv-enum.yaml. Each category maps to a distinct runtime concern. GXL-FUNC is a Tess proposal (see .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md) — Barbara must ratify before Phase 2.",
+          "description": "Coverage category mapped to a distinct runtime concern, including package and enum validation.",
           "enum": [
             "GXL-PARSE",
             "GXL-EVAL",
@@ -156,12 +156,14 @@
       "properties": {
         "error_class": {
           "type": "string",
-          "description": "Error family prefix. Must be one of: GXL-PARSE, GXL-TYPE, GXL-PATH, GXL-EVAL, GIS-PARSE, GIS-PATH, GIS-TYPE, GIS-EVAL, GCP-PARSE, GCP-RESOLVE, GCP-DEFAULT, GCP-TYPE, GCP-EVAL, ENUM.",
+          "description": "Error family prefix for expression, interpolation, capture, composition, or enum validation.",
           "enum": [
             "GXL-PARSE",
             "GXL-TYPE",
             "GXL-PATH",
             "GXL-EVAL",
+            "GXL-DATE",
+            "GXL-ORDER",
             "GIS-PARSE",
             "GIS-PATH",
             "GIS-TYPE",
@@ -176,8 +178,8 @@
         },
         "error_code": {
           "type": "string",
-          "description": "The precise error code from the grammar's error catalog (§6), or from design/yawr/sections/03d-parse-time-enforcement.tex §Enum Constraint Error Codes when error_class is 'ENUM'. Pattern: <CLASS>-<NNN>, special catalog symbols such as GIS-PATH-MISSING or GCP-DEFAULT-SUBTREE, 'ENUM-0NN' (001..009), or 'TBD' for undecided vectors requiring Barbara arbitration. Examples: 'GXL-PARSE-007', 'GXL-TYPE-001', 'GIS-PATH-MISSING', 'GCP-RESOLVE-004', 'ENUM-008'.",
-          "pattern": "^(GXL|GIS)-(PARSE|TYPE|PATH|EVAL)-\\d{3}$|^GCP-(PARSE|RESOLVE|TYPE)-\\d{3}$|^GIS-PATH-MISSING$|^GCP-DEFAULT-SUBTREE$|^ENUM-\\d{3}$|^TBD$"
+          "description": "The precise grammar or enum error code. Examples: GXL-PARSE-007, GIS-PATH-MISSING, GCP-RESOLVE-004, and ENUM-008.",
+          "pattern": "^(GXL|GIS)-(PARSE|TYPE|PATH|EVAL)-\\d{3}$|^GXL-(DATE|ORDER)-\\d{3}$|^GCP-(PARSE|RESOLVE|TYPE)-\\d{3}$|^GIS-PATH-MISSING$|^GCP-DEFAULT-SUBTREE$|^ENUM-\\d{3}$|^TBD$"
         },
         "timing": {
           "type": "string",

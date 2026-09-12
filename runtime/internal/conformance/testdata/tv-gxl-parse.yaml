@@ -2,7 +2,7 @@
 # Category:    GXL-PARSE
 # Grammar ref: spec/grammar/gxl.ebnf
 # Schema ref:  design/yawr/conformance/vector.schema.json
-# Author:      Tess (Conformance Tester)
+# Owner:       Yawr runtime
 # Date:        2026-06-05T00:14:04-04:00
 #
 # Purpose: Pin down every grammar production in gxl.ebnf that is
@@ -18,7 +18,7 @@
 # Convention for negative vectors:
 #   expected.error_class + expected.error_code match gxl.ebnf §6.1.
 #
-# Open issues raised to Barbara:
+# Parser edge cases:
 #   See .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md
 #   §Ambiguities for GXL-PARSE-010-vs-007 and 1.2.3 classification.
 
@@ -663,7 +663,7 @@ vectors:
     expected:
       error_class: GXL-PARSE
       error_code: GXL-PARSE-001
-    note: "expected_status: undecided — see .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md. Lexer tokenises '1.2' as NUMBER then '.' as DOT then '3' as NUMBER; parse fails on unexpected DOT after Primary. Could be GXL-PARSE-003 if lexer tries whole-token analysis. Barbara to decide."
+    note: "The lexer tokenises '1.2' as NUMBER then '.' as DOT then '3' as NUMBER; parsing rejects the unexpected DOT after Primary."
     tags: [negative, number, invalid, ambiguous]
 
   # ---------------------------------------------------------------
@@ -784,7 +784,7 @@ vectors:
 
   - id: TV-GXL-PARSE-071
     category: GXL-PARSE
-    description: "Parser rejects 'contains' used as a legacy infix operator."
+    description: "Parser rejects unsupported infix 'contains'."
     input: "items contains \"prod\""
     variables: {}
     expected:

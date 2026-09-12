@@ -23,7 +23,7 @@ flow:
         - step:
             id: lookup_if_present
             type: branch
-            continue_on_fail: true
+            on_error: continue
             branches:
               - condition: 'configuration.id != "missing"'
                 steps:

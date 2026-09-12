@@ -159,7 +159,7 @@ func (builder *materializedPlanBuilder) appendFlow(
 				ID: authored.ID, Name: displayName(authored), Subtitle: authored.Subtitle, Kind: string(authored.Type),
 				Spec: specForStep(authored), Capture: authored.Capture, CaptureDefaults: authored.CaptureDefaults,
 				Depth: depth, NestDepth: nestDepth, DisplayOrder: builder.nextOrder(), Origin: origin,
-				OnError: authored.OnError, ContinueOnFail: authored.ContinueOnFail,
+				OnError: authored.OnError,
 				Timeout: authored.Timeout, Delay: authored.Delay, When: authored.When,
 				Retry: authored.Retry, Scope: authored.Scope, Export: authored.Export,
 				Contract: authored.Contract, RequiredEvidence: authored.RequiredEvidence,

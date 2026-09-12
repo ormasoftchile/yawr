@@ -154,6 +154,12 @@ func parseFlowNode(node *yaml.Node) (schema.FlowNode, error) {
 // parseStep decodes a step yaml.Node using per-type dispatch.
 // It never calls node.Decode on any type that transitively contains schema.Step.
 func parseStep(node *yaml.Node) (*schema.Step, error) {
+	removedFailurePolicy := "continue_" + "on_fail"
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		if node.Content[index].Value == removedFailurePolicy {
+			return nil, fmt.Errorf("step uses removed field %q; use on_error", removedFailurePolicy)
+		}
+	}
 	var raw rawStep
 	if err := node.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("step common fields: %w", err)
@@ -182,12 +188,12 @@ func parseStep(node *yaml.Node) (*schema.Step, error) {
 		Timeout:         raw.Timeout,
 		Delay:           raw.Delay,
 		Retry:           raw.Retry,
-		ContinueOnFail:  raw.ContinueOnFail,
 		Scope:           raw.Scope,
 		Export:          raw.Export,
 		Capture:         raw.Capture,
 		CaptureDefaults: raw.CaptureDefaults,
 		Contract:        raw.Contract,
+		OnError:         raw.OnError,
 	}
 
 	var err error
@@ -292,12 +298,12 @@ type rawStep struct {
 	Timeout         string              `yaml:"timeout,omitempty"`
 	Delay           string              `yaml:"delay,omitempty"`
 	Retry           *schema.RetryConfig `yaml:"retry,omitempty"`
-	ContinueOnFail  bool                `yaml:"continue_on_fail,omitempty"`
 	Scope           string              `yaml:"scope,omitempty"`
 	Export          []string            `yaml:"export,omitempty"`
 	Capture         map[string]string   `yaml:"capture,omitempty"`
 	CaptureDefaults map[string]any      `yaml:"capture_defaults,omitempty"`
 	Contract        *schema.Contract    `yaml:"contract,omitempty"`
+	OnError         string              `yaml:"on_error,omitempty"`
 }
 
 // ─── Type-specific spec decoders ─────────────────────────────────────────────

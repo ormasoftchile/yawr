@@ -4648,14 +4648,11 @@ func sameDebugCallPath(left, right []enginepkg.DebugCallFrame) bool {
 }
 
 // resolveOnError determines the error-handling action for a failed step.
-// Precedence: on_error > continue_on_fail > default (stop).
+// Explicit on_error takes precedence over the fail-stop default.
 // Returns "continue", "stop", or "goto:<step_id>".
 func resolveOnError(step enginepkg.ResolvedStep) string {
 	if step.OnError != "" {
 		return step.OnError
-	}
-	if step.ContinueOnFail {
-		return "continue"
 	}
 	return "stop"
 }
@@ -6080,7 +6077,6 @@ func applyWaitTimeoutRouting(step enginepkg.ResolvedStep, onTimeout string) (eng
 		return step, nil
 	case onTimeout == "continue" || onTimeout == "stop" || strings.HasPrefix(onTimeout, "goto:"):
 		step.OnError = onTimeout
-		step.ContinueOnFail = false
 		return step, nil
 	default:
 		return step, fmt.Errorf("wait_for_event step %q has unsupported on_timeout %q", step.ID, onTimeout)

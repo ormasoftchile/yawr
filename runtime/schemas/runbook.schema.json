@@ -257,9 +257,6 @@
         "retry_max": {
           "type": "integer",
           "minimum": 0
-        },
-        "continue_on_fail": {
-          "type": "boolean"
         }
       }
     },
@@ -434,9 +431,6 @@
         },
         "retry": {
           "$ref": "#/$defs/RetryConfig"
-        },
-        "continue_on_fail": {
-          "type": "boolean"
         },
         "scope": {
           "type": "string"

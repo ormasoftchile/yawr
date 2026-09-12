@@ -97,7 +97,7 @@ func LoadEnumSuite(ctx context.Context, dir string) ([]EnumVector, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	schema, err := compileSchema(filepath.Join(dir, "vector.schema.json"))
+	schema, err := compileSchema(filepath.Join(filepath.Dir(dir), "vector.schema.json"))
 	if err != nil {
 		return nil, err
 	}

@@ -66,7 +66,6 @@ type ResolvedStepSnapshotV1 struct {
 	DisplayOrder     int                          `json:"display_order,omitempty"`
 	Origin           string                       `json:"origin,omitempty"`
 	OnError          string                       `json:"on_error,omitempty"`
-	ContinueOnFail   bool                         `json:"continue_on_fail,omitempty"`
 	Timeout          string                       `json:"timeout,omitempty"`
 	Delay            string                       `json:"delay,omitempty"`
 	When             string                       `json:"when,omitempty"`
@@ -424,7 +423,6 @@ func snapshotStep(step engine.ResolvedStep) (ResolvedStepSnapshotV1, error) {
 		DisplayOrder:     step.DisplayOrder,
 		Origin:           step.Origin,
 		OnError:          step.OnError,
-		ContinueOnFail:   step.ContinueOnFail,
 		Timeout:          step.Timeout,
 		Delay:            step.Delay,
 		When:             step.When,
@@ -461,7 +459,6 @@ func restoreStep(snapshot ResolvedStepSnapshotV1) (engine.ResolvedStep, error) {
 		DisplayOrder:     snapshot.DisplayOrder,
 		Origin:           snapshot.Origin,
 		OnError:          snapshot.OnError,
-		ContinueOnFail:   snapshot.ContinueOnFail,
 		Timeout:          snapshot.Timeout,
 		Delay:            snapshot.Delay,
 		When:             snapshot.When,

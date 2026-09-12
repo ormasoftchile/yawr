@@ -114,24 +114,18 @@ func findModuleRoot() (string, error) {
 	}
 }
 
-// gitBashDir returns the directory containing a working bash.exe usable by
-// the CLI's "cli" steps (several vectors' fixtures use `command: bash`,
-// mirroring tv-pkg-resolve.yaml's own fixture shape), preferring Git for
-// Windows' bash over any WSL launcher shim that may otherwise shadow it on
-// PATH. Returns "" if none is found (non-Windows platforms rely on the
-// system bash already being first on PATH).
+// gitBashDir returns Git's portable bash directory on Windows.
 func gitBashDir() string {
 	if runtime.GOOS != "windows" {
 		return ""
 	}
-	candidates := []string{
-		`C:\Program Files\Git\bin`,
-		`C:\Program Files (x86)\Git\bin`,
+	out, err := exec.Command("git", "--exec-path").Output()
+	if err != nil {
+		return ""
 	}
-	for _, c := range candidates {
-		if _, err := os.Stat(filepath.Join(c, "bash.exe")); err == nil {
-			return c
-		}
+	dir := filepath.Clean(filepath.Join(strings.TrimSpace(string(out)), "..", "..", "..", "bin"))
+	if _, err := os.Stat(filepath.Join(dir, "bash.exe")); err == nil {
+		return dir
 	}
 	return ""
 }

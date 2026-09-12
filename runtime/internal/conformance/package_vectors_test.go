@@ -39,7 +39,7 @@ func loadPackageVectors(t *testing.T) (string, []byte, []packageVector) {
 
 func TestPackageResolutionVectorHarnessLoadsCorpus(t *testing.T) {
 	file, data, vectors := loadPackageVectors(t)
-	schema, err := compileSchema(filepath.Join(filepath.Dir(file), "enumdata", "vector.schema.json"))
+	schema, err := compileSchema(filepath.Join(filepath.Dir(file), "vector.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

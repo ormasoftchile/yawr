@@ -115,7 +115,7 @@ id: route-test-tolerated-failure
 name: Route test tolerated failure
 kind: mitigation
 flow:
-	- step: { id: tolerated_failure, type: cli, run: must-not-run, continue_on_fail: true }
+	- step: { id: tolerated_failure, type: cli, run: must-not-run, on_error: continue }
 	- step: { id: target, type: noop }
 `, "\t", "  ")
 	if err := os.WriteFile(runbookPath, []byte(runbookSource), 0o600); err != nil {

@@ -480,7 +480,7 @@ flow:
       id: unbound
       type: cli
       run: must-not-run
-      continue_on_fail: true
+      on_error: continue
 `
 	root := `apiVersion: yawr.runbook/v1
 id: root

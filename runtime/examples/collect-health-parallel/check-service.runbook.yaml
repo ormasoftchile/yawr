@@ -17,7 +17,7 @@ flow:
       type: tool
       title: "Health check ${service_host}"
       delay: 2s
-      continue_on_fail: true
+      on_error: continue
       tool:
         name: curl
         action: head

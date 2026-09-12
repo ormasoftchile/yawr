@@ -255,17 +255,17 @@ func TestRunSubStepsViaEngineStorelessReplayUsesFirstFrameInvocation(t *testing.
 	}
 }
 
-// TestRunSubStepsViaEngine_ContinueOnFail_ReturnsNil exercises the real path:
-// a child step fails with continue_on_fail=true, the sub-engine continues,
+// TestRunSubStepsViaEngine_OnErrorContinue_ReturnsNil exercises the real path:
+// a child step fails with on_error=continue, the sub-engine continues,
 // and the function returns nil error.
-func TestRunSubStepsViaEngine_ContinueOnFail_ReturnsNil(t *testing.T) {
+func TestRunSubStepsViaEngine_OnErrorContinue_ReturnsNil(t *testing.T) {
 	reg := &testRegistry{executors: map[string]engine.StepExecutor{
 		"tool": &failAlwaysExecutor{},
 		"end":  &passExecutor{},
 	}}
 
 	nodes := []schema.FlowNode{
-		{Step: &schema.Step{ID: "child-1", Type: schema.StepTypeTool, ContinueOnFail: true}},
+		{Step: &schema.Step{ID: "child-1", Type: schema.StepTypeTool, OnError: "continue"}},
 		{Step: &schema.Step{ID: "child-2", Type: "end"}},
 	}
 

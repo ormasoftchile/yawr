@@ -120,9 +120,9 @@ func TestFailStop_FirstToolFail_StopsRun(t *testing.T) {
 	}
 }
 
-// TestFailStop_ContinueOnFail_Continues verifies that explicit
-// continue_on_fail: true still allows the run to continue past a failure.
-func TestFailStop_ContinueOnFail_Continues(t *testing.T) {
+// TestFailStop_OnErrorContinue_Continues verifies that explicit
+// on_error: continue allows the run to continue past a failure.
+func TestFailStop_OnErrorContinue_Continues(t *testing.T) {
 	reg := newFakeExecutorRegistry()
 	reg.Register("tool", &failingExecutor{err: errors.New("expected failure")})
 	reg.Register("end", &passThroughExecutor{})
@@ -136,7 +136,7 @@ func TestFailStop_ContinueOnFail_Continues(t *testing.T) {
 	eng := New(cfg)
 
 	plan := makeTestPlan(
-		engine.ResolvedStep{ID: "failing-step", Kind: "tool", Spec: &cliStepSpec{}, ContinueOnFail: true},
+		engine.ResolvedStep{ID: "failing-step", Kind: "tool", Spec: &cliStepSpec{}, OnError: "continue"},
 		engine.ResolvedStep{ID: "next-step", Kind: "end", Spec: &cliStepSpec{}},
 	)
 
@@ -243,9 +243,9 @@ func TestFailStop_ParallelBranchFail_StopsLaterSiblings(t *testing.T) {
 	}
 }
 
-// TestFailStop_ParallelBranch_ContinueOnFail verifies that a step inside
-// a parallel branch with continue_on_fail: true doesn't kill the branch.
-func TestFailStop_ParallelBranch_ContinueOnFail(t *testing.T) {
+// TestFailStop_ParallelBranch_OnErrorContinue verifies that a step inside
+// a parallel branch with on_error: continue doesn't kill the branch.
+func TestFailStop_ParallelBranch_OnErrorContinue(t *testing.T) {
 	reg := newFakeExecutorRegistry()
 	reg.Register("tool", stepExecutorFunc(func(_ context.Context, step engine.ResolvedStep, _ map[string]any) (*engine.StepResult, error) {
 		if step.ID == "failing-branch-step" {
@@ -280,7 +280,7 @@ func TestFailStop_ParallelBranch_ContinueOnFail(t *testing.T) {
 					{
 						Label: "branch-a",
 						Steps: []engine.ResolvedStep{
-							{ID: "failing-branch-step", Kind: "tool", Spec: &cliStepSpec{}, ContinueOnFail: true},
+							{ID: "failing-branch-step", Kind: "tool", Spec: &cliStepSpec{}, OnError: "continue"},
 							{ID: "next-branch-step", Kind: "tool", Spec: &cliStepSpec{}},
 						},
 					},
@@ -304,7 +304,7 @@ func TestFailStop_ParallelBranch_ContinueOnFail(t *testing.T) {
 		t.Fatalf("Next error: %v", err)
 	}
 	if result.Status == engine.StepStatusFailed {
-		t.Fatal("parallel container should NOT be failed when branch step has continue_on_fail")
+		t.Fatal("parallel container should NOT be failed when branch step has on_error: continue")
 	}
 }
 
@@ -318,11 +318,10 @@ func makeSubStepRunner(cfg engine.EngineConfig) executor.SubStepRunner {
 			if node.Step != nil {
 				s := node.Step
 				steps = append(steps, engine.ResolvedStep{
-					ID:             s.ID,
-					Kind:           string(s.Type),
-					Spec:           &cliStepSpec{},
-					OnError:        s.OnError,
-					ContinueOnFail: s.ContinueOnFail,
+					ID:      s.ID,
+					Kind:    string(s.Type),
+					Spec:    &cliStepSpec{},
+					OnError: s.OnError,
 				})
 			}
 		}
@@ -437,9 +436,9 @@ func TestFailStop_IncludeChildFail_StopsRun(t *testing.T) {
 	}
 }
 
-// TestFailStop_IncludeContinueOnFail_Continues verifies that an include step
-// whose child has continue_on_fail completes successfully.
-func TestFailStop_IncludeContinueOnFail_Continues(t *testing.T) {
+// TestFailStop_IncludeOnErrorContinue_Continues verifies that an include step
+// whose child has on_error: continue completes successfully.
+func TestFailStop_IncludeOnErrorContinue_Continues(t *testing.T) {
 	reg := newFakeExecutorRegistry()
 	reg.Register("tool", &failingExecutor{err: errors.New("child tool error")})
 	reg.Register("end", &passThroughExecutor{})
@@ -461,7 +460,7 @@ func TestFailStop_IncludeContinueOnFail_Continues(t *testing.T) {
 			Spec: &schema.IncludeSpec{
 				Include: schema.IncludeConfig{Runbook: "child.yaml"},
 				ResolvedSteps: []schema.FlowNode{
-					{Step: &schema.Step{ID: "child-tool", Type: schema.StepTypeTool, ContinueOnFail: true}},
+					{Step: &schema.Step{ID: "child-tool", Type: schema.StepTypeTool, OnError: "continue"}},
 				},
 			},
 		},
@@ -484,7 +483,7 @@ func TestFailStop_IncludeContinueOnFail_Continues(t *testing.T) {
 		t.Fatalf("Next[0] error: %v", err)
 	}
 	if result.Status != engine.StepStatusCompleted {
-		t.Fatalf("expected include step Completed (child had continue_on_fail), got %s", result.Status)
+		t.Fatalf("expected include step Completed (child had on_error: continue), got %s", result.Status)
 	}
 
 	// Sibling should run.

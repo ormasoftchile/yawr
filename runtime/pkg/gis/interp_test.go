@@ -15,7 +15,7 @@ func TestInterpolate(t *testing.T) {
 	}{
 		{name: "empty", in: "", want: ""},
 		{name: "literal", in: "hello", want: "hello"},
-		{name: "path", in: "hello ${user.name}", vars: map[string]any{"user": map[string]any{"name": "Alice"}}, want: "hello Alice"},
+		{name: "path", in: "hello ${user.name}", vars: map[string]any{"user": map[string]any{"name": "Example"}}, want: "hello Example"},
 		{name: "escape", in: `literal: \${not interpolated}`, want: "literal: ${not interpolated}"},
 		{name: "adjacent", in: "${a}${b}", vars: map[string]any{"a": "x", "b": "y"}, want: "xy"},
 		{name: "stdlib", in: "${str.toUpper(user.name)}", vars: map[string]any{"user": map[string]any{"name": "alice"}}, want: "ALICE"},
@@ -60,7 +60,7 @@ func TestInterpolateErrors(t *testing.T) {
 		code string
 	}{
 		{name: "mandatory miss", in: "${a.b?.c}", vars: map[string]any{}, code: "GIS-PATH-MISSING"},
-		{name: "strict truthy", in: "${name and true}", vars: map[string]any{"name": "Alice"}, code: "GIS-TYPE-002"},
+		{name: "strict truthy", in: "${name and true}", vars: map[string]any{"name": "Example"}, code: "GIS-TYPE-002"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

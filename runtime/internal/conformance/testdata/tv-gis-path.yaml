@@ -2,13 +2,13 @@
 # Category:    GIS-PATH
 # Grammar ref: spec/grammar/gis.ebnf §2.5 (GISPathSegment, OptionalDotAccess, OptionalBracketAccess)
 # Schema ref:  design/yawr/conformance/vector.schema.json
-# Author:      Tess (Conformance Tester)
+# Owner:       Yawr runtime
 # Date:        2026-06-05T07:28:56.273-07:00
 #
 # Authority:
 #   - Ratification: .squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md
 #   - Proposal:     design/yawr/proposals/gis-optional-chaining.md §2 and proposed vector set
-#   - Grammar:      spec/grammar/gis.ebnf (Barbara editing in parallel); tests GDP override
+#   - Grammar:      spec/grammar/gis.ebnf; tests GDP override
 #                   production GISPathSegment and its optional forms.
 #   - Spec:         design/yawr/sections/03b-interpolation-syntax.tex (Edith editing in parallel);
 #                   maps to the GIS optional-path interpolation semantics section.

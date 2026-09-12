@@ -220,7 +220,7 @@ flow:
                 - "-h"
                 - "prod-db"
                 - "/backup/pre-migration.dump"
-              continue_on_fail: true
+              on_error: continue
 
   # Step 10: Execute Production Migration
   - step:

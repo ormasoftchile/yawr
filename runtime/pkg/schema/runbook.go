@@ -89,9 +89,8 @@ type Output struct {
 
 // StepDefaults holds default settings applied to all steps.
 type StepDefaults struct {
-	Timeout        string `yaml:"timeout,omitempty"          json:"timeout,omitempty"`
-	RetryMax       int    `yaml:"retry_max,omitempty"        json:"retry_max,omitempty"`
-	ContinueOnFail bool   `yaml:"continue_on_fail,omitempty" json:"continue_on_fail,omitempty"`
+	Timeout  string `yaml:"timeout,omitempty"   json:"timeout,omitempty"`
+	RetryMax int    `yaml:"retry_max,omitempty" json:"retry_max,omitempty"`
 }
 
 // GovernanceConfig is the runbook-level governance policy block.

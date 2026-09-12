@@ -8,7 +8,7 @@
 
 | Gap ID | Class | Severity | Description |
 |--------|-------|----------|-------------|
-| G3-001 | G3 | MEDIUM | No native "early exit from iterate" construct; must use `continue_on_fail: false` workaround inside branch within iterate |
+| G3-001 | G3 | MEDIUM | No native "early exit from iterate" construct; branch failure uses the default fail-stop behavior |
 | G6-001 | G6 | LOW | Iterate loop for metrics monitoring is verbose (60 steps for 10-minute monitoring); no dedicated "monitor for duration" primitive |
 
 ## Translation Notes
@@ -23,7 +23,7 @@
 
 3. **Step 7 (Monitor Metrics):** Used `iterate` with `max: 60` (60 iterations × 10s = 10 minutes).
    The iterate contains two tool steps (Prometheus queries), a branch step checking thresholds,
-   and a sleep step. Early exit implemented via `continue_on_fail: false` inside the branch.
+   and a sleep step. Early exit uses the default fail-stop behavior inside the branch.
 
 4. **Step 8 (Decision):** Used `type: branch` with automatic evaluation (not `type: decision`
    which is human-driven). Condition checks if metrics are within SLO.

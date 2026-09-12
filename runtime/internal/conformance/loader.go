@@ -20,7 +20,7 @@ func LoadSuite(ctx context.Context, dir string) (Suite, error) {
 	if err := ctx.Err(); err != nil {
 		return Suite{}, err
 	}
-	schema, err := compileSchema(filepath.Join(dir, "vector.schema.json"))
+	schema, err := compileSchema(filepath.Join(filepath.Dir(dir), "vector.schema.json"))
 	if err != nil {
 		return Suite{}, err
 	}

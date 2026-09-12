@@ -98,6 +98,19 @@ func TestParser_RejectsRemovedToolRefFields(t *testing.T) {
 	}
 }
 
+func TestParser_RejectsRemovedFailurePolicyField(t *testing.T) {
+	p, err := parser.New(platform.NewFakePlatform())
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := minimalRunbook()
+	removedField := "continue_" + "on_fail"
+	src = strings.Replace(src, "type: end", "type: end\n      "+removedField+": true", 1)
+	if _, err := p.ParseBytes(context.Background(), []byte(src)); err == nil {
+		t.Fatal("expected removed failure policy field to fail structural validation")
+	}
+}
+
 // ─── §2.1 — apiVersion ────────────────────────────────────────────────────────
 
 func TestParser_MissingAPIVersion(t *testing.T) {

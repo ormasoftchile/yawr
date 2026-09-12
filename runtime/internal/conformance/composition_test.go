@@ -13,7 +13,7 @@ import (
 
 func TestCompositionValuesConformance(t *testing.T) {
 	dir := testdataDir(t)
-	schema, err := compileSchema(filepath.Join(dir, "vector.schema.json"))
+	schema, err := compileSchema(filepath.Join(filepath.Dir(dir), "vector.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

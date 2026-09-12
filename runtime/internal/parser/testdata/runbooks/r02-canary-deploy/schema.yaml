@@ -232,7 +232,6 @@ flow:
                       title: Abort — metrics exceed threshold
                       command: echo
                       args: ["ERROR: Metrics unhealthy, triggering rollback"]
-                      continue_on_fail: false
 
         - step:
             id: wait_interval

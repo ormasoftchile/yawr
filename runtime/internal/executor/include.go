@@ -912,7 +912,7 @@ func (e *IncludeExecutor) aggregateResults(step engine.ResolvedStep, spec *schem
 
 	// If runSubStepsViaEngine returned without error, the sub-engine
 	// completed its flow — any individual step failures were tolerated
-	// (continue_on_fail / on_error: continue). The include is successful.
+	// (on_error: continue). The include is successful.
 	status := engine.StepStatusCompleted
 
 	result := newResult(step, status)

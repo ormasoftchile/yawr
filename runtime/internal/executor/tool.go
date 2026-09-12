@@ -228,7 +228,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, step engine.ResolvedStep, va
 			}
 		}
 		// Still populate captures with empty/zero values so downstream steps
-		// that have continue_on_fail can reference these keys without template errors.
+		// that use on_error: continue can reference these keys without template errors.
 		for name, source := range step.Capture {
 			switch source {
 			case "stdout", "stderr":

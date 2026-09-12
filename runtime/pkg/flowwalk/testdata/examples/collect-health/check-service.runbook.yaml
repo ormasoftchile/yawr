@@ -18,7 +18,7 @@ flow:
       id: dns_lookup
       type: tool
       title: "DNS lookup {{ .service_host }}"
-      continue_on_fail: true
+      on_error: continue
       tool:
         name: nslookup
         action: lookup
@@ -32,7 +32,7 @@ flow:
       id: ping_host
       type: tool
       title: "Ping {{ .service_host }}"
-      continue_on_fail: true
+      on_error: continue
       tool:
         name: ping
         action: check

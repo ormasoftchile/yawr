@@ -33,8 +33,8 @@ outputs:
   configurations: {type: array, optional: true, value_expr: 'sample_raw_results[0].rows'}
   observations: {type: array, value_expr: sample_observations}
   configuration_order: {type: object, value_expr: 'sample_order_results[0]'}
-  pool_columns: {type: array, optional: true, value_expr: 'sample_legacy_pool[0].columns'}
-  pool_rows: {type: array, optional: true, value_expr: 'sample_legacy_pool[0].rows'}
+  pool_columns: {type: array, optional: true, value_expr: 'sample_pool[0].columns'}
+  pool_rows: {type: array, optional: true, value_expr: 'sample_pool[0].rows'}
 flow:
   - iterate:
       id: sample_initialize
@@ -59,7 +59,7 @@ flow:
       collect_values:
         sample_order_results: {status: not-applicable, items: []}
         sample_raw_results: {row_count: -1, columns: [], rows: []}
-        sample_legacy_pool: {columns: [], rows: []}
+        sample_pool: {columns: [], rows: []}
   # Full-shape source fixture.
   - iterate:
       id: sample_initialize_rows
@@ -209,7 +209,7 @@ flow:
                   - step: {id: sample_item_single_zone, type: noop, capture: {sample_item_zone: single-zone}}
         - step: {id: sample_item_configuration_observed, type: noop, capture: {sample_item_status: observed}}
         - step:
-            id: sample_item_legacy_scope
+            id: sample_item_scope
             type: branch
             branches:
               - condition: sample_count == 1
@@ -228,7 +228,7 @@ flow:
         - step:
             id: sample_item_pool_gate
             type: branch
-            continue_on_fail: true
+            on_error: continue
             branches:
               - condition: sample_configuration.sample_group_id == null
                 steps:
@@ -284,19 +284,19 @@ flow:
                 steps:
                   - step: {id: sample_mixed_pool_status, type: noop, capture: {sample_pool_status: mixed}}
         - step:
-            id: sample_legacy_pool_values
+            id: sample_pool_values
             type: branch
             branches:
               - condition: sample_count == 1
                 steps:
                   - iterate:
-                      id: sample_capture_legacy_pool
+                      id: sample_capture_pool
                       over: retain
-                      as: sample_legacy_operation
+                      as: sample_operation
                       steps:
-                        - step: {id: sample_legacy_single_pool, type: noop}
+                        - step: {id: sample_single_pool, type: noop}
                       collect_values:
-                        sample_legacy_pool:
+                        sample_pool:
                           columns: '${sample_item_pool_columns}'
                           rows: '${sample_item_pool_rows}'
       collect_values:

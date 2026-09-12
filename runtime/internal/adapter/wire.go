@@ -634,7 +634,6 @@ func resolveFlowNode(node schema.FlowNode) (engine.ResolvedStep, bool) {
 			When:            step.When,
 			Delay:           step.Delay,
 			OnError:         step.OnError,
-			ContinueOnFail:  step.ContinueOnFail,
 		}, true
 	}
 	if node.Iterate != nil {

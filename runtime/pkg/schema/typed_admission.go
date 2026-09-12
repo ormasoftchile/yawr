@@ -142,8 +142,8 @@ func ValidateTypedRunbook(rb *Runbook) error {
 			if node.Step != nil {
 				step := node.Step
 				if step.Type == StepTypeAssign || step.Type == StepTypeResults {
-					if step.Retry != nil || step.Delay != "" || step.ContinueOnFail || step.OnError != "" ||
-						(rb.Defaults != nil && (rb.Defaults.RetryMax != 0 || rb.Defaults.ContinueOnFail)) {
+					if step.Retry != nil || step.Delay != "" || step.OnError != "" ||
+						(rb.Defaults != nil && rb.Defaults.RetryMax != 0) {
 						return nil, fmt.Errorf("%s: typed atomic steps forbid retry, delay and failure routing", step.ID)
 					}
 				}
