@@ -56,6 +56,11 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(runner, /failure evidence artifact: \$\{evidence\.artifactId\}/);
   assert.match(runner, /installedExtensionDirectory/);
   assert.match(runner, /diagnostic-state\.json/);
+  assert.match(runner, /--forbid-pending/);
+  assert.match(runner, /installed-tests skips=0/);
+  assert.match(runner, /installedPackageSHA256Equality/);
+  assert.match(runner, /YAWR_EXPECTED_HELPER_SHA256/);
+  assert.match(runner, /YAWR_EXPECTED_FIXTURE_SHA256/);
   assert.doesNotMatch(runner, /failure evidence: \$\{evidencePath\}/);
   const productionSurface = fs.readFileSync(path.join(root, 'test', 'suite', 'productionSurface.test.ts'), 'utf8');
   assert.match(productionSurface, /replace\(\/\^mainThreadWebview-\/,\s*['"]{2}\)/);
@@ -121,6 +126,10 @@ test('component wiring uses the monorepo runtime without a second checkout', () 
   assert.match(highlightingBuild, /environmentValue\('CORE_ROOT'\) \|\| resolve\(root, '\.\.', '\.\.', 'runtime'\)/);
   assert.match(helperPackaging, /\['authoring', 'capabilities', '--v3'\]/);
   assert.match(helperPackaging, /assertAuthoringParity\(sourceAuthoring, packagedAuthoring\)/);
+  assert.match(helperPackaging, /runtime', 'internal', 'tool', 'testdata', 'fileonlyfixture', 'main\.go'/);
+  assert.match(helperPackaging, /GOOS: 'windows', GOARCH: 'amd64', CGO_ENABLED: '0'/);
+  assert.match(helperPackaging, /sha256=\$\{expectedHelperSHA256\}/);
+  assert.match(helperPackaging, /sha256=\$\{expectedFixtureSHA256\}/);
   assert.match(cacheTest, /value\('CORE_ROOT'\) \|\| path\.resolve\(__dirname, '\.\.', '\.\.', '\.\.', 'runtime'\)/);
   assert.match(wireTest, /value\('CORE_ROOT'\) \|\| path\.resolve\(__dirname, '\.\.', '\.\.', '\.\.', 'runtime'\)/);
   assert.doesNotMatch(powershellBuild + shellBuild, /Clone https:\/\/github\.com\/ormasoftchile\/yawr/);

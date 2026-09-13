@@ -129,6 +129,8 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 		})
 	case toolpkg.TransportNative:
 		return (&NativeCLITransport{}).Invoke(ctx, *def, action, args)
+	case toolpkg.TransportNativeFileOnly:
+		return (&NativeFileOnlyTransport{}).Invoke(ctx, *def, action, args)
 	default:
 		return nil, fmt.Errorf("tool runtime: unsupported transport %q", def.Transport)
 	}

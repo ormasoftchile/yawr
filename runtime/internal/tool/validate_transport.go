@@ -107,6 +107,29 @@ func ValidateTransportConfig(cfg schema.TransportConfig) []error {
 			errs = append(errs, fmt.Errorf("mcp: transport.auth is not valid for mode mcp (auth is only used by mode mcp-http)"))
 		}
 
+	case schema.TransportNativeFileOnly:
+		if cfg.Command == "" {
+			errs = append(errs, fmt.Errorf("native-file-only: transport.command is required"))
+		}
+		if cfg.SHA256 == "" {
+			errs = append(errs, fmt.Errorf("native-file-only: transport.sha256 is required"))
+		} else if len(cfg.SHA256) != 64 || strings.ToLower(cfg.SHA256) != cfg.SHA256 {
+			errs = append(errs, fmt.Errorf("native-file-only: transport.sha256 must be exactly 64 lower-case hexadecimal characters"))
+		} else {
+			for _, r := range cfg.SHA256 {
+				if !strings.ContainsRune("0123456789abcdef", r) {
+					errs = append(errs, fmt.Errorf("native-file-only: transport.sha256 must be exactly 64 lower-case hexadecimal characters"))
+					break
+				}
+			}
+		}
+		if len(cfg.Env) != 0 {
+			errs = append(errs, fmt.Errorf("native-file-only: transport.env is forbidden; the child receives only the fixed sandbox environment"))
+		}
+		if cfg.URL != "" || cfg.Auth != nil || cfg.VscodeTool != nil {
+			errs = append(errs, fmt.Errorf("native-file-only: url, auth, and vscode_tool are not valid for this transport"))
+		}
+
 	case schema.TransportVSCodeMCP:
 		// vscode-mcp is a loopback bridge transport. It requires NO url:, NO auth:, NO command:.
 		// These fields belong to other modes and are rejected here so authoring errors are caught early.

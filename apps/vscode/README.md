@@ -122,6 +122,18 @@ XTS host actions pause on an explicit **Open XTS** control in the run panel.
 That reviewed in-panel action is the only launch confirmation; the extension
 does not show a second modal. A reminder appears after a focused XTS view opens.
 
+## Installed-editor file-only subprocess support
+
+Installed-editor file-only test subprocess execution is supported only through
+the distinct `native-file-only` transport when the packaged runtime advertises
+`yawr.file-only-subprocess/v1`. The existing unsandboxed test permission remains
+distinct and is not a fallback. Installed qualification uses the production
+`yawr run --stdio` argument construction and the packaged helper and fixture;
+the current Extension Host harness executes that exact command directly because
+it cannot drive a click from the webview back into the extension.
+
+Native authoring remains exactly **EXTERNALLY GATED — NOT RUN — NOT PASSED**.
+
 ## Settings
 
 - `yawr.packageMap` — package-map selection for direct execution. Absolute, or relative

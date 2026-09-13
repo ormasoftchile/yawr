@@ -252,6 +252,32 @@ func TestValidateTransport_MCPStdio_ValidMinimal(t *testing.T) {
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got: %v", errs)
 	}
+
+}
+
+func TestValidateTransport_NativeFileOnlyContract(t *testing.T) {
+	valid := schema.TransportConfig{
+		Type:    schema.TransportNativeFileOnly,
+		Command: `bin\fixture.exe`,
+		SHA256:  strings.Repeat("a", 64),
+		Inputs:  []string{`data\input.txt`},
+	}
+	if errs := ValidateTransportConfig(valid); len(errs) != 0 {
+		t.Fatalf("valid native-file-only rejected: %v", errs)
+	}
+	for name, mutate := range map[string]func(*schema.TransportConfig){
+		"missing digest": func(c *schema.TransportConfig) { c.SHA256 = "" },
+		"upper digest":   func(c *schema.TransportConfig) { c.SHA256 = strings.ToUpper(c.SHA256) },
+		"environment":    func(c *schema.TransportConfig) { c.Env = map[string]string{"X": "Y"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			mutate(&cfg)
+			if errs := ValidateTransportConfig(cfg); len(errs) == 0 {
+				t.Fatal("invalid native-file-only config accepted")
+			}
+		})
+	}
 }
 
 func TestValidateTransport_MCPStdio_MissingCommand(t *testing.T) {
