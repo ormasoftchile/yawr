@@ -49,7 +49,25 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: '1.25.7'
+          cache-dependency-path: runtime/go.sum
       - run: npm ci
+      - name: Build and export current expression helper
+        shell: pwsh
+        run: |
+          $executable = if ($IsWindows) { 'yawr-expression.exe' } else { 'yawr-expression' }
+          $helper = Join-Path $env:RUNNER_TEMP $executable
+          go build -C runtime -trimpath -buildvcs=false -o $helper ./cmd/yawr
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $helper -PathType Leaf)) {
+            throw "Current-source expression helper was not built at $helper"
+          }
+          $identity = go version -m $helper 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $identity -notmatch 'path\s+github\.com/ormasoftchile/yawr/runtime/cmd/yawr') {
+            throw "Built expression helper identity is invalid: $identity"
+          }
+          "YAWR_EXPRESSION_HELPER=$helper" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run complete retained unit suite
         run: npm run extension:test
 
