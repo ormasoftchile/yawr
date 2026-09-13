@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +93,13 @@ async function findInstalledExtension() {
 let failure;
 try {
   await mkdir(join(runRoot, 'workspace'), { recursive: true });
+  if (label === 'production-surface') {
+    await mkdir(join(runRoot, 'workspace', 'test', 'fixtures'), { recursive: true });
+    await copyFile(
+      join(root, 'test', 'fixtures', 'enum.runbook.yaml'),
+      join(runRoot, 'workspace', 'test', 'fixtures', 'enum.runbook.yaml'),
+    );
+  }
   await writeDiagnosticState({ label });
   if (label === 'download') {
     const vscodeExecutable = await downloadAndUnzipVSCode({

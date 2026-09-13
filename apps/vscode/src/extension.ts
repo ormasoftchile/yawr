@@ -1366,9 +1366,14 @@ async function openDirectGraphPanelForRunbook(
     publishReloadState(true);
     const style = getSetting('preview.nodeStyle', resource, 'smooth-curves');
     const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
-    const projectRoot = pickProjectRoot(runbookPath, workspaceFolders, path.dirname(runbookPath));
+    const projectRoot = presentationProjectRoot(
+      runbookPath,
+      workspaceFolders,
+      path.dirname(runbookPath),
+      getSetting('packageMap', resource, ''),
+    );
     const isCurrentRevision = () => !disposed && revision === loadRevision;
-    const authoringRoot = presentationProjectRoot(runbookPath, workspaceFolders, path.dirname(runbookPath), getSetting('packageMap', resource, ''));
+    const authoringRoot = projectRoot;
     try {
       let document: GraphDocument;
       if (testHooks?.documentLoader) {
@@ -1544,7 +1549,12 @@ async function openDirectGraphPanelForRunbook(
       await testHooks?.beforeSpawn?.();
       if (!startupIsActive()) return;
       const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
-      const projectRoot = pickProjectRoot(runbookPath, workspaceFolders, path.dirname(runbookPath));
+      const projectRoot = currentProjectRoot ?? presentationProjectRoot(
+        runbookPath,
+        workspaceFolders,
+        path.dirname(runbookPath),
+        getSetting('packageMap', resource, ''),
+      );
       const packageMap = resolveRunPackageMapPath(
         projectRoot,
         getSetting('packageMap', resource, ''),

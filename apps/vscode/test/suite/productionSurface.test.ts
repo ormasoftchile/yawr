@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 
 const EXTENSION_ID = 'ormasoftchile.yawr-preview';
@@ -253,8 +253,20 @@ suite('Installed VSIX production surface', () => {
     const address = server.address();
     assert.ok(address && typeof address === 'object', 'loopback listener must expose a TCP address');
 
-    const toolPath = join(fixtureRoot, 'installed-qualification.tool.yaml');
-    const runbookPath = join(fixtureRoot, 'installed-qualification.runbook.yaml');
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    assert.ok(workspaceRoot, 'map-aware qualification requires the isolated workspace folder');
+    const nestedRoot = join(workspaceRoot, 'packages', 'nested');
+    const nestedRunbooks = join(nestedRoot, 'runbooks');
+    const workspaceMap = join(workspaceRoot, 'maps', 'workspace.package-map.yaml');
+    await mkdir(join(workspaceRoot, 'runbooks'), { recursive: true });
+    await mkdir(join(nestedRoot, 'tools'), { recursive: true });
+    await mkdir(nestedRunbooks, { recursive: true });
+    await mkdir(join(workspaceRoot, 'maps'), { recursive: true });
+    await writeFile(workspaceMap, 'apiVersion: yawr.config/v1\nrequires: []\n');
+    await copyFile(fixture, join(nestedRunbooks, 'fixture.exe'));
+    await copyFile(stagedInput, join(nestedRunbooks, 'input.txt'));
+    const toolPath = join(nestedRunbooks, 'installed-qualification.tool.yaml');
+    const runbookPath = join(nestedRunbooks, 'installed-qualification.runbook.yaml');
     const json = (value: string) => JSON.stringify(value);
     await writeFile(toolPath, `apiVersion: yawr.tool/v1
 meta: {name: installed-file-only, version: "1.0.0", description: Installed file-only qualification}
@@ -305,7 +317,9 @@ flow:
     await vscode.window.showTextDocument(runbookDocument);
     const binaryConfiguration = vscode.workspace.getConfiguration('yawr', vscode.Uri.file(runbookPath));
     const previousBinaryPath = binaryConfiguration.inspect<string>('binaryPath')?.workspaceValue;
+    const previousPackageMap = binaryConfiguration.inspect<string>('packageMap')?.workspaceValue;
     await binaryConfiguration.update('binaryPath', 'yawr', vscode.ConfigurationTarget.Workspace);
+    await binaryConfiguration.update('packageMap', join('maps', 'workspace.package-map.yaml'), vscode.ConfigurationTarget.Workspace);
     const sandboxBase = join(process.env.LOCALAPPDATA!, 'yawr', 'native-file-only');
     const sandboxesBefore = await directoryEntries(sandboxBase);
     const expectedArgs = [
@@ -313,6 +327,8 @@ flow:
       '--stdio',
       '--require-capabilities',
       'yawr.typed-results/v1,yawr.run-results-chunks/v1',
+      '--package-map',
+      workspaceMap,
       runbookDocument.fileName,
     ];
 
@@ -333,7 +349,7 @@ flow:
         'registered production command must execute from the exact installed extension');
       assert.strictEqual(await realpath(result.binary), helper,
         'default production resolution must select the packaged helper without checkout/PATH fallback');
-      assert.strictEqual(await realpath(result.cwd), fixtureRoot);
+      assert.strictEqual(await realpath(result.cwd), await realpath(workspaceRoot));
       assert.deepStrictEqual(Buffer.from(result.args.join('\0')), Buffer.from(expectedArgs.join('\0')),
         'registered production command must use the normal byte-for-byte stdio argument construction');
       assert.strictEqual(result.finished.status, 'completed', `installed file-only run failed: ${result.stderr}`);
@@ -347,6 +363,7 @@ flow:
       if (previousParentSentinel === undefined) delete process.env.YAWR_FILE_ONLY_PARENT_SENTINEL;
       else process.env.YAWR_FILE_ONLY_PARENT_SENTINEL = previousParentSentinel;
       await binaryConfiguration.update('binaryPath', previousBinaryPath, vscode.ConfigurationTarget.Workspace);
+      await binaryConfiguration.update('packageMap', previousPackageMap, vscode.ConfigurationTarget.Workspace);
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 
@@ -361,6 +378,13 @@ flow:
       productionCommandExecuted: 'yawr.runCurrentRunbook',
       installedPackageSHA256Equality: true,
       fileOnlyCommand: [result.binary, ...result.args],
+      mapAwareRunRoot: {
+        workspaceRoot,
+        nestedInferredRoot: nestedRoot,
+        packageMap: workspaceMap,
+        commandArgs: result.args,
+        cwd: result.cwd,
+      },
       expectedHelperSHA256: process.env.YAWR_EXPECTED_HELPER_SHA256,
       packagedHelperSHA256: helperSHA256,
       expectedFixtureSHA256: process.env.YAWR_EXPECTED_FIXTURE_SHA256,

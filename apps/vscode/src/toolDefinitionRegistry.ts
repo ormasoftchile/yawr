@@ -201,8 +201,8 @@ function readProjectConfig(
     throw error;
   }
   const raw = yaml.load(content) as RawProjectConfig | undefined;
-  if (!raw || typeof raw !== 'object' || raw.apiVersion !== 'config/v1') {
-    throw new Error(`${filePath}: expected apiVersion config/v1`);
+  if (!raw || typeof raw !== 'object' || raw.apiVersion !== 'yawr.config/v1') {
+    throw new Error(`${filePath}: expected apiVersion yawr.config/v1`);
   }
   const requires = Array.isArray(raw.requires)
     ? raw.requires.flatMap((value) => {
