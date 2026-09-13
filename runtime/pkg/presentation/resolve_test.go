@@ -1,6 +1,7 @@
 package presentation
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,6 +12,13 @@ import (
 	"unicode/utf16"
 )
 
+const canonicalContractDigest = "sha256:5264150ec2208082a21448bca2eeb1f64549bb84bc9e1033fd912beca140ded8"
+
+func canonicalContractBytes(data []byte) []byte {
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	return bytes.ReplaceAll(data, []byte("\n"), []byte("\r\n"))
+}
+
 func contract(t *testing.T) (Request, map[string]any, string) {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "interfaces.md"))
@@ -18,7 +26,7 @@ func contract(t *testing.T) (Request, map[string]any, string) {
 		t.Fatal(err)
 	}
 	vector := regexp.MustCompile("(?s)```json\\r?\\n(.*?)\\r?\\n```").FindSubmatch(data)
-	if len(vector) != 2 || Digest(vector[1]) != "sha256:5264150ec2208082a21448bca2eeb1f64549bb84bc9e1033fd912beca140ded8" {
+	if len(vector) != 2 || Digest(canonicalContractBytes(vector[1])) != canonicalContractDigest {
 		t.Fatal("canonical vector digest changed")
 	}
 	var v struct {
@@ -40,6 +48,18 @@ func contract(t *testing.T) (Request, map[string]any, string) {
 	v.Expect["document"] = map[string]any{"uri": v.Request.Document.URI, "version": float64(3)}
 	return v.Request, v.Expect, v.Invalid
 }
+
+func TestCanonicalContractDigestIgnoresCheckoutLineEndings(t *testing.T) {
+	lf := []byte("{\n  \"contract\": true\n}")
+	crlf := []byte("{\r\n  \"contract\": true\r\n}")
+	if !bytes.Equal(canonicalContractBytes(lf), canonicalContractBytes(crlf)) {
+		t.Fatal("canonical contract bytes depend on checkout line endings")
+	}
+	if bytes.Equal(canonicalContractBytes(lf), canonicalContractBytes([]byte("{\n  \"contract\": false\n}"))) {
+		t.Fatal("canonicalization erased a meaningful contract change")
+	}
+}
+
 func partial(t *testing.T, want, got any, path string) {
 	t.Helper()
 	switch w := want.(type) {
