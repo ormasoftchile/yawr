@@ -44,6 +44,22 @@ for (const token of [
   }
 }
 
+const runtime = workflow.match(
+  /^  runtime:\r?\n(?<job>[\s\S]*?)(?=^  [a-z][a-z0-9-]+:\r?$)/m,
+)?.groups?.job;
+if (!runtime) {
+  throw new Error('Root CI is missing the runtime job.');
+}
+if (!/timeout-minutes:\s*15/.test(runtime)) {
+  throw new Error('Runtime CI must remain bounded by the repository job budget.');
+}
+if (!runtime.includes('go test -p 1 ./... -count=1')) {
+  throw new Error('Runtime CI must serialize packages while retaining the complete uncached suite.');
+}
+if (/\b-run\b|\b-skip\b/.test(runtime)) {
+  throw new Error('Runtime CI must not filter or skip tests.');
+}
+
 const extensionUnit = workflow.match(
   /^  extension-unit:\r?\n(?<job>[\s\S]*?)(?=^  [a-z][a-z0-9-]+:\r?$)/m,
 )?.groups?.job;
