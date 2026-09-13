@@ -110,12 +110,14 @@ func TestStepStartedEvent_StructuralMetadata_CollectHealth(t *testing.T) {
 		"summarize":   {parentID: "check_host", parentKind: "include", includeAlias: "", branchLabel: ""},
 		"accumulate":  {parentID: "check_loop", parentKind: "iterate", includeAlias: "", branchLabel: ""},
 		"show_result": {parentID: "", parentKind: "", includeAlias: "", branchLabel: ""},
-		"go_ahead":    {parentID: "show_result", parentKind: "branch", includeAlias: "", branchLabel: "All checks passed"},
 		// Note: include is now a real composite parent step (like branch /
 		// iterate / parallel), so check_host fires step/started directly
 		// and its children reference it as parent_step_id=check_host.
-		// no_go is the not-taken branch arm — never runs, never fires step/started.
 		"done": {parentID: "", parentKind: "", includeAlias: "", branchLabel: ""},
+	}
+	branchExpectations := map[string]want{
+		"go_ahead": {parentID: "show_result", parentKind: "branch", includeAlias: "", branchLabel: "All checks passed"},
+		"no_go":    {parentID: "show_result", parentKind: "branch", includeAlias: "", branchLabel: "Checks failed"},
 	}
 
 	getStr := func(p map[string]any, key string) string {
@@ -141,5 +143,32 @@ func TestStepStartedEvent_StructuralMetadata_CollectHealth(t *testing.T) {
 		if got := getStr(p, "branch_label"); got != w.branchLabel {
 			t.Errorf("step %q: branch_label = %q, want %q", id, got, w.branchLabel)
 		}
+	}
+
+	var executedBranchChildren []string
+	for id := range branchExpectations {
+		if _, ok := starts[id]; ok {
+			executedBranchChildren = append(executedBranchChildren, id)
+		}
+	}
+	if len(executedBranchChildren) != 1 {
+		t.Fatalf("branch %q: observed step/started for %d branch children %v, want exactly one of %v",
+			"show_result", len(executedBranchChildren), executedBranchChildren, []string{"go_ahead", "no_go"})
+	}
+
+	id := executedBranchChildren[0]
+	p := starts[id]
+	w := branchExpectations[id]
+	if got := getStr(p, "parent_step_id"); got != w.parentID {
+		t.Errorf("step %q: parent_step_id = %q, want %q", id, got, w.parentID)
+	}
+	if got := getStr(p, "parent_kind"); got != w.parentKind {
+		t.Errorf("step %q: parent_kind = %q, want %q", id, got, w.parentKind)
+	}
+	if got := getStr(p, "include_alias"); got != w.includeAlias {
+		t.Errorf("step %q: include_alias = %q, want %q", id, got, w.includeAlias)
+	}
+	if got := getStr(p, "branch_label"); got != w.branchLabel {
+		t.Errorf("step %q: branch_label = %q, want %q", id, got, w.branchLabel)
 	}
 }
