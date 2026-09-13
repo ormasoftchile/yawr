@@ -126,6 +126,9 @@ func ValidateTransportConfig(cfg schema.TransportConfig) []error {
 		if len(cfg.Env) != 0 {
 			errs = append(errs, fmt.Errorf("native-file-only: transport.env is forbidden; the child receives only the fixed sandbox environment"))
 		}
+		if len(cfg.Args) != 0 {
+			errs = append(errs, fmt.Errorf("native-file-only: transport.args is not valid; declare all invocation arguments on actions[].argv"))
+		}
 		if cfg.URL != "" || cfg.Auth != nil || cfg.VscodeTool != nil {
 			errs = append(errs, fmt.Errorf("native-file-only: url, auth, and vscode_tool are not valid for this transport"))
 		}

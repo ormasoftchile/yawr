@@ -61,8 +61,12 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(runner, /installedPackageSHA256Equality/);
   assert.match(runner, /YAWR_EXPECTED_HELPER_SHA256/);
   assert.match(runner, /YAWR_EXPECTED_FIXTURE_SHA256/);
-  assert.doesNotMatch(runner, /failure evidence: \$\{evidencePath\}/);
+  assert.match(runner, /archive\.file\('extension\/bin\/win32-x64\/yawr\.exe'\)/);
+  assert.match(runner, /YAWR_EXPECTED_STANDALONE_SHA256/);
   const productionSurface = fs.readFileSync(path.join(root, 'test', 'suite', 'productionSurface.test.ts'), 'utf8');
+  assert.match(productionSurface, /executeCommand<typeof result>\('yawr\.runCurrentRunbook'\)/);
+  assert.doesNotMatch(productionSurface, /spawn\(helper/);
+  assert.doesNotMatch(runner, /failure evidence: \$\{evidencePath\}/);
   assert.match(productionSurface, /replace\(\/\^mainThreadWebview-\/,\s*['"]{2}\)/);
   assert.match(productionSurface, /canonicalWebviewViewType\(preview\.input\.viewType\)/);
 });

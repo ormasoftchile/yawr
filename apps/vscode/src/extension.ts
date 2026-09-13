@@ -147,6 +147,22 @@ interface DirectGraphTestHooks {
   ) => ReturnType<typeof spawn>;
 }
 
+interface ProductionRunResult {
+  extensionPath: string;
+  binary: string;
+  args: string[];
+  cwd: string;
+  frames: Array<Record<string, unknown>>;
+  stderr: string;
+  finished: Record<string, unknown>;
+}
+
+interface ProductionRunRequest {
+  inputs: Record<string, string>;
+  resolve(result: ProductionRunResult): void;
+  reject(error: Error): void;
+}
+
 interface DirectRouteTestOutcome {
   passed: boolean;
   targetReached: boolean;
@@ -369,6 +385,7 @@ export async function activate(context: vscode.ExtensionContext) {
     participant,
     vscode.commands.registerCommand('yawr.preview', () => previewProse()),
     vscode.commands.registerCommand('yawr.previewGraph', () => previewGraph()),
+    vscode.commands.registerCommand('yawr.runCurrentRunbook', () => runCurrentRunbook()),
     ...(context.extensionMode === vscode.ExtensionMode.Test
       ? [
           vscode.commands.registerCommand(
@@ -788,6 +805,25 @@ async function previewGraph() {
   return openDirectGraphPanelForRunbook(runbookPath);
 }
 
+async function runCurrentRunbook(): Promise<ProductionRunResult | undefined> {
+  const activeEditor = vscode.window.activeTextEditor;
+  const runbookPath = resolveRunbookPath(
+    activeEditor?.document.fileName,
+    extensionContext?.workspaceState.get<string>(WORKSPACE_RUNBOOK_KEY),
+  );
+  if (!runbookPath) {
+    void vscode.window.showWarningMessage('Open a *.runbook.yaml file first.');
+    return;
+  }
+  return new Promise<ProductionRunResult>((resolve, reject) => {
+    void openDirectGraphPanelForRunbook(runbookPath, undefined, {
+      inputs: {},
+      resolve,
+      reject,
+    }).catch((error: unknown) => reject(error instanceof Error ? error : new Error(String(error))));
+  });
+}
+
 function findRunbookViewColumn(runbookPath: string): vscode.ViewColumn | undefined {
   const runbookUri = vscode.Uri.file(runbookPath).toString();
   const activeGroup = vscode.window.tabGroups.activeTabGroup;
@@ -845,6 +881,7 @@ function parseRouteTestPlanHash(stdout: string): string {
 async function openDirectGraphPanelForRunbook(
   runbookPath: string,
   testHooks?: DirectGraphTestHooks,
+  productionRun?: ProductionRunRequest,
 ): Promise<vscode.WebviewPanel> {
   const resource = vscode.Uri.file(runbookPath);
   const runbookViewColumn = findRunbookViewColumn(runbookPath);
@@ -906,6 +943,16 @@ async function openDirectGraphPanelForRunbook(
   let activeHostActionRunID: string | undefined;
   let reloadPending = false;
   let activeRouteTest: { revision: number; artifact: RouteTestArtifact; outcome?: DirectRouteTestOutcome } | undefined;
+  let productionRunStarted = false;
+  let productionRunSettled = false;
+  let productionLaunch: { binary: string; args: string[]; cwd: string } | undefined;
+  const productionFrames: Array<Record<string, unknown>> = [];
+  let productionStderr = '';
+  const rejectProductionRun = (error: unknown) => {
+    if (!productionRun || productionRunSettled) return;
+    productionRunSettled = true;
+    productionRun.reject(error instanceof Error ? error : new Error(String(error)));
+  };
   let latestMessage: { type: string; [key: string]: unknown } = { type: 'loading' };
   const sessionCache = new SessionGraphCacheStore(
     vscode.Uri.joinPath(extensionContext!.globalStorageUri, 'investigation-sessions').fsPath,
@@ -1393,10 +1440,15 @@ async function openDirectGraphPanelForRunbook(
       const message = deriveFailureMessage(error);
       publish({ type: 'error', message });
       output?.appendLine(`[yawr] direct graph failed for ${runbookPath}:\n${message}`);
+      rejectProductionRun(new Error(message));
     } finally {
       if (loadController === controller) {
         loadController = undefined;
         publishReloadState(false);
+        if (productionRun && currentDocument && !productionRunStarted && !productionRunSettled) {
+          productionRunStarted = true;
+          void startRun(productionRun.inputs, undefined);
+        }
       }
     }
   };
@@ -1529,6 +1581,9 @@ async function openDirectGraphPanelForRunbook(
         stdio: ['pipe', 'pipe', 'pipe'],
       };
       if (!startupIsActive()) return;
+      if (productionRun) {
+        productionLaunch = { binary, args: [...args], cwd: projectRoot };
+      }
       const child = testHooks?.spawnRun
         ? testHooks.spawnRun(binary, args, spawnOptions)
         : spawn(binary, args, spawnOptions);
@@ -1545,6 +1600,7 @@ async function openDirectGraphPanelForRunbook(
       session = new DirectRunSession(child as RunChildProcess, {
         onFrame: (frame) => {
           if (!startupIsActive()) return;
+          if (productionRun) productionFrames.push({ ...frame });
           if (frame.type === 'run.started') {
             invalidateHostActionRun();
             activeHostActionRunID = frame.runID;
@@ -1567,16 +1623,30 @@ async function openDirectGraphPanelForRunbook(
             runBridge.dispose();
             runBridge = undefined;
           }
-          if (frame.type === 'run.finished') applyDeferredReload();
+          if (frame.type === 'run.finished') {
+            applyDeferredReload();
+            if (productionRun && productionLaunch && !productionRunSettled) {
+              productionRunSettled = true;
+              productionRun.resolve({
+                extensionPath: extensionContext!.extensionPath,
+                ...productionLaunch,
+                frames: productionFrames,
+                stderr: productionStderr,
+                finished: { ...frame },
+              });
+            }
+          }
         },
         onError: (message) => {
           if (!startupIsActive()) return;
           invalidateHostActionRun();
           output?.appendLine(`[yawr] stdio protocol error: ${message}`);
           void panel.webview.postMessage({ type: 'run.error', message });
+          rejectProductionRun(new Error(message));
         },
         onStderr: (text) => {
           if (!startupIsActive()) return;
+          if (productionRun) productionStderr += text;
           output?.append(text);
           void panel.webview.postMessage({ type: 'run.stderr', text });
         },
@@ -1589,6 +1659,9 @@ async function openDirectGraphPanelForRunbook(
             runBridge = undefined;
           }
           void panel.webview.postMessage({ type: 'run.exit', code, signal });
+          if (productionRun && !productionRunSettled) {
+            rejectProductionRun(new Error(`yawr run exited before run.finished: code=${code} signal=${signal}`));
+          }
           applyDeferredReload();
         },
       });
@@ -1613,6 +1686,7 @@ async function openDirectGraphPanelForRunbook(
       const message = deriveFailureMessage(error);
       output?.appendLine(`[yawr] direct run failed to start:\n${message}`);
       if (startupIsActive()) void panel.webview.postMessage({ type: 'run.error', message });
+      rejectProductionRun(new Error(message));
     } finally {
       if (startRevision === runStartRevision) runStarting = false;
       if (!runSession) applyDeferredReload();
@@ -1909,6 +1983,7 @@ async function openDirectGraphPanelForRunbook(
     if (directGraphPanel === panel) {
       directGraphPanel = undefined;
     }
+    rejectProductionRun(new Error('Yawr run panel was disposed before terminal completion.'));
   });
   void reload().then(() => reconnectInvestigation());
   return panel;

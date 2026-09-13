@@ -30,6 +30,27 @@ const hashFile = async (path) => createHash('sha256').update(await readFile(path
 const expectedExtensionVersion = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 const require = createRequire(import.meta.url);
 const { downloadAndUnzipVSCode, resolveCliPathFromVSCodeExecutablePath } = require('@vscode/test-electron');
+const JSZip = require('jszip');
+const vsixPath = process.env.YAWR_VSIX_PATH || join(root, 'yawr-preview.vsix');
+let archiveIdentities = {};
+if (label === 'production-surface' && process.platform === 'win32' && process.arch === 'x64') {
+  const archive = await JSZip.loadAsync(await readFile(vsixPath));
+  const helperEntry = archive.file('extension/bin/win32-x64/yawr.exe');
+  const fixtureEntry = archive.file('extension/fixtures/file-only-subprocess/win32-x64/fixture.exe');
+  if (!helperEntry || !fixtureEntry) throw new Error('final VSIX is missing the packaged helper or file-only fixture');
+  const hashBytes = (bytes) => createHash('sha256').update(bytes).digest('hex');
+  const helperSHA256 = hashBytes(await helperEntry.async('nodebuffer'));
+  const fixtureSHA256 = hashBytes(await fixtureEntry.async('nodebuffer'));
+  const standaloneSHA256 = await hashFile(packagedHelper);
+  if (helperSHA256 !== standaloneSHA256) {
+    throw new Error(`final VSIX helper ${helperSHA256} differs from standalone runtime ${standaloneSHA256}`);
+  }
+  archiveIdentities = {
+    YAWR_EXPECTED_HELPER_SHA256: helperSHA256,
+    YAWR_EXPECTED_FIXTURE_SHA256: fixtureSHA256,
+    YAWR_EXPECTED_STANDALONE_SHA256: standaloneSHA256,
+  };
+}
 const environment = {
   ...process.env,
   PATH: `${portableGoBin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}`,
@@ -38,10 +59,7 @@ const environment = {
   YAWR_E2E_BINARY: packagedHelper,
   YAWR_EXPRESSION_HELPER: packagedHelper,
   YAWR_EXPECTED_EXTENSION_VERSION: expectedExtensionVersion,
-  ...(process.platform === 'win32' && process.arch === 'x64' ? {
-    YAWR_EXPECTED_HELPER_SHA256: await hashFile(packagedHelper),
-    YAWR_EXPECTED_FIXTURE_SHA256: await hashFile(packagedFixture),
-  } : {}),
+  ...archiveIdentities,
 };
 
 const transient = (error) => error instanceof BoundedProcessError && (
@@ -101,7 +119,7 @@ try {
         `--user-data-dir=${join(runRoot, 'profile')}`,
         `--extensions-dir=${join(runRoot, 'extensions')}`,
         '--install-extension',
-        process.env.YAWR_VSIX_PATH || join(root, 'yawr-preview.vsix'),
+        vsixPath,
       ], {
         cwd: root,
         env: environment,

@@ -9,6 +9,7 @@ Three commands:
 |---|---|---|
 | **Yawr: Open Runbook Preview** (`yawr.preview`) | Runs the helper preview command against the active `.runbook.yaml` file and opens the rendered Markdown in a side-by-side preview. | Packaged `yawr` helper, or set `yawr.binaryPath`. |
 | **Yawr: Open Runbook Graph (React Flow)** (`yawr.previewGraph`) | Opens the complete runbook UI using the `yawr.stdio/v1` runtime protocol. | Packaged `yawr` helper, or set `yawr.binaryPath`. |
+| **Yawr: Run Current Runbook** (`yawr.runCurrentRunbook`) | Opens the production graph session and starts its normal `yawr run --stdio` flow. The command resolves only at terminal `run.finished` with bounded, non-secret launch/frame/result metadata for automation. | Packaged `yawr` helper by default, or explicit `yawr.binaryPath`. |
 | **Yawr: Validate Runbook Inputs (Dry Run)** (`yawr.validateInputs`) | Prompts for declared inputs and delegates validation to the real runtime. | Packaged `yawr` helper, or set `yawr.binaryPath`. |
 
 ## Inspector

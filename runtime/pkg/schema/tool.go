@@ -535,6 +535,18 @@ func (t *TransportConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 	*t = TransportConfig(raw)
 	t.Type = Transport(t.Mode)
+	if t.Type == TransportNativeFileOnly {
+		known := map[string]bool{
+			"mode": true, "command": true, "sha256": true, "inputs": true,
+			"args": true, "env": true, "url": true, "auth": true, "vscode_tool": true,
+		}
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i].Value
+			if !known[key] {
+				return fmt.Errorf("native-file-only: transport field %q is not recognized", key)
+			}
+		}
+	}
 	return nil
 }
 

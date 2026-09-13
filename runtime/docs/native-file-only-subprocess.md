@@ -18,6 +18,11 @@ symlinks, junctions, and other reparse points reject. `sha256` is mandatory,
 lower-case, and verified over the bytes copied into the sandbox before those
 same staged bytes execute.
 
+The transport contract is closed: `command`, `sha256`, and `inputs` are the
+only transport fields accepted by this mode. `transport.args` is rejected;
+invocation arguments belong on each action's `argv`. `env`, `url`, `auth`,
+and `vscode_tool` are also rejected rather than ignored.
+
 The runtime creates an ephemeral AppContainer with no capabilities, grants it
 read/execute access only to staged files, and grants write access only to the
 private `scratch` directory. A Job Object with an active-process limit of one

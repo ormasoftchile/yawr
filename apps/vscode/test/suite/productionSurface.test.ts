@@ -1,17 +1,14 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { createHash } from 'node:crypto';
-import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { promisify } from 'node:util';
 import { readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 
 const EXTENSION_ID = 'ormasoftchile.yawr-preview';
 const canonicalWebviewViewType = (viewType: string) => viewType.replace(/^mainThreadWebview-/, '');
 const RENDER_TELEMETRY_SCHEMA = 'yawr.render-telemetry/v1';
-const execFileAsync = promisify(execFile);
 
 interface RenderTelemetry {
   type: 'render.telemetry';
@@ -231,6 +228,8 @@ suite('Installed VSIX production surface', () => {
     const fixtureSHA256 = await hashFile(fixture);
     assert.match(process.env.YAWR_EXPECTED_HELPER_SHA256 ?? '', /^[0-9a-f]{64}$/);
     assert.match(process.env.YAWR_EXPECTED_FIXTURE_SHA256 ?? '', /^[0-9a-f]{64}$/);
+    assert.strictEqual(process.env.YAWR_EXPECTED_STANDALONE_SHA256, process.env.YAWR_EXPECTED_HELPER_SHA256,
+      'standalone runtime must byte-match the helper independently extracted from the final VSIX');
     assert.strictEqual(
       helperSHA256,
       process.env.YAWR_EXPECTED_HELPER_SHA256,
@@ -241,14 +240,6 @@ suite('Installed VSIX production surface', () => {
       process.env.YAWR_EXPECTED_FIXTURE_SHA256,
       'installed fixture SHA-256 must equal the independently recorded exact package input',
     );
-
-    const capabilities = JSON.parse((await execFileAsync(helper, ['presentation', 'capabilities', '--v3'], {
-      windowsHide: true,
-      timeout: 10_000,
-      maxBuffer: 8 * 1024 * 1024,
-    })).stdout) as { capabilities?: string[] };
-    assert.ok(capabilities.capabilities?.includes('yawr.file-only-subprocess/v1'),
-      'installed helper must advertise yawr.file-only-subprocess/v1');
 
     const hostSentinel = join(stateRoot, 'file-only-host-sentinel.txt');
     await writeFile(hostSentinel, 'unchanged');
@@ -310,80 +301,43 @@ flow:
   - step: {id: publish, type: results, title: Results}
 `);
 
+    const runbookDocument = await vscode.workspace.openTextDocument(runbookPath);
+    await vscode.window.showTextDocument(runbookDocument);
     const binaryConfiguration = vscode.workspace.getConfiguration('yawr', vscode.Uri.file(runbookPath));
     const previousBinaryPath = binaryConfiguration.inspect<string>('binaryPath')?.workspaceValue;
-    const absentBinaryPath = join(stateRoot, 'asserted-absent-file-only-yawr.exe');
-    await assert.rejects(Promise.resolve(vscode.workspace.fs.stat(vscode.Uri.file(absentBinaryPath))));
-    await binaryConfiguration.update('binaryPath', absentBinaryPath, vscode.ConfigurationTarget.Workspace);
+    await binaryConfiguration.update('binaryPath', 'yawr', vscode.ConfigurationTarget.Workspace);
     const sandboxBase = join(process.env.LOCALAPPDATA!, 'yawr', 'native-file-only');
     const sandboxesBefore = await directoryEntries(sandboxBase);
-    const installedRunModule = require(join(extensionRoot, 'out', 'directRunSession.js')) as {
-      buildStdioRunArgs(
-        runbookPath: string,
-        inputs: Readonly<Record<string, string>>,
-        packageMapPath?: string,
-        debug?: boolean,
-        privateInputNames?: ReadonlySet<string>,
-        routeTestPath?: string,
-        typedResults?: boolean,
-      ): string[];
-      DirectRunSession: new (
-        child: unknown,
-        callbacks: {
-          onFrame(frame: Record<string, unknown>): void;
-          onError(message: string): void;
-          onExit(code: number | null, signal: NodeJS.Signals | null): void;
-          onStderr(text: string): void;
-        },
-      ) => unknown;
-    };
-    const args = installedRunModule.buildStdioRunArgs(runbookPath, {}, undefined, false, new Set(), undefined, true);
     const expectedArgs = [
       'run',
       '--stdio',
       '--require-capabilities',
       'yawr.typed-results/v1,yawr.run-results-chunks/v1',
-      runbookPath,
+      runbookDocument.fileName,
     ];
-    assert.deepStrictEqual(Buffer.from(args.join('\0')), Buffer.from(expectedArgs.join('\0')),
-      'installed execution must have byte-for-byte parity with production argument construction');
 
     const previousParentSentinel = process.env.YAWR_FILE_ONLY_PARENT_SENTINEL;
     process.env.YAWR_FILE_ONLY_PARENT_SENTINEL = 'must-not-inherit';
-    const child = spawn(helper, args, {
-      cwd: fixtureRoot,
-      env: { ...process.env },
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const frames: Array<Record<string, unknown>> = [];
-    let stderr = '';
+    let result!: {
+      extensionPath: string;
+      binary: string;
+      args: string[];
+      cwd: string;
+      frames: Array<Record<string, unknown>>;
+      stderr: string;
+      finished: Record<string, unknown>;
+    };
     try {
-      const finished = await new Promise<Record<string, unknown>>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error(`installed file-only run timed out; stderr=${stderr}`)), 75_000);
-        new installedRunModule.DirectRunSession(child, {
-          onFrame(frame) {
-            frames.push(frame);
-            if (frame.type === 'run.finished') {
-              clearTimeout(timeout);
-              resolve(frame);
-            }
-          },
-          onError(message) {
-            clearTimeout(timeout);
-            reject(new Error(`installed stdio protocol failed: ${message}; stderr=${stderr}`));
-          },
-          onExit(code, signal) {
-            if (!frames.some((frame) => frame.type === 'run.finished')) {
-              clearTimeout(timeout);
-              reject(new Error(`installed helper exited before run.finished: code=${code} signal=${signal}; stderr=${stderr}`));
-            }
-          },
-          onStderr(text) { stderr += text; },
-        });
-      });
-      assert.strictEqual(finished.status, 'completed', `installed file-only run failed: ${stderr}`);
-      const availability = finished.resultsAvailability as {
+      result = await vscode.commands.executeCommand<typeof result>('yawr.runCurrentRunbook');
+      assert.strictEqual(await realpath(result.extensionPath), extensionRoot,
+        'registered production command must execute from the exact installed extension');
+      assert.strictEqual(await realpath(result.binary), helper,
+        'default production resolution must select the packaged helper without checkout/PATH fallback');
+      assert.strictEqual(await realpath(result.cwd), fixtureRoot);
+      assert.deepStrictEqual(Buffer.from(result.args.join('\0')), Buffer.from(expectedArgs.join('\0')),
+        'registered production command must use the normal byte-for-byte stdio argument construction');
+      assert.strictEqual(result.finished.status, 'completed', `installed file-only run failed: ${result.stderr}`);
+      const availability = result.finished.resultsAvailability as {
         state?: string;
         publication?: { outputs?: Record<string, { value?: unknown }> };
       };
@@ -400,16 +354,18 @@ flow:
     assert.strictEqual(connectionCount, 0, 'file-only fixture must not connect to the loopback listener');
     assert.strictEqual(await readFile(hostSentinel, 'utf8'), 'unchanged', 'file-only fixture must not mutate the host sentinel');
     assert.deepStrictEqual(await directoryEntries(sandboxBase), sandboxesBefore, 'file-only sandboxes must be cleaned up');
-    assert.ok(frames.some((frame) => frame.type === 'run.started'));
-    assert.ok(frames.some((frame) => frame.type === 'run.finished'));
+    assert.ok(result.frames.some((frame) => frame.type === 'run.started'));
+    assert.ok(result.frames.some((frame) => frame.type === 'run.finished'));
     await record({
       fileOnlyQualificationExecuted: true,
+      productionCommandExecuted: 'yawr.runCurrentRunbook',
       installedPackageSHA256Equality: true,
-      fileOnlyCommand: [helper, ...args],
+      fileOnlyCommand: [result.binary, ...result.args],
       expectedHelperSHA256: process.env.YAWR_EXPECTED_HELPER_SHA256,
       packagedHelperSHA256: helperSHA256,
       expectedFixtureSHA256: process.env.YAWR_EXPECTED_FIXTURE_SHA256,
       packagedFixtureSHA256: fixtureSHA256,
+      standaloneRuntimeSHA256: process.env.YAWR_EXPECTED_STANDALONE_SHA256,
       fileOnlyEvidence: {
         stagedInputRead: true,
         privateScratchWrite: true,
@@ -420,7 +376,7 @@ flow:
         sandboxCleaned: true,
         typedResults: true,
       },
-      installedExecutionLimitation: 'Extension Host cannot synthesize a webview-to-extension click; executed installed helper directly with byte-for-byte production buildStdioRunArgs output.',
+      installedExecutionPath: 'registered yawr.runCurrentRunbook -> production graph load -> normal resolveBinary/buildStdioRunArgs/spawn/DirectRunSession flow',
     });
   });
 });

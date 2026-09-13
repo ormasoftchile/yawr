@@ -20,6 +20,7 @@
     "onLanguage:yaml",
     "onCommand:yawr.preview",
     "onCommand:yawr.previewGraph",
+    "onCommand:yawr.runCurrentRunbook",
     "onCommand:yawr.validateInputs",
     "onCommand:yawr.showServerLog",
     "onCommand:yawr.showHighlightingDiagnostics",
@@ -46,6 +47,10 @@
         "command": "yawr.previewGraph",
         "title": "Yawr: Open Runbook Graph (React Flow)",
         "icon": "$(type-hierarchy-sub)"
+      },
+      {
+        "command": "yawr.runCurrentRunbook",
+        "title": "Yawr: Run Current Runbook"
       },
       {
         "command": "yawr.showServerLog",
