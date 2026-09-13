@@ -785,7 +785,7 @@ async function previewGraph() {
     void vscode.window.showWarningMessage('Open a *.runbook.yaml file first.');
     return;
   }
-  await openDirectGraphPanelForRunbook(runbookPath);
+  return openDirectGraphPanelForRunbook(runbookPath);
 }
 
 function findRunbookViewColumn(runbookPath: string): vscode.ViewColumn | undefined {
