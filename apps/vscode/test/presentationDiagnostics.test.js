@@ -50,12 +50,19 @@ test('helper timing separates queued cancellation from spawned work and preserve
   assert.deepEqual(await finiteHelper(process.execPath, ['-e', 'console.log("{}")'], '', undefined, () => { throw Error('sink'); }), {});
 });
 
-test('real five-second deadline is attributed to process time without retaining stderr', { timeout: 10000 }, async () => {
+test('five-second deadline is attributed to process time without retaining stderr', async t => {
+  const realSetTimeout = globalThis.setTimeout;
+  const deadlines = [];
+  t.mock.method(globalThis, 'setTimeout', (callback, delay, ...args) => {
+    deadlines.push(delay);
+    return realSetTimeout(callback, delay === 5000 ? 100 : delay, ...args);
+  });
   let timing;
   await assert.rejects(finiteHelper(process.execPath,
     ['-e', 'process.stderr.write("PRIVATE_STDERR");setTimeout(()=>{},20000)'], '', undefined, v => { timing = v; }), /helper-deadline/);
+  assert.ok(deadlines.includes(5000));
   assert.equal(timing.reason, 'helper-deadline');
-  assert.ok(timing.processMs >= 4900 && timing.processMs < 8000);
+  assert.ok(timing.processMs >= 75 && timing.processMs < 2000);
   assert.doesNotMatch(JSON.stringify(timing), /PRIVATE_STDERR/);
 });
 

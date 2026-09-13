@@ -26,10 +26,13 @@ function deferred() {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-function productionModule(file) {
+function productionEntry(...segments) {
+  return path.resolve(__dirname, '..', ...segments);
+}
+function productionModule(...segments) {
   const { buildSync } = require('esbuild');
   const Module = require('node:module');
-  const compiled = buildSync({ entryPoints: [path.join(__dirname, '..', file)], bundle: true, write: false,
+  const compiled = buildSync({ entryPoints: [productionEntry(...segments)], bundle: true, write: false,
     platform: 'node', format: 'cjs', packages: 'external', logLevel: 'silent' });
   const loaded = new Module(path.join(__dirname, 'expression-production.cjs'), module);
   loaded.filename = loaded.id;
@@ -37,6 +40,18 @@ function productionModule(file) {
   loaded._compile(compiled.outputFiles[0].text, loaded.filename);
   return loaded.exports;
 }
+test('production test entry paths resolve from platform-independent segments', () => {
+  for (const segments of [
+    ['webview', 'highlighting', 'expressions.ts'],
+    ['webview', 'highlighting', 'AuthoredValue.tsx'],
+    ['webview', 'inspector.tsx'],
+  ]) {
+    assert.ok(segments.every(segment => !/[\\/]/.test(segment)));
+    assert.ok(fs.statSync(productionEntry(...segments)).isFile());
+    assert.equal(path.win32.basename(path.win32.join('C:\\repo\\apps\\vscode', ...segments)), segments.at(-1));
+    assert.equal(path.posix.basename(path.posix.join('/repo/apps/vscode', ...segments)), segments.at(-1));
+  }
+});
 function request(text) {
   return { schema_version: 'yawr.expression-resolve/v1', request_id: 'expr:1', document: { uri: 'file:///test.runbook.yaml', path: 'C:\\test.runbook.yaml', version: 1, text },
     context: { project_root: 'C:\\project', generation: 1, package_map_path: 'C:\\configured.yaml', entrypoint_path: 'C:\\entry.runbook.yaml' }, overlays: [] };
@@ -131,7 +146,7 @@ test('v2 regex scalar mapping paints exact classes on all YAML forms, excluding 
   }
 });
 test('v2 safe authored recursion and DOM rendering consume core regex tokens without guessing strings', async () => {
-  const { verifiedExpressionValues, appendTokenText } = productionModule('webview\\highlighting\\expressions.ts');
+  const { verifiedExpressionValues, appendTokenText } = productionModule('webview', 'highlighting', 'expressions.ts');
   const { text, expected } = regexFixture[0];
   const pointers = ['/assertions/0/expected', '/arguments/0/value/a~0~1/0/pattern'];
   const details = {
@@ -245,7 +260,7 @@ test('surrogate boundaries, malformed spans, envelope budgets and redacted desce
   assert.equal(wire.safeExpressionText({}, '/__proto__/x'), undefined);
 });
 test('only serialized named-entry boundaries protect values, not arbitrary payload redacted keys', async t => {
-  const { verifiedExpressionValues } = productionModule('webview\\highlighting\\expressions.ts');
+  const { verifiedExpressionValues } = productionModule('webview', 'highlighting', 'expressions.ts');
   const digestInputs = [];
   const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
   t.mock.method(globalThis.crypto.subtle, 'digest', (algorithm, bytes) => {
@@ -282,8 +297,8 @@ test('only serialized named-entry boundaries protect values, not arbitrary paylo
 test('production authored component and named rows preserve all safe payload fields, including legacy display', () => {
   const React = require('react');
   const { renderToStaticMarkup } = require('react-dom/server');
-  const { AuthoredValue } = productionModule('webview\\highlighting\\AuthoredValue.tsx');
-  const { NamedValueRows } = productionModule('webview\\inspector.tsx');
+  const { AuthoredValue } = productionModule('webview', 'highlighting', 'AuthoredValue.tsx');
+  const { NamedValueRows } = productionModule('webview', 'inspector.tsx');
   const value = { redacted: true, code: fixture[1].text, other: 'must remain visible',
     'a~/': [{ name: 'ordinary map', redacted: true, value: fixture[1].text }] };
   const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));
