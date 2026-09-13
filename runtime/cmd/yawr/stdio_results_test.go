@@ -165,9 +165,10 @@ func TestStdioResultsUnavailableAndTransportFailure(t *testing.T) {
 			}
 			raw := append([]byte(nil), buffer.Bytes()...)
 			frames := resultsFrames(t, &buffer)
-			if len(frames) != 1 || string(frames[0]["results"]) != "null" || !bytes.Contains(frames[0]["results_unavailable"], []byte(test.reason)) || !bytes.Contains(frames[0]["error"], []byte("original")) {
+			if len(frames) != 1 || string(frames[0]["results"]) != "null" || !bytes.Contains(frames[0]["error"], []byte("original")) {
 				t.Fatal("untruthful unavailable/failed terminal")
 			}
+			y2DecodeUnavailable(t, frames[0]["results_unavailable"], test.reason)
 			if test.secret != "" && bytes.Contains(raw, []byte(test.secret)) {
 				t.Fatal("protected content leaked")
 			}

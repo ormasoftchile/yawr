@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const yaml = require('js-yaml');
 
 const root = path.join(__dirname, '..');
 
@@ -55,8 +56,17 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(runner, /failure evidence artifact: \$\{evidence\.artifactId\}/);
   assert.match(runner, /installedExtensionDirectory/);
   assert.match(runner, /diagnostic-state\.json/);
-  assert.doesNotMatch(runner, /failure evidence: \$\{evidencePath\}/);
+  assert.match(runner, /--forbid-pending/);
+  assert.match(runner, /installed-tests skips=0/);
+  assert.match(runner, /installedPackageSHA256Equality/);
+  assert.match(runner, /YAWR_EXPECTED_HELPER_SHA256/);
+  assert.match(runner, /YAWR_EXPECTED_FIXTURE_SHA256/);
+  assert.match(runner, /archive\.file\('extension\/bin\/win32-x64\/yawr\.exe'\)/);
+  assert.match(runner, /YAWR_EXPECTED_STANDALONE_SHA256/);
   const productionSurface = fs.readFileSync(path.join(root, 'test', 'suite', 'productionSurface.test.ts'), 'utf8');
+  assert.match(productionSurface, /executeCommand<typeof result>\('yawr\.runCurrentRunbook'\)/);
+  assert.doesNotMatch(productionSurface, /spawn\(helper/);
+  assert.doesNotMatch(runner, /failure evidence: \$\{evidencePath\}/);
   assert.match(productionSurface, /replace\(\/\^mainThreadWebview-\/,\s*['"]{2}\)/);
   assert.match(productionSurface, /canonicalWebviewViewType\(preview\.input\.viewType\)/);
 });
@@ -86,6 +96,25 @@ test('root, task, and CI wiring expose the bounded installed-VSIX validator', ()
   assert.match(workflow, /extension-installed-vsix:[\s\S]*timeout-minutes:\s*15/);
   assert.match(workflow, /xvfb-run -a npm run extension:validate:vsix/);
   assert.doesNotMatch(workflow, /extension-installed-vsix:[\s\S]*npm run extension:e2e:vsix/);
+
+  const workflowDocument = yaml.load(workflow);
+  for (const jobName of ['extension-source-host', 'extension-installed-vsix']) {
+    const job = workflowDocument.jobs?.[jobName];
+    assert.ok(job, `CI job ${jobName} must exist`);
+    const commands = job.steps
+      .map((step) => step.run)
+      .filter((command) => typeof command === 'string');
+    const compileIndex = commands.findIndex((command) => command.includes('npm run extension:compile'));
+    const packageHelperIndex = commands.findIndex(
+      (command) => command.includes('npm run extension:package-helper'),
+    );
+    assert.ok(compileIndex >= 0, `${jobName} must compile the extension before helper packaging`);
+    assert.ok(packageHelperIndex >= 0, `${jobName} must package the matching runtime helper`);
+    assert.ok(
+      compileIndex < packageHelperIndex,
+      `${jobName} must compile required extension output before package-helper.mjs can run`,
+    );
+  }
 });
 
 test('component wiring uses the monorepo runtime without a second checkout', () => {
@@ -101,6 +130,10 @@ test('component wiring uses the monorepo runtime without a second checkout', () 
   assert.match(highlightingBuild, /environmentValue\('CORE_ROOT'\) \|\| resolve\(root, '\.\.', '\.\.', 'runtime'\)/);
   assert.match(helperPackaging, /\['authoring', 'capabilities', '--v3'\]/);
   assert.match(helperPackaging, /assertAuthoringParity\(sourceAuthoring, packagedAuthoring\)/);
+  assert.match(helperPackaging, /runtime', 'internal', 'tool', 'testdata', 'fileonlyfixture', 'main\.go'/);
+  assert.match(helperPackaging, /GOOS: 'windows', GOARCH: 'amd64', CGO_ENABLED: '0'/);
+  assert.match(helperPackaging, /sha256=\$\{expectedHelperSHA256\}/);
+  assert.match(helperPackaging, /sha256=\$\{expectedFixtureSHA256\}/);
   assert.match(cacheTest, /value\('CORE_ROOT'\) \|\| path\.resolve\(__dirname, '\.\.', '\.\.', '\.\.', 'runtime'\)/);
   assert.match(wireTest, /value\('CORE_ROOT'\) \|\| path\.resolve\(__dirname, '\.\.', '\.\.', '\.\.', 'runtime'\)/);
   assert.doesNotMatch(powershellBuild + shellBuild, /Clone https:\/\/github\.com\/ormasoftchile\/yawr/);

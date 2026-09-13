@@ -21,6 +21,7 @@ import (
 	internalexecutor "github.com/ormasoftchile/yawr/runtime/internal/executor"
 	internalparser "github.com/ormasoftchile/yawr/runtime/internal/parser"
 	internalplanner "github.com/ormasoftchile/yawr/runtime/internal/planner"
+	"github.com/ormasoftchile/yawr/runtime/internal/resultsdelivery"
 	internalroutetest "github.com/ormasoftchile/yawr/runtime/internal/routetest"
 	internalserve "github.com/ormasoftchile/yawr/runtime/internal/serve"
 	internaltool "github.com/ormasoftchile/yawr/runtime/internal/tool"
@@ -97,6 +98,11 @@ func runWithMode(args []string, mode engine.RunMode) int {
 		for _, capability := range strings.Split(*requiredCapabilities, ",") {
 			switch capability {
 			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1":
+			case "yawr.file-only-subprocess/v1":
+				if !toolpkg.FileOnlySubprocessAvailable() {
+					fmt.Fprintln(os.Stderr, "run: unsupported-capability:", capability)
+					return exitValidation
+				}
 			default:
 				fmt.Fprintln(os.Stderr, "run: unsupported-capability:", capability)
 				return exitValidation
@@ -840,7 +846,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 
 	switch *outputFormat {
 	case outputJSON:
-		renderJSONSummary(os.Stdout, reportedStatus, results)
+		renderJSONSummary(os.Stdout, reportedStatus, results, state)
 	case outputText, outputQuiet:
 		if routeTestPassed && *outputFormat == outputText {
 			fmt.Fprintln(os.Stdout, "Step reached - command not run")
@@ -1152,13 +1158,21 @@ func renderSummary(w io.Writer, status engine.RunStatus, steps int, dryRun bool)
 	fmt.Fprintf(w, "%scomplete: status=%s steps=%d\n", prefix, status, steps)
 }
 
-func renderJSONSummary(w io.Writer, status engine.RunStatus, steps []stepSummary) {
+func renderJSONSummary(w io.Writer, status engine.RunStatus, steps []stepSummary, state engine.RunState) {
+	record, cloneErr := state.CloneResults()
+	body, unavailable := resultsdelivery.Prepare(record, cloneErr, status, engine.DebugProtection{})
 	payload := struct {
-		Status string        `json:"status"`
-		Steps  []stepSummary `json:"steps"`
+		RunID              string                       `json:"run_id"`
+		Status             string                       `json:"status"`
+		Steps              []stepSummary                `json:"steps"`
+		Results            json.RawMessage              `json:"results"`
+		ResultsUnavailable *resultsdelivery.Unavailable `json:"results_unavailable,omitempty"`
 	}{
-		Status: string(status),
-		Steps:  steps,
+		RunID: state.RunID, Status: string(status), Steps: steps,
+		Results: body, ResultsUnavailable: unavailable,
+	}
+	if body == nil {
+		payload.Results = json.RawMessage("null")
 	}
 	enc := json.NewEncoder(w)
 	_ = enc.Encode(payload)

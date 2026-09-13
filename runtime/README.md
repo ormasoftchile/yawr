@@ -34,6 +34,14 @@ go build -o yawr ./cmd/yawr
 go test ./... -race -count=1
 ```
 
+## File-only subprocesses
+
+Windows AMD64 runtimes with a working AppContainer backend advertise
+`yawr.file-only-subprocess/v1` and accept the distinct
+`native-file-only` tool transport. It is digest-pinned, package-relative,
+network-denied, single-process, environment-scrubbed, and fail-closed. See
+[`docs/native-file-only-subprocess.md`](docs/native-file-only-subprocess.md).
+
 ## CLI
 
 ```

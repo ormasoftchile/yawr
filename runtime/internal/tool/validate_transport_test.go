@@ -252,6 +252,62 @@ func TestValidateTransport_MCPStdio_ValidMinimal(t *testing.T) {
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got: %v", errs)
 	}
+
+}
+
+func TestValidateTransport_NativeFileOnlyContract(t *testing.T) {
+	valid := schema.TransportConfig{
+		Type:    schema.TransportNativeFileOnly,
+		Command: `bin\fixture.exe`,
+		SHA256:  strings.Repeat("a", 64),
+		Inputs:  []string{`data\input.txt`},
+	}
+	if errs := ValidateTransportConfig(valid); len(errs) != 0 {
+		t.Fatalf("valid native-file-only rejected: %v", errs)
+	}
+	for name, mutate := range map[string]func(*schema.TransportConfig){
+		"missing digest": func(c *schema.TransportConfig) { c.SHA256 = "" },
+		"upper digest":   func(c *schema.TransportConfig) { c.SHA256 = strings.ToUpper(c.SHA256) },
+		"environment":    func(c *schema.TransportConfig) { c.Env = map[string]string{"X": "Y"} },
+		"transport args": func(c *schema.TransportConfig) { c.Args = []string{"--silently-ignored"} },
+		"url":            func(c *schema.TransportConfig) { c.URL = "https://example.invalid" },
+		"auth":           func(c *schema.TransportConfig) { c.Auth = &schema.AuthConfig{Provider: "azure-cli"} },
+		"vscode tool":    func(c *schema.TransportConfig) { value := "tool"; c.VscodeTool = &value },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			mutate(&cfg)
+			if errs := ValidateTransportConfig(cfg); len(errs) == 0 {
+				t.Fatal("invalid native-file-only config accepted")
+			}
+		})
+	}
+	errs := ValidateTransportConfig(schema.TransportConfig{
+		Type: schema.TransportNativeFileOnly, Command: "fixture.exe",
+		SHA256: strings.Repeat("a", 64), Args: []string{"--flag"},
+	})
+	if len(errs) != 1 || errs[0].Error() != "native-file-only: transport.args is not valid; declare all invocation arguments on actions[].argv" {
+		t.Fatalf("transport.args must have a stable rejection, got %v", errs)
+	}
+}
+
+func TestParseToolFile_NativeFileOnlyRejectsUnknownTransportField(t *testing.T) {
+	_, err := parseToolFileFromString(t, `apiVersion: yawr.tool/v1
+meta: {name: closed-contract}
+transport:
+  mode: native-file-only
+  command: fixture.exe
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  inputs: []
+  extra: silently-ignored
+actions:
+  - name: read
+    classification: read-only
+    argv: []
+`)
+	if err == nil || !strings.Contains(err.Error(), `native-file-only: transport field "extra" is not recognized`) {
+		t.Fatalf("unknown native-file-only transport field must reject, got %v", err)
+	}
 }
 
 func TestValidateTransport_MCPStdio_MissingCommand(t *testing.T) {

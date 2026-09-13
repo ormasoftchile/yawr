@@ -9,6 +9,7 @@ Three commands:
 |---|---|---|
 | **Yawr: Open Runbook Preview** (`yawr.preview`) | Runs the helper preview command against the active `.runbook.yaml` file and opens the rendered Markdown in a side-by-side preview. | Packaged `yawr` helper, or set `yawr.binaryPath`. |
 | **Yawr: Open Runbook Graph (React Flow)** (`yawr.previewGraph`) | Opens the complete runbook UI using the `yawr.stdio/v1` runtime protocol. | Packaged `yawr` helper, or set `yawr.binaryPath`. |
+| **Yawr: Run Current Runbook** (`yawr.runCurrentRunbook`) | Opens the production graph session and starts its normal `yawr run --stdio` flow. The command resolves only at terminal `run.finished` with bounded, non-secret launch/frame/result metadata for automation. | Packaged `yawr` helper by default, or explicit `yawr.binaryPath`. |
 | **Yawr: Validate Runbook Inputs (Dry Run)** (`yawr.validateInputs`) | Prompts for declared inputs and delegates validation to the real runtime. | Packaged `yawr` helper, or set `yawr.binaryPath`. |
 
 ## Inspector
@@ -122,6 +123,18 @@ XTS host actions pause on an explicit **Open XTS** control in the run panel.
 That reviewed in-panel action is the only launch confirmation; the extension
 does not show a second modal. A reminder appears after a focused XTS view opens.
 
+## Installed-editor file-only subprocess support
+
+Installed-editor file-only test subprocess execution is supported only through
+the distinct `native-file-only` transport when the packaged runtime advertises
+`yawr.file-only-subprocess/v1`. The existing unsandboxed test permission remains
+distinct and is not a fallback. Installed qualification uses the production
+`yawr run --stdio` argument construction and the packaged helper and fixture;
+the current Extension Host harness executes that exact command directly because
+it cannot drive a click from the webview back into the extension.
+
+Native authoring remains exactly **EXTERNALLY GATED — NOT RUN — NOT PASSED**.
+
 ## Settings
 
 - `yawr.packageMap` — package-map selection for direct execution. Absolute, or relative
@@ -191,8 +204,9 @@ Uninstall: `code --uninstall-extension ormasoftchile.yawr-preview`
 Marketplace publication and coexistence validation are deferred; this repository
 only produces the local `ormasoftchile.yawr-preview` package identity.
 
-The CI workflow `.github/workflows/ci.yml` runs `npm run package` on every PR
-and uploads the resulting `.vsix` as a build artifact.
+The CI workflow `.github/workflows/ci.yml` validates packaging in disposable
+state and then installs and exercises the resulting VSIX in an isolated
+Extension Host profile.
 
 ## See also
 

@@ -431,6 +431,12 @@ type TransportConfig struct {
 	Command string            `yaml:"command,omitempty" json:"command,omitempty"`
 	Args    []string          `yaml:"args,omitempty"    json:"args,omitempty"`
 	Env     map[string]string `yaml:"env,omitempty"     json:"env,omitempty"`
+	// SHA256 is the pinned lower-case executable digest required by
+	// native-file-only.
+	SHA256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
+	// Inputs lists package-relative regular files staged read-only beside the
+	// executable for native-file-only. Directories and reparse points reject.
+	Inputs []string `yaml:"inputs,omitempty" json:"inputs,omitempty"`
 	// URL is required for mode: mcp-http; must use https:// (B-22).
 	// Plain HTTP is rejected at validation time — there is no override.
 	URL string `yaml:"url,omitempty" json:"url,omitempty"`
@@ -529,6 +535,18 @@ func (t *TransportConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 	*t = TransportConfig(raw)
 	t.Type = Transport(t.Mode)
+	if t.Type == TransportNativeFileOnly {
+		known := map[string]bool{
+			"mode": true, "command": true, "sha256": true, "inputs": true,
+			"args": true, "env": true, "url": true, "auth": true, "vscode_tool": true,
+		}
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i].Value
+			if !known[key] {
+				return fmt.Errorf("native-file-only: transport field %q is not recognized", key)
+			}
+		}
+	}
 	return nil
 }
 
@@ -565,10 +583,11 @@ func (t TransportConfig) MarshalYAML() (any, error) {
 type Transport string
 
 const (
-	TransportStdio     Transport = "stdio"
-	TransportJSONRPC   Transport = "jsonrpc"
-	TransportMCP       Transport = "mcp"
-	TransportNative    Transport = "native"
-	TransportMCPHTTP   Transport = "mcp-http"
-	TransportVSCodeMCP Transport = "vscode-mcp"
+	TransportStdio          Transport = "stdio"
+	TransportJSONRPC        Transport = "jsonrpc"
+	TransportMCP            Transport = "mcp"
+	TransportNative         Transport = "native"
+	TransportNativeFileOnly Transport = "native-file-only"
+	TransportMCPHTTP        Transport = "mcp-http"
+	TransportVSCodeMCP      Transport = "vscode-mcp"
 )

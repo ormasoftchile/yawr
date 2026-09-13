@@ -1,0 +1,19 @@
+apiVersion: yawr.runbook/v1
+id: y2-chunked-results
+name: Y2 chunked Results transport
+inputs:
+  helper_path: {type: string, required: true}
+outputs:
+  result: {type: string, value_expr: large}
+flow:
+  - step:
+      id: produce
+      type: cli
+      command: '${helper_path}'
+      args:
+        - -test.run=^TestY1RuntimeContractsHelper$
+        - --
+        - large
+      capture:
+        large: stdout
+  - step: {id: publish, type: results, title: Results}

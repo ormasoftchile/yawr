@@ -139,6 +139,36 @@ func TestE2E_BranchFailingSubstep(t *testing.T) {
 	// The run must reach RunStatusCompleted even though the branch arm had a
 	// failing sub-step. The step after the branch ("after-branch") must also run.
 	h.AssertCompleted(state)
+
+	events, err := h.TraceEvents()
+	if err != nil {
+		t.Fatalf("TraceEvents: %v", err)
+	}
+	started := map[string]bool{}
+	completed := map[string]bool{}
+	for _, ev := range events {
+		var p struct {
+			StepID string `json:"step_id"`
+		}
+		if len(ev.Payload) > 0 {
+			_ = json.Unmarshal(ev.Payload, &p)
+		}
+		switch string(ev.Kind) {
+		case "step/started":
+			started[p.StepID] = true
+		case "step/completed":
+			completed[p.StepID] = true
+		}
+	}
+	if !started["failing-substep"] {
+		t.Error("failing branch sub-step did not run")
+	}
+	if started["should-not-run"] {
+		t.Error("branch arm continued after its failing sub-step")
+	}
+	if !started["after-branch"] || !completed["after-branch"] {
+		t.Error("top-level step after tolerated branch failure did not complete")
+	}
 }
 
 // TestE2E_IterateAll iterates over all 3 items without early exit and verifies

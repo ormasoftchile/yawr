@@ -75,6 +75,7 @@ import {
 } from './routeTestPane';
 
 type NodeStyle = 'smooth-curves' | 'minimalist' | 'header-badges';
+const RENDER_TELEMETRY_SCHEMA = 'yawr.render-telemetry/v1';
 
 type HostMessage =
   | { type: 'workflow-markdown.preference'; preference: unknown }
@@ -1678,8 +1679,10 @@ function GraphView({
   const runtimeNodes = useMemo(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document), [observedRuntimeNodes, runStatus, document]);
   const [selectedId, setSelectedId] = useState<string>();
   useEffect(() => {
-    if (!testMode) return;
-    const report = (event: ErrorEvent) => vscode.postMessage({ type: 'test.error', message: event.message, stack: event.error?.stack });
+    const report = (event: ErrorEvent) => {
+      vscode.postMessage({ type: 'render.telemetry.error', schema: RENDER_TELEMETRY_SCHEMA });
+      if (testMode) vscode.postMessage({ type: 'test.error', message: event.message, stack: event.error?.stack });
+    };
     window.addEventListener('error', report);
     return () => window.removeEventListener('error', report);
   }, [testMode]);
@@ -2106,7 +2109,6 @@ function GraphView({
   }, [routeTargetID]);
 
   useEffect(() => {
-    if (!testMode) return;
     let frame = 0;
     let attempts = 0;
     const report = () => {
@@ -2114,12 +2116,15 @@ function GraphView({
         const firstStep = window.document.querySelector<HTMLElement>('.step-node');
         const firstEdge = window.document.querySelector<SVGElement>('.react-flow__edge');
         const edgeClassName = firstEdge?.getAttribute('class') ?? '';
-        const nodeCount = window.document.querySelectorAll('.react-flow__node-yawrStep').length;
+        const reactFlowRootCount = window.document.querySelectorAll('.react-flow').length;
+        const stepNodes = Array.from(window.document.querySelectorAll<HTMLElement>('.react-flow__node-yawrStep'));
+        const nodeCount = stepNodes.length;
         const frameCount = window.document.querySelectorAll('.react-flow__node-frameBox').length;
         const edgeCount = window.document.querySelectorAll('.react-flow__edge').length;
         const expectedNodeCount = layout.nodes.filter(node => node.type === 'yawrStep').length;
         const expectedFrameCount = layout.nodes.filter(node => node.type === 'frameBox').length;
-        const rendered = nodeCount === expectedNodeCount &&
+        const rendered = reactFlowRootCount === 1 &&
+          nodeCount === expectedNodeCount &&
           frameCount === expectedFrameCount &&
           edgeCount === layout.edges.length &&
           (layout.edges.length === 0 || edgeClassName.includes('react-flow__edge-'));
@@ -2127,6 +2132,16 @@ function GraphView({
           report();
           return;
         }
+        vscode.postMessage({
+          type: 'render.telemetry',
+          schema: RENDER_TELEMETRY_SCHEMA,
+          reactFlowRootCount,
+          stepNodeCount: nodeCount,
+          nodeIDs: stepNodes.map(node => node.dataset.id).filter((id): id is string => Boolean(id)).sort().slice(0, 256),
+          frameCount,
+          edgeCount,
+        });
+        if (!testMode) return;
         vscode.postMessage({
           type: 'rendered',
           nodeCount,

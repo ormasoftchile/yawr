@@ -507,8 +507,10 @@ test('repoBoundary/rule7: every getConfiguration( in src/ is resource-scoped or 
 //             → component runner → root wrapper → root CI (rule6)
 //
 // test:e2e:only is intentionally not a product gate: it is the low-level
-// unlabelled vscode-test utility used for interactive selection. The labelled
-// source and bounded installed-VSIX validation runners are the retained CI gates.
+// unlabelled vscode-test utility used for interactive selection. The native
+// authoring runner requires an authoritative external evidence bundle and is
+// likewise not a checkout-only CI gate. The labelled source and bounded
+// installed-VSIX validation runners are the retained CI gates.
 test('repoBoundary/rule6: every retained product test runner is invoked by root CI', () => {
   const monorepoRoot = path.resolve(REPO_ROOT, '..', '..');
   const componentPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
@@ -536,7 +538,6 @@ test('repoBoundary/rule6: every retained product test runner is invoked by root 
     .map(([name]) => name);
   const retainedProductGates = [...new Set([
     ...nodeTestScripts,
-    'test:authoring:native',
     'test:e2e',
     'validate:vsix',
   ])];

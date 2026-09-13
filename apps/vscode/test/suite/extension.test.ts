@@ -2412,7 +2412,7 @@ flow:
   - step:
       id: get-incident
       type: cli
-      command: go
+      command: ${JSON.stringify(sourceYawrBinaryPath)}
       args: [version]
       capture:
         incident_status: stdout

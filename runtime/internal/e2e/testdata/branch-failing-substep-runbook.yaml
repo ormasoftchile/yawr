@@ -8,6 +8,7 @@ flow:
   - step:
       id: branch-step
       type: branch
+      on_error: continue
       branches:
         - condition: 'flag == "true"'
           label: then

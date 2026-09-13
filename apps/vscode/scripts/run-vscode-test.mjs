@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -24,8 +25,32 @@ const diagnosticStateFile = join(runRoot, 'diagnostic-state.json');
 const executable = join(root, '..', '..', 'node_modules', '@vscode', 'test-cli', 'out', 'bin.mjs');
 const portableGoBin = join(root, '..', '..', '.tools', 'go1.25.7', 'go', 'bin');
 const packagedHelper = join(root, 'bin', `${process.platform}-${process.arch}`, process.platform === 'win32' ? 'yawr.exe' : 'yawr');
+const packagedFixture = join(root, 'fixtures', 'file-only-subprocess', 'win32-x64', 'fixture.exe');
+const hashFile = async (path) => createHash('sha256').update(await readFile(path)).digest('hex');
+const expectedExtensionVersion = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 const require = createRequire(import.meta.url);
 const { downloadAndUnzipVSCode, resolveCliPathFromVSCodeExecutablePath } = require('@vscode/test-electron');
+const JSZip = require('jszip');
+const vsixPath = process.env.YAWR_VSIX_PATH || join(root, 'yawr-preview.vsix');
+let archiveIdentities = {};
+if (label === 'production-surface' && process.platform === 'win32' && process.arch === 'x64') {
+  const archive = await JSZip.loadAsync(await readFile(vsixPath));
+  const helperEntry = archive.file('extension/bin/win32-x64/yawr.exe');
+  const fixtureEntry = archive.file('extension/fixtures/file-only-subprocess/win32-x64/fixture.exe');
+  if (!helperEntry || !fixtureEntry) throw new Error('final VSIX is missing the packaged helper or file-only fixture');
+  const hashBytes = (bytes) => createHash('sha256').update(bytes).digest('hex');
+  const helperSHA256 = hashBytes(await helperEntry.async('nodebuffer'));
+  const fixtureSHA256 = hashBytes(await fixtureEntry.async('nodebuffer'));
+  const standaloneSHA256 = await hashFile(packagedHelper);
+  if (helperSHA256 !== standaloneSHA256) {
+    throw new Error(`final VSIX helper ${helperSHA256} differs from standalone runtime ${standaloneSHA256}`);
+  }
+  archiveIdentities = {
+    YAWR_EXPECTED_HELPER_SHA256: helperSHA256,
+    YAWR_EXPECTED_FIXTURE_SHA256: fixtureSHA256,
+    YAWR_EXPECTED_STANDALONE_SHA256: standaloneSHA256,
+  };
+}
 const environment = {
   ...process.env,
   PATH: `${portableGoBin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}`,
@@ -33,6 +58,8 @@ const environment = {
   YAWR_TEST_STATE_ROOT: runRoot,
   YAWR_E2E_BINARY: packagedHelper,
   YAWR_EXPRESSION_HELPER: packagedHelper,
+  YAWR_EXPECTED_EXTENSION_VERSION: expectedExtensionVersion,
+  ...archiveIdentities,
 };
 
 const transient = (error) => error instanceof BoundedProcessError && (
@@ -66,6 +93,13 @@ async function findInstalledExtension() {
 let failure;
 try {
   await mkdir(join(runRoot, 'workspace'), { recursive: true });
+  if (label === 'production-surface') {
+    await mkdir(join(runRoot, 'workspace', 'test', 'fixtures'), { recursive: true });
+    await copyFile(
+      join(root, 'test', 'fixtures', 'enum.runbook.yaml'),
+      join(runRoot, 'workspace', 'test', 'fixtures', 'enum.runbook.yaml'),
+    );
+  }
   await writeDiagnosticState({ label });
   if (label === 'download') {
     const vscodeExecutable = await downloadAndUnzipVSCode({
@@ -92,7 +126,7 @@ try {
         `--user-data-dir=${join(runRoot, 'profile')}`,
         `--extensions-dir=${join(runRoot, 'extensions')}`,
         '--install-extension',
-        process.env.YAWR_VSIX_PATH || join(root, 'yawr-preview.vsix'),
+        vsixPath,
       ], {
         cwd: root,
         env: environment,
@@ -108,13 +142,33 @@ try {
         installComplete: true,
       });
     }
-    await runBoundedProcess(process.execPath, [executable, '--label', label], {
+    await runBoundedProcess(process.execPath, [
+      executable,
+      '--label',
+      label,
+      '--fail-zero',
+      '--forbid-only',
+      '--forbid-pending',
+    ], {
       cwd: root,
       env: environment,
       timeoutMs: 240_000,
       stallMs,
       label: `${label} Extension Host`,
     });
+    if (label === 'production-surface' && process.platform === 'win32' && process.arch === 'x64') {
+      const state = JSON.parse(await readFile(diagnosticStateFile, 'utf8'));
+      if (state.fileOnlyQualificationExecuted !== true) {
+        throw new Error('installed VSIX file-only qualification was skipped');
+      }
+      if (state.installedPackageSHA256Equality !== true) {
+        throw new Error('installed VSIX package SHA-256 equality was not proved');
+      }
+    }
+    if (label === 'production-surface') {
+      await writeDiagnosticState({ installedTestSkipCount: 0 });
+      console.log('extension:validate:vsix installed-tests skips=0');
+    }
   }
 } catch (error) {
   failure = error;

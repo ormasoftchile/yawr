@@ -201,13 +201,15 @@ func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request, req rpcR
 	}
 	warnings = append(warnings, catalogWarnings...)
 
-	handle, err := s.engine.Start(startCtx, plan, engine.RunOptions{
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(startCtx))
+	handle, err := s.engine.Start(runCtx, plan, engine.RunOptions{
 		Mode:   mode,
 		Actor:  actor,
 		Vars:   vars,
 		Client: "server",
 	})
 	if err != nil {
+		cancel()
 		writeRPC(w, rpcResponse{
 			JSONRPC: "2.0",
 			ID:      normalizeID(req.ID),
@@ -216,7 +218,6 @@ func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request, req rpcR
 		return
 	}
 
-	runCtx, cancel := context.WithCancel(context.Background())
 	state := handle.State()
 	if state.RunID == "" {
 		state.RunID = plan.RunID
@@ -594,6 +595,14 @@ func (s *Server) handleRunGet(w http.ResponseWriter, r *http.Request, req rpcReq
 			record, recordErr := runState.CloneResults()
 			s.addPublicResults(r.Context(), result, record, recordErr, runState.Status, runState.Plan, runState.Vars, params.RunID, runState.BindingScope != nil)
 			writeRPC(w, rpcResponse{JSONRPC: "2.0", ID: normalizeID(req.ID), Result: result})
+			return
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			writeRPC(w, rpcResponse{
+				JSONRPC: "2.0",
+				ID:      normalizeID(req.ID),
+				Error:   &rpcError{Code: rpcInternalError, Message: "Internal error"},
+			})
 			return
 		}
 	}

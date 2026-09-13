@@ -1,0 +1,298 @@
+{
+  "schema": "yawr.capability-evidence/v1",
+  "milestone": "Y2",
+  "status": "PASS",
+  "executed_at": "2026-09-12T11:26:08.110-07:00",
+  "scope": {
+    "repository": "Yawr",
+    "branch": "milestone/y2-windows-candidate",
+    "baseline": "7ffddf8b77f84bf3cf357ce9415d433b36997943",
+    "candidate_is_uncommitted_worktree": true,
+    "y2_extension_only": true,
+    "runrail_accessed": false,
+    "handoff_drop_accessed": false,
+    "handoff_drop_modified": false,
+    "replacement_artifacts_claimed": false,
+    "caller_acceptance_claimed": false
+  },
+  "reproduction": {
+    "status": "PASS",
+    "before_production_edits": true,
+    "command": "go test -C runtime ./internal/resultsdelivery -run '^TestY2ReproduceUnknownUnavailableReason$' -count=1 -v",
+    "exit_code": 0,
+    "observed": "constructed=&{Status:redacted Reason:unknown-reason} serialized={\"status\":\"redacted\",\"reason\":\"unknown-reason\"}",
+    "conclusion": "The former generic constructor and exported fields admitted and serialized an unknown reason with a mismatched redacted status."
+  },
+  "unavailable_contract": {
+    "owner": "runtime/internal/resultsdelivery",
+    "pairs": [
+      {"status": "unavailable", "reason": "no-publication"},
+      {"status": "unavailable", "reason": "invalid-publication"},
+      {"status": "redacted", "reason": "protected-content"},
+      {"status": "unavailable", "reason": "execution-not-completed"},
+      {"status": "unavailable", "reason": "protection-unavailable"}
+    ],
+    "generic_public_string_constructor": false,
+    "strict_decode_rejects": [
+      "null",
+      "missing members",
+      "extra members",
+      "duplicate members",
+      "trailing JSON",
+      "unknown status",
+      "unknown reason",
+      "mismatched status/reason",
+      "wrong member types"
+    ],
+    "receiver_unchanged_on_error": true,
+    "invalid_serialization_rejected": true,
+    "persistence": "Only validated RunResults are persisted; unavailable envelopes are reconstructed at delivery."
+  },
+  "digest_vectors": {
+    "schema_path": "runtime/specs/run-results-digest-v1.schema.json",
+    "vectors_path": "runtime/specs/run-results-digest-v1.json",
+    "case_count": 11,
+    "cases": [
+      "root-false",
+      "root-zero",
+      "root-empty-string",
+      "root-array",
+      "root-object-order-a",
+      "root-object-order-b",
+      "root-output-absent",
+      "root-output-present-null",
+      "root-nested-null",
+      "parent-results",
+      "child-results"
+    ],
+    "fixed_fields": [
+      "semantic_record",
+      "source_utf8",
+      "source_base64",
+      "canonical_utf8",
+      "canonical_base64",
+      "sha256_hex",
+      "digest",
+      "canonical_with_digest_utf8",
+      "canonical_with_digest_base64",
+      "metadata"
+    ],
+    "generation": "One disposable Node.js standard-library-only script generated the literals and was removed before validation.",
+    "verification_order": [
+      "independent Go standard-library bytes/base64/hash/JSON/equivalence/distinction",
+      "CanonicalResultsJSON/Seal/Validate parity against fixed literals"
+    ],
+    "digests": {
+      "root-false": "sha256:bd002e527e437d5082b46ff6c3025097e079dc8a75e085e941b8cfb74cf3c4e9",
+      "root-zero": "sha256:27a5e52e3b6fcdb62f4b07504a41017487003499dd9ff104e00144e335f469be",
+      "root-empty-string": "sha256:51756ada8cc27987a5b9178824aab158907e7b723db0d1b85793da8046a36710",
+      "root-array": "sha256:f45e6ee864a9fc37917d8df4276a12ab8872c40714b83c8abdabe028ba2fe1cd",
+      "root-object-order-a": "sha256:013f8f1104a32b897ef1788217bf0f80b909a110e11175809d608cb296941d71",
+      "root-object-order-b": "sha256:013f8f1104a32b897ef1788217bf0f80b909a110e11175809d608cb296941d71",
+      "root-output-absent": "sha256:509de06e1066f7f13437e3e87fbf8fca83203ea3ddf420b4e1080ac69f7eba00",
+      "root-output-present-null": "sha256:35659ab0772023d0da9a40441ac2a60a77f8091ad2640d848405354f6ef7a91e",
+      "root-nested-null": "sha256:f0b646ad76575f172b1d6756f0ed89d2ab29f9513b8edb2c35a6af48c25541ef",
+      "parent-results": "sha256:05604de3d24468ecb53d305c3a8bcf95b222e0375e0416ed7362c73ce2c25f9e",
+      "child-results": "sha256:167a30ddda8e04897891eaf73f12fdb8fd8ac4cd76d9b75eff330f370be4c23f"
+    }
+  },
+  "commands": [
+    {
+      "id": "focused-unavailable",
+      "command": "go test -C runtime ./internal/resultsdelivery -run '^Test(PrepareInvalidProtectedAndNoPublication|UnavailableClosedVocabularyWireRoundTrip|UnavailableStrictDecodeAndSerialization)$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "All five exact wire pairs round-tripped; malformed, unknown, duplicate, trailing, and mismatched values failed without receiver mutation."
+    },
+    {
+      "id": "focused-vectors",
+      "command": "go test -C runtime ./pkg/engine -run '^TestRunResultsDigestVectors(IndependentStdlibVerification|ImplementationParity)$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "All eleven fixed vectors passed independent standard-library verification and implementation parity."
+    },
+    {
+      "id": "production-boundaries",
+      "command": "go test -C runtime ./cmd/yawr -run '^TestY2Results(.*)$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "Direct, real open-stdin stdio unavailable/chunk, active served, and reopened persisted production paths passed."
+    },
+    {
+      "id": "relevant-packages",
+      "command": "go test -C runtime ./internal/resultsdelivery ./internal/serve ./pkg/engine ./cmd/yawr -count=1",
+      "exit_code": 0,
+      "summary": "All supplemented Results delivery, serve, engine, and command tests passed uncached."
+    },
+    {
+      "id": "supplemental-mappings",
+      "command": "go test -C runtime ./internal/resultsdelivery ./internal/serve -run '^Test(PrepareExecutionAvailabilityMapping|PrepareOversizePublicationFailsClosed|RPC_RunGet_(NotFound|CorruptOrUnreadableStoreIsInternalError))$' -count=1 -v",
+      "exit_code": 0,
+      "summary": "Pending/failed publication presence, oversize Results, missing run, and corrupt/unreadable store mappings passed."
+    },
+    {
+      "id": "full-runtime",
+      "command": "npm run runtime:test",
+      "effective_command": "go test -C runtime ./... -count=1",
+      "exit_code": 0,
+      "summary": "The supplemented complete uncached runtime suite passed; cmd/yawr reported 70.128s."
+    }
+  ],
+  "production_paths": {
+    "direct_json": "PASS",
+    "open_stdin_stdio_inline_unavailable": "PASS",
+    "open_stdin_stdio_chunked_results": "PASS",
+    "active_served_get": "PASS",
+    "reopened_persisted_get": "PASS",
+    "successful_resume_no_replay_control": "PASS via TestY1RuntimeContractsDirectPersistedResume",
+    "authentication_no_replay_controls": "PASS via existing TestPublicResultsHTTPActiveReopenedNoRepeat and full runtime gate",
+    "unreachable_reason_fabrication": false
+  },
+  "supplemental_fail_closed_mapping": {
+    "no_publication": "results null plus unavailable/no-publication",
+    "pending_without_publication": "pending execution state retained plus unavailable/no-publication",
+    "non_completed_with_record": "execution state retained plus unavailable/execution-not-completed",
+    "missing_run": "JSON-RPC -32010 Run not found; no availability envelope",
+    "corrupt_or_unreadable_run_state": "JSON-RPC -32603 Internal error; never mapped to missing run",
+    "missing_or_unreadable_protection_plan": "unavailable/protection-unavailable",
+    "denied_execution_without_publication": "failed execution state retained plus unavailable/no-publication",
+    "protected_output": "redacted/protected-content",
+    "oversize_results": "unavailable/invalid-publication at the 256 MiB canonical boundary",
+    "protocol_error": "existing JSON-RPC/stdio transport error; no invented successful terminal or availability reason"
+  },
+  "runtime_budgets": {
+    "units": "bytes unless otherwise stated",
+    "canonical_results": 268435456,
+    "stdio_frame_including_lf": 1048576,
+    "decoded_results_chunk": 65536,
+    "plan_snapshot": 67108864,
+    "state_snapshot": 16777216,
+    "inline_stored_value_threshold": 65536,
+    "expanded_stored_value": 268435456,
+    "compressed_stored_blob": 67108864,
+    "expanded_checkpoint_aggregate": 268435456,
+    "stored_value_entries": 4096,
+    "served_read_timeout_seconds_default": 30,
+    "served_write_timeout_seconds_default": 60,
+    "served_response_byte_limit": "NOT SUPPORTED; external client/proxy ceiling required",
+    "cli_stdout_stderr_limit": "NOT SUPPORTED; external per-stream and aggregate ceilings required",
+    "cli_argument_environment_stdin_cwd_limits": "NOT SUPPORTED; external byte/count admission required",
+    "general_cli_step_deadline": "NOT SUPPORTED; external deadline and process-tree termination required"
+  },
+  "r2_file_only_curl": {
+    "native_support_under_runtime_profile": "NOT SUPPORTED",
+    "source_paths": [
+      "runtime/pkg/schema/profile.go",
+      "runtime/internal/executor/cli.go",
+      "runtime/pkg/platform/real.go",
+      "runtime/internal/engine/engine.go",
+      "runtime/pkg/engine/results.go",
+      "runtime/cmd/yawr/stdio_protocol.go",
+      "runtime/cmd/yawr/stdio_results.go",
+      "runtime/internal/runstore/dir_store.go",
+      "runtime/internal/serve/server.go"
+    ],
+    "source_findings": {
+      "executable": "Authored command uses normal OS lookup or authored path; a profile does not pin executable identity.",
+      "arguments": "Authored/interpolated arguments have no profile-owned closed grammar or global count/byte ceiling.",
+      "environment": "The host environment is inherited and declared values are overlaid; no minimal profile environment exists.",
+      "cwd_and_files": "Arbitrary authored working directory; no read-only root, file allowlist, or filesystem sandbox.",
+      "network": "No CLI network deny, URL scheme restriction, host allowlist, or redirect control.",
+      "stdin_stdout_stderr": "String stdin is accepted; stdout and stderr are captured in unbounded memory buffers.",
+      "timeout_and_cancellation": "Parent context cancellation is honored by exec.CommandContext, but no general CLI step deadline is applied.",
+      "output_and_result_budgets": "Results are capped at 256 MiB, but subprocess streams are unbounded before Results construction.",
+      "exit_handling": "Nonzero exit marks the step failed; spawn and cancellation errors fail execution.",
+      "side_effect_boundary": "No OS sandbox or no-write boundary; curl arguments may cause network or filesystem effects."
+    },
+    "required_external_policy": [
+      "approved absolute curl executable identity",
+      "closed argument grammar",
+      "approved file:// inputs under a read-only root",
+      "network denial including redirects",
+      "minimal fixed environment and cwd",
+      "closed or bounded stdin",
+      "separate and aggregate stdout/stderr ceilings",
+      "deadline with process-tree termination",
+      "accepted exit-code policy",
+      "no-write/no-side-effect filesystem boundary"
+    ]
+  },
+  "artifacts": [
+    {"path": "runtime/internal/resultsdelivery/results.go", "sha256": "b17984351d119488b5e811b887479fc23e2eba55a87b9857f1f488fe13941758"},
+    {"path": "runtime/internal/resultsdelivery/results_test.go", "sha256": "d329da29b028b09dfe351e97df840b2ed9e9824203aa893c6cbc83aa1663b568"},
+    {"path": "runtime/internal/serve/results.go", "sha256": "72b4e8ea0cac9ab0d29ee8190c65864266debc83a34c152148ae38e16874792e"},
+    {"path": "runtime/internal/serve/rpc.go", "sha256": "576a0a7c735ce1372b36064e4a0354b83113077cca77023c00426d5ef5606580"},
+    {"path": "runtime/internal/serve/rpc_test.go", "sha256": "74f10f1e084f7b24da823a44a0d4f5c05c3c7b794db19bd562fe406a78259042"},
+    {"path": "runtime/cmd/yawr/stdio_results_test.go", "sha256": "92dbb1d854eca8d58ce3a7334851159f5df2bc9945905d64ff612a9fc0dcae36"},
+    {"path": "runtime/cmd/yawr/y1_runtime_contracts_integration_test.go", "sha256": "f231f7e1f67db320c633e96ea641e7deef0bb3aae1621e26035a7349b973cbe1"},
+    {"path": "runtime/cmd/yawr/y2_contract_gap_closure_integration_test.go", "sha256": "ae224777a9ec3ee66f97785582fb4656148bc82703211bc2554a893539faa968"},
+    {"path": "runtime/cmd/yawr/testdata/y2-contract-gap-closure/no-publication.runbook.yaml", "sha256": "2823581ae13fd97fa38285f037ca3586b554e8a4fb544bb6de58adb3db8b06cd"},
+    {"path": "runtime/cmd/yawr/testdata/y2-contract-gap-closure/chunked-results.runbook.yaml", "sha256": "f7c48a4ef54f27050078602f4d6803c5eaaeb086b836816084af32ff508521f5"},
+    {"path": "runtime/pkg/engine/results_digest_vectors_test.go", "sha256": "714970ab846f13c1d48ff88ca5762766630a76dd95466e035f33f7d1be25d4c4"},
+    {"path": "runtime/specs/run-results-digest-v1.schema.json", "sha256": "8159fad5560991d7c061901b128f7576d5d7983e0040c55af170aacb342ffbbf"},
+    {"path": "runtime/specs/run-results-digest-v1.json", "sha256": "c7911fc1d494c86cae7e3939ce10dacba7ad5f0936e37b4712eb1db17a93724d"},
+    {"path": "runtime/docs/typed-results.md", "sha256": "adff1420cfe273045db2ccaefb01c3675be9b6fef4ac63748d8ae5dfdbfe143c"},
+    {"path": "docs/y2-contract-gap-closure.md", "sha256": "83878af69c66d85d49504b6f54398f18747cb6de405530d31d3d84a1296b3b89"}
+  ],
+  "cleanup": {
+    "status": "PASS",
+    "disposable_vector_generator_removed": true,
+    "repository_local_test_artifacts_remaining": false,
+    "handoff_artifacts_modified": false
+  },
+  "native_authoring": {
+    "status": "EXTERNALLY_GATED_NOT_RUN_NOT_PASSED",
+    "limitation": "This Windows runtime cycle did not execute or claim native authoring acceptance."
+  },
+  "review": {
+    "status": "PASS",
+    "reviewer": "Tester",
+    "reviewed_at": "2026-09-12T11:48:43.2743672-07:00",
+    "baseline": "7ffddf8b77f84bf3cf357ce9415d433b36997943",
+    "findings": [],
+    "independent_commands": [
+      {
+        "command": "go test -C runtime ./internal/resultsdelivery -run '^Test(PrepareInvalidProtectedAndNoPublication|UnavailableClosedVocabularyWireRoundTrip|UnavailableStrictDecodeAndSerialization)$' -count=1 -v",
+        "exit_code": 0,
+        "result": "3 top-level tests passed; five exact status/reason pairs and 14 malformed inputs were exercised."
+      },
+      {
+        "command": "go test -C runtime ./pkg/engine -run '^TestRunResultsDigestVectors(IndependentStdlibVerification|ImplementationParity)$' -count=1 -v",
+        "exit_code": 0,
+        "result": "2 top-level tests and all 11 implementation-parity subtests passed."
+      },
+      {
+        "command": "go test -C runtime ./cmd/yawr -run '^TestY2Results(.*)$' -count=1 -v",
+        "exit_code": 0,
+        "result": "2 production-boundary tests passed in 1.920s."
+      },
+      {
+        "command": "go test -C runtime ./internal/resultsdelivery ./internal/serve ./pkg/engine ./cmd/yawr -count=1",
+        "exit_code": 0,
+        "result": "All 4 relevant packages passed; cmd/yawr completed in 39.079s."
+      },
+      {
+        "command": "go test -C runtime ./internal/resultsdelivery ./internal/serve -run '^Test(PrepareExecutionAvailabilityMapping|PrepareOversizePublicationFailsClosed|RPC_RunGet_(NotFound|CorruptOrUnreadableStoreIsInternalError))$' -count=1 -v",
+        "exit_code": 0,
+        "result": "All supplemental execution, oversize, missing-run, corrupt-store, and unreadable-store mappings passed."
+      },
+      {
+        "command": "npm run runtime:test",
+        "effective_command": "go test -C runtime ./... -count=1",
+        "exit_code": 0,
+        "result": "Complete uncached runtime suite passed; cmd/yawr completed in 70.794s."
+      },
+      {
+        "command": "Node.js stdlib base64/JSON/crypto verification of runtime/specs/run-results-digest-v1.json",
+        "exit_code": 0,
+        "result": "All 11 literal canonical byte strings, base64 values, and SHA-256 digests passed without Yawr canonicalization; reorder, absent/null, nested-null, and parent/child checks passed."
+      }
+    ],
+    "verified_artifact_hashes": 15,
+    "wire_compatibility": "PASS: successful Results inline/chunk/reference shapes remain unchanged and all five availability spellings are exact.",
+    "r2_file_only_curl": "NOT SUPPORTED: all required controls remain external; no caller acceptance is claimed.",
+    "cleanup": "PASS: ignored generated JSONL state removed; only authorized candidate files remain changed.",
+    "replacement_artifacts_approved": false
+  },
+  "residuals": [
+    "Native authoring remains externally gated and unexecuted.",
+    "No Runrail, handoff, release, signing, publication, or caller behavior was accessed or claimed."
+  ]
+}

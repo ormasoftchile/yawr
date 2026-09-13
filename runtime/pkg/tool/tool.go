@@ -10,12 +10,13 @@ import (
 type TransportType string
 
 const (
-	TransportStdio     TransportType = "stdio"
-	TransportJSONRPC   TransportType = "stdio-jsonrpc"
-	TransportMCP       TransportType = "mcp"
-	TransportNative    TransportType = "native"
-	TransportMCPHTTP   TransportType = "mcp-http"
-	TransportVSCodeMCP TransportType = "vscode-mcp"
+	TransportStdio          TransportType = "stdio"
+	TransportJSONRPC        TransportType = "stdio-jsonrpc"
+	TransportMCP            TransportType = "mcp"
+	TransportNative         TransportType = "native"
+	TransportNativeFileOnly TransportType = "native-file-only"
+	TransportMCPHTTP        TransportType = "mcp-http"
+	TransportVSCodeMCP      TransportType = "vscode-mcp"
 )
 
 // ToolTransport — invoke a tool over a transport
@@ -40,6 +41,8 @@ type ToolDef struct {
 	Command   string
 	Args      []string
 	Env       map[string]string
+	SHA256    string
+	Inputs    []string
 	Actions   map[string]*ToolAction
 
 	// SourcePath is the absolute path of the .tool.yaml this definition was

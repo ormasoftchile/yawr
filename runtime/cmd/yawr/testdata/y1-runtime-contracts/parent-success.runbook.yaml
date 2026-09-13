@@ -1,0 +1,12 @@
+apiVersion: yawr.runbook/v1
+id: y1-parent-success
+name: Y1 exact child forwarding
+outputs:
+  result: {type: object, value_expr: child_result}
+flow:
+  - step:
+      id: child
+      type: include
+      capture: {child_result: outputs.result}
+      include: {runbook: child-success.runbook.yaml, expand: eager}
+  - step: {id: parent_publish, type: results, title: Results}

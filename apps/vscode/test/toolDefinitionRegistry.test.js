@@ -112,7 +112,7 @@ test('buildRegistryForRun overlays external package-map bindings', (t) => {
   ].join('\n'));
   const packageMap = path.join(project, 'package-map.yaml');
   fs.writeFileSync(packageMap, [
-    'apiVersion: config/v1',
+    'apiVersion: yawr.config/v1',
     'requires:',
     '  - package: external.package',
     '    version: "^1.0.0"',
@@ -144,13 +144,13 @@ test('buildRegistryForRun gives effective required packages precedence over proj
   fs.writeFileSync(path.join(projectTools, 'shared.tool.yaml'), toolYaml('project-provider'));
   fs.writeFileSync(path.join(requiredPackage, 'shared.tool.yaml'), toolYaml('required-provider'));
   fs.writeFileSync(path.join(project, '.yawr', 'config.yaml'), [
-    'apiVersion: config/v1',
+    'apiVersion: yawr.config/v1',
     'tool-paths:',
     '  - ../project-tools',
   ].join('\n'));
   const packageMap = path.join(project, 'package-map.yaml');
   fs.writeFileSync(packageMap, [
-    'apiVersion: config/v1',
+    'apiVersion: yawr.config/v1',
     'requires:',
     '  - package: required.package',
     '    version: "^1.0.0"',

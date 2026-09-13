@@ -23,8 +23,8 @@ func (s *Server) addPublicResults(ctx context.Context, response map[string]any, 
 		}
 		if plan == nil && protectionRequired {
 			response["vars"] = nil
-			response["vars_unavailable"] = resultsdelivery.Missing("protection-unavailable")
-			response["results_unavailable"] = resultsdelivery.Missing("protection-unavailable")
+			response["vars_unavailable"] = resultsdelivery.ProtectionUnavailable()
+			response["results_unavailable"] = resultsdelivery.ProtectionUnavailable()
 			return
 		}
 	}
@@ -38,7 +38,7 @@ func (s *Server) addPublicResults(ctx context.Context, response map[string]any, 
 		if invocation && (len(protection.ProtectedVars) > 0 || len(protection.RedactionPatterns) > 0) {
 			if err := debugprotect.ValidateHandoffValues(protection, vars, nil); err != nil {
 				response["vars"] = nil
-				response["vars_unavailable"] = &resultsdelivery.Unavailable{Status: "redacted", Reason: "protected-content"}
+				response["vars_unavailable"] = resultsdelivery.ProtectedContent()
 			}
 		}
 	}
@@ -50,7 +50,7 @@ func (s *Server) addPublicResults(ctx context.Context, response map[string]any, 
 	if entry, ok := s.registry.Get(runID); ok {
 		if validator, ok := entry.Handle.(interface{ ValidateResultsDelivery(json.RawMessage) error }); ok {
 			if err := validator.ValidateResultsDelivery(body); err != nil {
-				response["results_unavailable"] = &resultsdelivery.Unavailable{Status: "redacted", Reason: "protected-content"}
+				response["results_unavailable"] = resultsdelivery.ProtectedContent()
 				return
 			}
 		}

@@ -296,6 +296,8 @@ func RuntimeToolDef(def *schema.ToolDef) (toolpkg.ToolDef, error) {
 		Command:    def.Transport.Command,
 		Args:       def.Transport.Args,
 		Env:        def.Transport.Env,
+		SHA256:     def.Transport.SHA256,
+		Inputs:     append([]string(nil), def.Transport.Inputs...),
 		URL:        def.Transport.URL,
 		Auth:       def.Transport.Auth,
 		Actions:    actions,
@@ -404,6 +406,8 @@ func mapTransport(t schema.Transport) (toolpkg.TransportType, error) {
 		return toolpkg.TransportMCP, nil
 	case schema.TransportNative:
 		return toolpkg.TransportNative, nil
+	case schema.TransportNativeFileOnly:
+		return toolpkg.TransportNativeFileOnly, nil
 	case schema.TransportMCPHTTP:
 		return toolpkg.TransportMCPHTTP, nil
 	case schema.TransportVSCodeMCP:
@@ -464,8 +468,8 @@ func validateActionResultContracts(path string, transport schema.TransportConfig
 		if action == nil || action.Result == nil {
 			continue
 		}
-		if mode != string(schema.TransportNative) {
-			return fmt.Errorf("%s: action %q: result is only supported for native transport actions", path, actionName)
+		if mode != string(schema.TransportNative) && mode != string(schema.TransportNativeFileOnly) {
+			return fmt.Errorf("%s: action %q: result is only supported for native and native-file-only transport actions", path, actionName)
 		}
 		result := action.Result
 		if result.Format != schema.ActionResultFormatQueryResultV1 {

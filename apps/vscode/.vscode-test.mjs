@@ -35,6 +35,7 @@ const vsixHarnessPath = resolve(__dirname, 'test', 'vsix-harness');
 // MD5 hash of the user-data path) and causes no conflict.
 const vsixRunId = environmentValue('TEST_RUN_ID') ?? `${Date.now().toString(36)}-${process.pid}`;
 const testStateRoot = environmentValue('TEST_STATE_ROOT') ?? join(__dirname, '.vscode-test', 'runs', vsixRunId);
+const productionWorkspace = join(testStateRoot, 'workspace');
 const vsixUserDataDir = join(testStateRoot, 'profile');
 const sourceUserDataDir = join(testStateRoot, 'profile');
 const sourceExtensionsDir = join(testStateRoot, 'extensions');
@@ -94,7 +95,7 @@ export default defineConfig([
     version: '1.137.0',
     files: 'out/test/suite/productionSurface.test.js',
     extensionDevelopmentPath: [vsixHarnessPath],
-    workspaceFolder: '.',
+    workspaceFolder: productionWorkspace,
     // Unique per-invocation user-data-dir — see comment above vsixRunId.
     launchArgs: [
       ...hermeticLaunchArgs(vsixUserDataDir),
@@ -108,4 +109,3 @@ export default defineConfig([
 ]);
 
 // VSIX-only acceptance remains isolated in the production-surface profile.
-
