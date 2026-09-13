@@ -37793,6 +37793,7 @@
 
   // webview/graph.tsx
   configureHighlighting(document.body.dataset.highlightingWorker ?? "");
+  var RENDER_TELEMETRY_SCHEMA = "yawr.render-telemetry/v1";
   var vscode = acquireVsCodeApi();
   var DEFAULT_INSPECTOR_RATIO = 0.31;
   var MIN_INSPECTOR_RATIO = 0.2;
@@ -38811,8 +38812,10 @@
     const runtimeNodes = (0, import_react15.useMemo)(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document2), [observedRuntimeNodes, runStatus, document2]);
     const [selectedId, setSelectedId] = (0, import_react15.useState)();
     (0, import_react15.useEffect)(() => {
-      if (!testMode) return;
-      const report = (event) => vscode.postMessage({ type: "test.error", message: event.message, stack: event.error?.stack });
+      const report = (event) => {
+        vscode.postMessage({ type: "render.telemetry.error", schema: RENDER_TELEMETRY_SCHEMA });
+        if (testMode) vscode.postMessage({ type: "test.error", message: event.message, stack: event.error?.stack });
+      };
       window.addEventListener("error", report);
       return () => window.removeEventListener("error", report);
     }, [testMode]);
@@ -39271,7 +39274,6 @@
       };
     }, [routeTargetID]);
     (0, import_react15.useEffect)(() => {
-      if (!testMode) return;
       let frame2 = 0;
       let attempts = 0;
       const report = () => {
@@ -39279,16 +39281,28 @@
           const firstStep = window.document.querySelector(".step-node");
           const firstEdge = window.document.querySelector(".react-flow__edge");
           const edgeClassName = firstEdge?.getAttribute("class") ?? "";
-          const nodeCount = window.document.querySelectorAll(".react-flow__node-yawrStep").length;
+          const reactFlowRootCount = window.document.querySelectorAll(".react-flow").length;
+          const stepNodes = Array.from(window.document.querySelectorAll(".react-flow__node-yawrStep"));
+          const nodeCount = stepNodes.length;
           const frameCount = window.document.querySelectorAll(".react-flow__node-frameBox").length;
           const edgeCount = window.document.querySelectorAll(".react-flow__edge").length;
           const expectedNodeCount = layout.nodes.filter((node) => node.type === "yawrStep").length;
           const expectedFrameCount = layout.nodes.filter((node) => node.type === "frameBox").length;
-          const rendered = nodeCount === expectedNodeCount && frameCount === expectedFrameCount && edgeCount === layout.edges.length && (layout.edges.length === 0 || edgeClassName.includes("react-flow__edge-"));
+          const rendered = reactFlowRootCount === 1 && nodeCount === expectedNodeCount && frameCount === expectedFrameCount && edgeCount === layout.edges.length && (layout.edges.length === 0 || edgeClassName.includes("react-flow__edge-"));
           if (++attempts < 120 && !rendered) {
             report();
             return;
           }
+          vscode.postMessage({
+            type: "render.telemetry",
+            schema: RENDER_TELEMETRY_SCHEMA,
+            reactFlowRootCount,
+            stepNodeCount: nodeCount,
+            nodeIDs: stepNodes.map((node) => node.dataset.id).filter((id2) => Boolean(id2)).sort().slice(0, 256),
+            frameCount,
+            edgeCount
+          });
+          if (!testMode) return;
           vscode.postMessage({
             type: "rendered",
             nodeCount,
