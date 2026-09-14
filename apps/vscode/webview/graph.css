@@ -332,7 +332,8 @@ button, input, select, textarea { font: inherit; }
 
 @media (max-width: 720px) {
   .toolbar { align-items: flex-start; flex-direction: column; }
-  .run-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .run-actions { width: 100%; height: 44px; flex-shrink: 0; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; }
+  .run-actions > * { flex-shrink: 0; }
   .route-view-strip { grid-template-columns: minmax(0, 1fr); }
   .route-view-actions { justify-content: space-between; flex-wrap: wrap; }
   .route-scope { max-width: 100%; grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }

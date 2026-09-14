@@ -47,6 +47,17 @@ test('actual renderer never falls back to runtime activity for a live current or
   assert.doesNotMatch(progress, /activities|runtimeNodes/);
 });
 
+test('narrow toolbar keeps a fixed-height accessible action row through runtime completion', () => {
+  const css = fs.readFileSync(require.resolve('../webview/graph.css'), 'utf8');
+  const narrow = css.slice(css.indexOf('@media (max-width: 720px)'));
+  const actions = narrow.match(/\.run-actions \{([^}]+)\}/)?.[1];
+  assert.ok(actions);
+  assert.match(actions, /height: 44px/);
+  assert.match(actions, /flex-wrap: nowrap/);
+  assert.match(actions, /overflow-x: auto/);
+  assert.match(narrow, /\.run-actions > \* \{ flex-shrink: 0; \}/);
+});
+
 test('current cursor survives completion/start gaps without modifying runtime evidence', () => {
   let previous;
   const steps = [

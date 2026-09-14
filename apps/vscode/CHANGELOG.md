@@ -6,6 +6,11 @@
   non-reduced-motion offscreen pans now schedule and cancel correctly.
 - Makes installed-graph observation follow nested out-of-process webview frames,
   with regression coverage for missing CURRENT samples after a prior run.
+- Starts command-driven runs only after their visible webview receiver and graph
+  are ready, preventing fast graph loads from overtaking graph initialization.
+  Once started, runtime execution and Results persistence remain immediate.
+- Keeps narrow-toolbar controls in a fixed-height scrollable row so successful
+  completion cannot wrap the controls and shift the graph during playback.
 - Preserves the accepted pacing queue, urgent bypasses, runtime, and VS Code
   1.136.2 compatibility. Pacing acceptance assertions remain unchanged.
 

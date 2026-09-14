@@ -1459,12 +1459,15 @@ async function openDirectGraphPanelForRunbook(
       if (loadController === controller) {
         loadController = undefined;
         publishReloadState(false);
-        if (productionRun && currentDocument && !productionRunStarted && !productionRunSettled) {
-          productionRunStarted = true;
-          void startRun(productionRun.inputs, undefined);
-        }
+        tryStartProductionRun();
       }
     }
+  };
+  const tryStartProductionRun = () => {
+    if (!productionRun || !ready || !panel.visible || !currentDocument || loadController ||
+        disposed || productionRunStarted || productionRunSettled) return;
+    productionRunStarted = true;
+    void startRun(productionRun.inputs, undefined);
   };
   const requestReload = () => {
     if (runStarting || runSession || investigationClient || investigationDescriptor) {
@@ -1805,6 +1808,7 @@ async function openDirectGraphPanelForRunbook(
         void panel.webview.postMessage({ type: 'session.update', state: investigationState, style: currentStyle, minimumStepDisplayMs: pacingInterval() });
       }
       void panel.webview.postMessage({ type: 'graph.reload-state', active: loadController !== undefined });
+      tryStartProductionRun();
       return;
     }
     if (candidate.type === 'session.start') {
@@ -1964,6 +1968,7 @@ async function openDirectGraphPanelForRunbook(
   });
   const visibilitySub = panel.onDidChangeViewState(() => {
     if (ready && !disposed) void panel.webview.postMessage({ type: 'preview.visibility', visible: panel.visible });
+    tryStartProductionRun();
   });
   const configSub = vscode.workspace.onDidChangeConfiguration((event) => {
     if (affectsSetting(event, 'packageMap', resource)) requestReload();

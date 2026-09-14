@@ -2233,8 +2233,14 @@ textarea {
   }
   .run-actions {
     width: 100%;
+    height: 44px;
+    flex-shrink: 0;
     justify-content: flex-start;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .run-actions > * {
+    flex-shrink: 0;
   }
   .route-view-strip {
     grid-template-columns: minmax(0, 1fr);
