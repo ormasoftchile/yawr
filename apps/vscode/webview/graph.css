@@ -14,12 +14,13 @@ button, input, select, textarea { font: inherit; }
 .identity { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
 .identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .identity span, .mode-label { color: var(--vscode-descriptionForeground); font-size: 11px; }
+.identity span { white-space: nowrap; }
 .mode-label { text-transform: uppercase; }
 .run-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .session-close-actions { display: inline-flex; align-items: center; gap: 4px; }
 .session-close-actions select { max-width: 112px; }
 .run-actions button, .run-actions select, .interaction-pane button { min-height: 26px; border: 1px solid var(--vscode-button-border, transparent); border-radius: 3px; color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
-.run-actions button { display: inline-flex; align-items: center; gap: 5px; }
+.run-actions button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .run-actions button svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .run-actions button:hover, .interaction-pane button:hover { background: var(--vscode-button-secondaryHoverBackground); }
 .run-actions button.primary, .interaction-pane button[type="submit"], .interaction-pane button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
@@ -27,7 +28,7 @@ button, input, select, textarea { font: inherit; }
 .run-actions button.danger, .interaction-pane button.danger { color: var(--vscode-errorForeground); }
 .run-actions button:disabled, .interaction-pane button:disabled { cursor: not-allowed; opacity: 0.48; }
 .run-actions button.toggle.active { outline: 1px solid var(--vscode-focusBorder); }
-.run-status { min-width: 58px; padding: 2px 6px; border-radius: 3px; color: var(--vscode-descriptionForeground); font-size: 10px; text-align: center; text-transform: uppercase; }
+.run-status { min-width: 58px; padding: 2px 6px; border-radius: 3px; color: var(--vscode-descriptionForeground); font-size: 10px; text-align: center; text-transform: uppercase; white-space: nowrap; }
 .run-status.status-running, .run-status.status-starting { color: var(--vscode-charts-blue); }
 .run-status.status-waiting { color: var(--vscode-charts-yellow); }
 .run-status.status-completed { color: var(--vscode-charts-green); }

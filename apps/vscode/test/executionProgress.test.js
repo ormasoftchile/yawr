@@ -185,7 +185,7 @@ test('actual App pending handler rejects stale lifecycle and turn identities', (
   const noop = () => {};
   const receive = vm.runInNewContext(transformSync(`function receive(message) {${source.slice(start, end)}}\nreceive`, { loader: 'ts' }).code, {
     pendingRef, runFinishedRef, runIDRef, directRunScopeRef: { current: 'run' },
-    pacer: { bypass() {}, ordinary(nodeID) { pacedStarts.push(nodeID); } },
+    pacer: { bypass() {}, complete() {}, ordinary(nodeID) { pacedStarts.push(nodeID); } },
     settledVisualOccurrencesRef: { current: new Set() }, ...progress,
     eventNodeID: event => event.payload?.qualified_node_id,
     recordValue: value => value && typeof value === 'object' ? value : undefined,

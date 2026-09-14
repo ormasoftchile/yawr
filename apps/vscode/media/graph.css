@@ -462,6 +462,9 @@ textarea {
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
 }
+.identity span {
+  white-space: nowrap;
+}
 .mode-label {
   text-transform: uppercase;
 }
@@ -492,6 +495,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
 }
 .run-actions button svg {
   width: 14px;
@@ -533,6 +537,7 @@ textarea {
   font-size: 10px;
   text-align: center;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .run-status.status-running,
 .run-status.status-starting {

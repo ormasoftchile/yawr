@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.11
+
+- Preserves ordered visual playback after successful runtime completion, including
+  Results and the final step's full minimum display interval. Runtime completion
+  and Results processing/persistence remain immediate.
+- Prevents terminal frames, normal process exit and same-graph refresh from
+  flushing the successful visual backlog. Automatic Results selection waits for
+  playback, while failures, cancellation, blocked states and prompts still bypass it.
+- Adds frame-sampled completion-with-backlog regressions at 200 and 500 ms,
+  checking every dwell, immediate Results availability and stable graph geometry.
+
 ## 0.2.10
 
 - Adds `yawr.preview.minimumStepDisplayMs` (integer, default 200, minimum 0)

@@ -29,6 +29,7 @@ export class VisualStepPacer {
   private disposed = false;
   private interval = DEFAULT_MINIMUM_STEP_DISPLAY_MS;
   private awaitingCommit = false;
+  private completing = false;
 
   constructor(
     private readonly publish: (step: VisualStep | undefined) => void,
@@ -51,6 +52,8 @@ export class VisualStepPacer {
 
   ordinary(nodeID: string): void {
     if (this.disposed) return;
+    if (this.completing && !this.queue.length) this.cancelTimer();
+    this.completing = false;
     const next = { nodeID, progressing: true };
     this.latest = next;
     if (!this.visible) return;
@@ -68,8 +71,19 @@ export class VisualStepPacer {
     if (this.disposed) return;
     this.cancelTimer();
     this.queue = [];
+    this.completing = false;
     this.latest = step;
     if (this.visible) this.show(step);
+  }
+
+  complete(): void {
+    if (this.disposed || this.completing) return;
+    if (!this.visible || !this.interval || !this.displayed?.progressing) {
+      this.bypass();
+      return;
+    }
+    this.completing = true;
+    this.schedule();
   }
 
   setVisible(visible: boolean): void {
@@ -77,6 +91,10 @@ export class VisualStepPacer {
     this.visible = visible;
     this.cancelTimer();
     this.queue = [];
+    if (this.completing) {
+      this.completing = false;
+      this.latest = undefined;
+    }
     if (visible) this.show(this.latest ? { ...this.latest } : undefined);
   }
 
@@ -100,13 +118,20 @@ export class VisualStepPacer {
   }
 
   private schedule(): void {
-    if (this.awaitingCommit || this.timer !== undefined || !this.queue.length) return;
+    if (this.awaitingCommit || this.timer !== undefined || (!this.queue.length && !this.completing)) return;
     const remaining = Math.max(0, this.interval - (this.clock.now() - this.displayedAt));
     const generation = this.generation;
     this.timer = this.clock.setTimeout(() => {
       if (this.disposed || !this.visible || generation !== this.generation) return;
       this.timer = undefined;
-      if (this.clock.now() - this.displayedAt >= this.interval) this.show(this.queue.shift());
+      if (this.clock.now() - this.displayedAt >= this.interval) {
+        if (this.queue.length) this.show(this.queue.shift());
+        else if (this.completing) {
+          this.completing = false;
+          this.latest = undefined;
+          this.show(undefined);
+        }
+      }
       this.schedule();
     }, Math.min(remaining, 2_147_483_647));
   }

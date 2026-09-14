@@ -35828,6 +35828,7 @@
     disposed = false;
     interval = DEFAULT_MINIMUM_STEP_DISPLAY_MS;
     awaitingCommit = false;
+    completing = false;
     acknowledge(step) {
       if (this.disposed || !this.visible || !this.awaitingCommit || step !== this.displayed) return;
       this.awaitingCommit = false;
@@ -35841,6 +35842,8 @@
     }
     ordinary(nodeID) {
       if (this.disposed) return;
+      if (this.completing && !this.queue.length) this.cancelTimer();
+      this.completing = false;
       const next = { nodeID, progressing: true };
       this.latest = next;
       if (!this.visible) return;
@@ -35857,14 +35860,28 @@
       if (this.disposed) return;
       this.cancelTimer();
       this.queue = [];
+      this.completing = false;
       this.latest = step;
       if (this.visible) this.show(step);
+    }
+    complete() {
+      if (this.disposed || this.completing) return;
+      if (!this.visible || !this.interval || !this.displayed?.progressing) {
+        this.bypass();
+        return;
+      }
+      this.completing = true;
+      this.schedule();
     }
     setVisible(visible) {
       if (this.disposed || visible === this.visible) return;
       this.visible = visible;
       this.cancelTimer();
       this.queue = [];
+      if (this.completing) {
+        this.completing = false;
+        this.latest = void 0;
+      }
       if (visible) this.show(this.latest ? { ...this.latest } : void 0);
     }
     dispose() {
@@ -35884,13 +35901,20 @@
       this.timer = void 0;
     }
     schedule() {
-      if (this.awaitingCommit || this.timer !== void 0 || !this.queue.length) return;
+      if (this.awaitingCommit || this.timer !== void 0 || !this.queue.length && !this.completing) return;
       const remaining = Math.max(0, this.interval - (this.clock.now() - this.displayedAt));
       const generation = this.generation;
       this.timer = this.clock.setTimeout(() => {
         if (this.disposed || !this.visible || generation !== this.generation) return;
         this.timer = void 0;
-        if (this.clock.now() - this.displayedAt >= this.interval) this.show(this.queue.shift());
+        if (this.clock.now() - this.displayedAt >= this.interval) {
+          if (this.queue.length) this.show(this.queue.shift());
+          else if (this.completing) {
+            this.completing = false;
+            this.latest = void 0;
+            this.show(void 0);
+          }
+        }
         this.schedule();
       }, Math.min(remaining, 2147483647));
     }
@@ -39006,15 +39030,16 @@
       setSelectedId((current) => current && canonicalIDs.has(current) ? current : void 0);
     }, [document2.hash, document2.runbook.path, sessionID]);
     const [showPanel, setShowPanel] = (0, import_react15.useState)(true);
+    const visualPlayback = !!visualStep && (!isExecutionEnded(runStatus) || ["completed", "resolved"].includes(runStatus));
     (0, import_react15.useEffect)(() => {
-      if (results?.state === "available" && runStatus === "completed") {
+      if (results?.state === "available" && runStatus === "completed" && !visualPlayback) {
         const origin = results.publication.origin.node_id;
         if (document2.nodes.some((node) => node.id === origin && node.data.kind === "results")) {
           setSelectedId(origin);
           setShowPanel(true);
         }
       }
-    }, [results, runStatus]);
+    }, [results, runStatus, visualPlayback]);
     const [inspectorRatio, setInspectorRatio] = (0, import_react15.useState)(restoredInspectorRatio);
     const [routeTargetID, setRouteTargetID] = (0, import_react15.useState)();
     const [routeScope, setRouteScope] = (0, import_react15.useState)("through");
@@ -39035,7 +39060,7 @@
       previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : void 0,
       pending2?.nodeID ?? pending2?.stepID
     );
-    const currentNodeID = !isExecutionEnded(runStatus) && !pending2 && visualStep ? graphExecutionNodeID(document2, visualStep.nodeID) ?? liveCurrentNodeID : liveCurrentNodeID;
+    const currentNodeID = visualPlayback && !pending2 && visualStep ? graphExecutionNodeID(document2, visualStep.nodeID) ?? liveCurrentNodeID : liveCurrentNodeID;
     (0, import_react15.useLayoutEffect)(() => {
       previousExecutionRef.current = { scope: executionScope, nodeID: liveCurrentNodeID };
     }, [executionScope, liveCurrentNodeID]);
@@ -39132,7 +39157,7 @@
     const activeNodeIDs = (0, import_react15.useMemo)(() => activeGraphNodeIDs(structuralDocument, runtimeNodes), [structuralDocument, runtimeNodes]);
     const executionNode = currentNodeID ? document2.nodes.find((node) => node.id === currentNodeID) : void 0;
     const resolvedExecutionNodeID = executionNode?.id;
-    const executionTerminal = isExecutionEnded(runStatus);
+    const executionTerminal = isExecutionEnded(runStatus) && !visualPlayback;
     const executionStatus = executionTerminal ? void 0 : ["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) || pending2?.kind === "debug_break" ? "paused" : pending2 ? "waiting" : void 0;
     const executionProgressing = !executionTerminal && !pending2 && !["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) && (visualStep ? visualStep.progressing : activities.some((activity) => activity.nodeID === resolvedExecutionNodeID && activity.status === "running"));
     const executionPosition = (0, import_react15.useMemo)(
@@ -39341,6 +39366,8 @@
           const nodes = Array.from(canvas?.querySelectorAll(".react-flow__node-yawrStep") ?? []);
           samples.push({
             at: performance.now(),
+            runStatus: window.document.querySelector(".app")?.dataset.runStatus,
+            resultsState: window.document.querySelector(".app")?.dataset.resultsState,
             currentIDs: nodes.filter((node) => node.querySelector(".execution-current")).map((node) => node.dataset.id),
             selectedIDs: nodes.filter((node) => node.querySelector(".selected")).map((node) => node.dataset.id),
             progressing: nodes.filter((node) => node.querySelector(".execution-progress")).map((node) => node.dataset.id),
@@ -39576,307 +39603,331 @@
       report();
       return () => cancelAnimationFrame(frame2);
     }, [document2, layout.nodes.length, layout.edges.length, style2, testMode]);
-    return /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement("main", { className: `app style-${style2}${showPanel ? "" : " panel-hidden"} has-panel-content` }, /* @__PURE__ */ import_react15.default.createElement("header", { className: "toolbar" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "identity" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, document2.runbook.name ?? document2.runbook.id ?? "Runbook"), /* @__PURE__ */ import_react15.default.createElement("span", null, sessionID ? `${sessionSegmentCount} segments | ${document2.nodes.length} steps` : `${document2.nodes.length} steps`)), /* @__PURE__ */ import_react15.default.createElement("div", { className: "run-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-mode", role: "group", "aria-label": "Graph detail" }, ["workflow", "all"].map((mode) => /* @__PURE__ */ import_react15.default.createElement(
-      "button",
+    return /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement(
+      "main",
       {
-        type: "button",
-        key: mode,
-        "aria-pressed": effectiveWorkflowMode === mode,
-        disabled: executionLayoutLocked,
-        title: executionLayoutLocked ? "All steps stay expanded for execution and result review. Reset restores your saved view." : void 0,
-        onClick: () => changePreference({ workflowMode: mode })
+        className: `app style-${style2}${showPanel ? "" : " panel-hidden"} has-panel-content`,
+        "data-run-status": runStatus,
+        "data-results-state": results?.state
       },
-      mode === "workflow" ? "Workflow" : "All steps"
-    ))), /* @__PURE__ */ import_react15.default.createElement("span", { className: `run-status status-${runStatus}`, role: "status", "aria-live": "polite" }, runStarting ? "starting" : runStatus), !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
-      "button",
-      {
-        className: "primary",
-        type: "button",
-        disabled: routeTestReviewOpen || reloading,
-        title: reloading ? "Wait for the runbook graph to finish reloading" : void 0,
-        onClick: onRun
-      },
-      /* @__PURE__ */ import_react15.default.createElement(Play, { "aria-hidden": "true" }),
-      "Run"
-    ) : null, !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
-      "button",
-      {
-        className: "session-run",
-        type: "button",
-        disabled: routeTestReviewOpen || reloading,
-        title: "Start a durable investigation session",
-        onClick: onStartSession
-      },
-      /* @__PURE__ */ import_react15.default.createElement(Workflow, { "aria-hidden": "true" }),
-      /* @__PURE__ */ import_react15.default.createElement("span", null, "Start session")
-    ) : null, !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
-      "button",
-      {
-        className: "debug-run",
-        type: "button",
-        disabled: routeTestReviewOpen || reloading || breakpoints.length === 0,
-        title: reloading ? "Wait for the runbook graph to finish reloading" : routeTestReviewOpen ? "Close the route-test review before starting a debug run" : breakpoints.length === 0 ? "Add a breakpoint to start a debug run" : "Start with debugger enabled",
-        onClick: onDebugRun
-      },
-      /* @__PURE__ */ import_react15.default.createElement(Bug, { "aria-hidden": "true" }),
-      /* @__PURE__ */ import_react15.default.createElement("span", null, "Debug Run")
-    ) : null, !runActive && (sessionID ? sessionClosed || !sessionAttached && !runStarting : isTerminalRunStatus(runStatus) || routeTestOutcome !== void 0) ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "reset-run", type: "button", onClick: () => {
-      setRouteTestEditor(void 0);
-      onReset();
-    } }, /* @__PURE__ */ import_react15.default.createElement(RotateCcw, { "aria-hidden": "true" }), "Reset") : null, sessionID && sessionPaused && sessionAttached ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "primary", type: "button", onClick: onResumeSession }, /* @__PURE__ */ import_react15.default.createElement(Play, { "aria-hidden": "true" }), "Resume") : null, canCloseSession ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "session-close-actions" }, /* @__PURE__ */ import_react15.default.createElement(
-      "select",
-      {
-        "aria-label": "Investigation outcome",
-        value: closeStatus,
-        onChange: (event) => setCloseStatus(event.target.value)
-      },
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "resolved" }, "Resolved"),
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "escalated" }, "Escalated"),
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "cancelled" }, "Cancelled"),
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "abandoned" }, "Abandoned")
-    ), /* @__PURE__ */ import_react15.default.createElement("button", { className: "primary", type: "button", onClick: () => onCloseSession(closeStatus) }, /* @__PURE__ */ import_react15.default.createElement(CircleCheck, { "aria-hidden": "true" }), "Close")) : null, runActive && runID ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "danger", type: "button", onClick: onCancel }, /* @__PURE__ */ import_react15.default.createElement(Square, { "aria-hidden": "true" }), "Cancel") : null, /* @__PURE__ */ import_react15.default.createElement(
-      "select",
-      {
-        "aria-label": "Graph style",
-        value: style2,
-        onChange: (event) => onStyleChange(event.target.value)
-      },
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "smooth-curves" }, "Smooth"),
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "minimalist" }, "Minimal"),
-      /* @__PURE__ */ import_react15.default.createElement("option", { value: "header-badges" }, "Headers")
-    ), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", className: showPanel ? "toggle active" : "toggle", onClick: () => setShowPanel((value) => !value) }, /* @__PURE__ */ import_react15.default.createElement(PanelRight, { "aria-hidden": "true" }), "Panel"))), /* @__PURE__ */ import_react15.default.createElement(
-      InputsForm,
-      {
-        declarations,
-        values: inputValues,
-        disabled: runActive,
-        onChange: onInputChange
-      }
-    ), runError ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "run-error", role: "alert" }, runError) : null, issueNotice || issues.length ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "workflow-issues", "aria-label": "Execution issues" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, issues.length ? "Showing issue context" : "Showing selected step context"), /* @__PURE__ */ import_react15.default.createElement("span", null, "Structural context, not a claim those alternatives executed."), issues.map((issue, index) => /* @__PURE__ */ import_react15.default.createElement(
-      "button",
-      {
-        type: "button",
-        key: `${issue.nodeID}:${issue.occurrenceID ?? index}`,
-        onClick: () => navigateIssue(issue),
-        title: issue.nodeID
-      },
-      issue.status,
-      issue.blockedOutcome ? " \xB7 blocked outcome" : "",
-      ": ",
-      issue.qualifiedNodeID || issue.nodeID,
-      issue.occurrenceID ? ` \xB7 occurrence ${index + 1}` : ""
-    )), issueSelection && !selected ? /* @__PURE__ */ import_react15.default.createElement("span", { role: "status" }, "Historical graph unavailable \u2014 occurrence remains in the issue index.") : null) : null, /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-summary", role: "status" }, progressCounts.total, " canonical steps \xB7 ", progressCounts.completed, " done \xB7 ", progressCounts.issues, " issues \xB7 ", progressCounts.skipped, " skipped \xB7 ", progressCounts.running, " running \xB7 ", progressCounts.remaining, " ", executionTerminal ? "without final status" : "remaining", " \xB7 ", workflow.segments.size, " visual technical groups \xB7 hidden is not skipped"), routeTargetID && routeProjection ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-view-strip", "aria-label": `Routes through ${routeTargetName}` }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-copy" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "Showing routes through: ", routeTargetName), /* @__PURE__ */ import_react15.default.createElement("span", null, routeProjection.predecessorCount, " steps lead to it, ", routeProjection.successorCount, " follow it, ", routeProjection.boundaryEdges.length, " hidden dependencies")), /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-scope", role: "radiogroup", "aria-label": "Visible routes" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "through", onClick: () => setRouteScope("through") }, "Through this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "to", onClick: () => setRouteScope("to") }, "To this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "from", onClick: () => setRouteScope("from") }, "From this step")), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: showFullGraph }, "Show full graph"))) : null, currentRouteTestEditor ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-test-global-safety", role: "status" }, routeTestOutcome?.passed ? "Route test completed - external actions were blocked" : routeTestRunning ? "Testing route - XTS and external actions are blocked" : "Reviewing route test - protected execution starts only when you run this route test") : null, /* @__PURE__ */ import_react15.default.createElement(
-      "div",
-      {
-        ref: workspaceRef,
-        className: "workspace",
-        style: { "--inspector-width": `${inspectorRatio * 100}%` }
-      },
-      /* @__PURE__ */ import_react15.default.createElement("section", { ref: canvasRef, className: "canvas", "aria-label": "Runbook structure" }, /* @__PURE__ */ import_react15.default.createElement(RuntimeNodesContext.Provider, { value: runtimeNodes }, /* @__PURE__ */ import_react15.default.createElement(ExecutionPositionContext.Provider, { value: executionPosition }, /* @__PURE__ */ import_react15.default.createElement(DebugBreakpointsContext.Provider, { value: breakpointKeys }, /* @__PURE__ */ import_react15.default.createElement(ReactFlowProvider, null, /* @__PURE__ */ import_react15.default.createElement(
-        ReactFlow,
+      /* @__PURE__ */ import_react15.default.createElement("header", { className: "toolbar" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "identity" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, document2.runbook.name ?? document2.runbook.id ?? "Runbook"), /* @__PURE__ */ import_react15.default.createElement("span", null, sessionID ? `${sessionSegmentCount} segments | ${document2.nodes.length} steps` : `${document2.nodes.length} steps`)), /* @__PURE__ */ import_react15.default.createElement("div", { className: "run-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-mode", role: "group", "aria-label": "Graph detail" }, ["workflow", "all"].map((mode) => /* @__PURE__ */ import_react15.default.createElement(
+        "button",
         {
-          nodes: renderNodes,
-          onNodesChange: (changes) => {
-            const measurements = changes.filter((change) => change.type === "dimensions");
-            if (measurements.length) setMeasuredNodes((current) => applyNodeChanges(measurements, preserveLayoutMeasurements(displayNodes, current)));
-          },
-          edges: runtimeEdges,
-          nodeTypes,
-          fitView: true,
-          fitViewOptions: { padding: 0.2 },
-          minZoom: 0.2,
-          maxZoom: 1.8,
-          nodesDraggable: false,
-          onInit: (instance) => {
-            flowRef.current = instance;
-            setFlowReady(true);
-          },
-          onMoveStart: (event) => {
-            if (event) stopExecutionPanRef.current?.();
-          },
-          onNodeClick: (_, node) => {
-            if (node.data.synthetic !== true) {
-              setIssueSelection(void 0);
-              setSelectedId(node.id);
-            }
-          },
-          onPaneClick: () => {
-            setSelectedId(void 0);
-          }
+          type: "button",
+          key: mode,
+          "aria-pressed": effectiveWorkflowMode === mode,
+          disabled: executionLayoutLocked,
+          title: executionLayoutLocked ? "All steps stay expanded for execution and result review. Reset restores your saved view." : void 0,
+          onClick: () => changePreference({ workflowMode: mode })
         },
-        /* @__PURE__ */ import_react15.default.createElement(Background$1, { variant: BackgroundVariant.Dots, gap: 20, size: 1 }),
-        /* @__PURE__ */ import_react15.default.createElement(Controls$1, { showInteractive: false }),
-        /* @__PURE__ */ import_react15.default.createElement(
-          MiniMap$1,
-          {
-            pannable: true,
-            zoomable: true,
-            ariaLabel: "Runbook overview",
-            nodeColor: (node) => node.id === resolvedExecutionNodeID ? executionTerminal ? "var(--vscode-charts-blue)" : "var(--vscode-charts-green)" : node.selected ? "var(--vscode-charts-yellow)" : ["running", "delaying"].includes(runtimeNodes[node.id]?.status ?? "") ? "var(--vscode-charts-green)" : "var(--vscode-foreground)",
-            nodeStrokeColor: (node) => node.selected ? "var(--vscode-editor-background)" : "transparent",
-            nodeStrokeWidth: 3
-          }
-        )
-      )))))),
-      showPanel ? /* @__PURE__ */ import_react15.default.createElement(
+        mode === "workflow" ? "Workflow" : "All steps"
+      ))), /* @__PURE__ */ import_react15.default.createElement(
+        "span",
+        {
+          className: `run-status status-${runStatus}`,
+          role: "status",
+          "aria-live": "polite",
+          title: isExecutionEnded(runStatus) && visualPlayback ? `Runtime ${runStatus}; ordered visual playback continues.` : void 0
+        },
+        runStarting ? "starting" : runStatus
+      ), !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          className: "primary",
+          type: "button",
+          disabled: routeTestReviewOpen || reloading,
+          title: reloading ? "Wait for the runbook graph to finish reloading" : void 0,
+          onClick: onRun
+        },
+        /* @__PURE__ */ import_react15.default.createElement(Play, { "aria-hidden": "true" }),
+        "Run"
+      ) : null, !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          className: "session-run",
+          type: "button",
+          disabled: routeTestReviewOpen || reloading,
+          title: "Start a durable investigation session",
+          onClick: onStartSession
+        },
+        /* @__PURE__ */ import_react15.default.createElement(Workflow, { "aria-hidden": "true" }),
+        /* @__PURE__ */ import_react15.default.createElement("span", null, "Start session")
+      ) : null, !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          className: "debug-run",
+          type: "button",
+          disabled: routeTestReviewOpen || reloading || breakpoints.length === 0,
+          title: reloading ? "Wait for the runbook graph to finish reloading" : routeTestReviewOpen ? "Close the route-test review before starting a debug run" : breakpoints.length === 0 ? "Add a breakpoint to start a debug run" : "Start with debugger enabled",
+          onClick: onDebugRun
+        },
+        /* @__PURE__ */ import_react15.default.createElement(Bug, { "aria-hidden": "true" }),
+        /* @__PURE__ */ import_react15.default.createElement("span", null, "Debug Run")
+      ) : null, !runActive && (sessionID ? sessionClosed || !sessionAttached && !runStarting : isTerminalRunStatus(runStatus) || routeTestOutcome !== void 0) ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "reset-run", type: "button", onClick: () => {
+        setRouteTestEditor(void 0);
+        onReset();
+      } }, /* @__PURE__ */ import_react15.default.createElement(RotateCcw, { "aria-hidden": "true" }), "Reset") : null, sessionID && sessionPaused && sessionAttached ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "primary", type: "button", onClick: onResumeSession }, /* @__PURE__ */ import_react15.default.createElement(Play, { "aria-hidden": "true" }), "Resume") : null, canCloseSession ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "session-close-actions" }, /* @__PURE__ */ import_react15.default.createElement(
+        "select",
+        {
+          "aria-label": "Investigation outcome",
+          value: closeStatus,
+          onChange: (event) => setCloseStatus(event.target.value)
+        },
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "resolved" }, "Resolved"),
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "escalated" }, "Escalated"),
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "cancelled" }, "Cancelled"),
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "abandoned" }, "Abandoned")
+      ), /* @__PURE__ */ import_react15.default.createElement("button", { className: "primary", type: "button", onClick: () => onCloseSession(closeStatus) }, /* @__PURE__ */ import_react15.default.createElement(CircleCheck, { "aria-hidden": "true" }), "Close")) : null, runActive && runID ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "danger", type: "button", onClick: onCancel }, /* @__PURE__ */ import_react15.default.createElement(Square, { "aria-hidden": "true" }), "Cancel") : null, /* @__PURE__ */ import_react15.default.createElement(
+        "select",
+        {
+          "aria-label": "Graph style",
+          value: style2,
+          onChange: (event) => onStyleChange(event.target.value)
+        },
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "smooth-curves" }, "Smooth"),
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "minimalist" }, "Minimal"),
+        /* @__PURE__ */ import_react15.default.createElement("option", { value: "header-badges" }, "Headers")
+      ), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", className: showPanel ? "toggle active" : "toggle", onClick: () => setShowPanel((value) => !value) }, /* @__PURE__ */ import_react15.default.createElement(PanelRight, { "aria-hidden": "true" }), "Panel"))),
+      /* @__PURE__ */ import_react15.default.createElement(
+        InputsForm,
+        {
+          declarations,
+          values: inputValues,
+          disabled: runActive,
+          onChange: onInputChange
+        }
+      ),
+      runError ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "run-error", role: "alert" }, runError) : null,
+      issueNotice || issues.length ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "workflow-issues", "aria-label": "Execution issues" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, issues.length ? "Showing issue context" : "Showing selected step context"), /* @__PURE__ */ import_react15.default.createElement("span", null, "Structural context, not a claim those alternatives executed."), issues.map((issue, index) => /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          key: `${issue.nodeID}:${issue.occurrenceID ?? index}`,
+          onClick: () => navigateIssue(issue),
+          title: issue.nodeID
+        },
+        issue.status,
+        issue.blockedOutcome ? " \xB7 blocked outcome" : "",
+        ": ",
+        issue.qualifiedNodeID || issue.nodeID,
+        issue.occurrenceID ? ` \xB7 occurrence ${index + 1}` : ""
+      )), issueSelection && !selected ? /* @__PURE__ */ import_react15.default.createElement("span", { role: "status" }, "Historical graph unavailable \u2014 occurrence remains in the issue index.") : null) : null,
+      /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-summary", role: "status" }, progressCounts.total, " canonical steps \xB7 ", progressCounts.completed, " done \xB7 ", progressCounts.issues, " issues \xB7 ", progressCounts.skipped, " skipped \xB7 ", progressCounts.running, " running \xB7 ", progressCounts.remaining, " ", isExecutionEnded(runStatus) ? "without final status" : "remaining", " \xB7 ", workflow.segments.size, " visual technical groups \xB7 hidden is not skipped"),
+      routeTargetID && routeProjection ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-view-strip", "aria-label": `Routes through ${routeTargetName}` }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-copy" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "Showing routes through: ", routeTargetName), /* @__PURE__ */ import_react15.default.createElement("span", null, routeProjection.predecessorCount, " steps lead to it, ", routeProjection.successorCount, " follow it, ", routeProjection.boundaryEdges.length, " hidden dependencies")), /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-scope", role: "radiogroup", "aria-label": "Visible routes" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "through", onClick: () => setRouteScope("through") }, "Through this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "to", onClick: () => setRouteScope("to") }, "To this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "from", onClick: () => setRouteScope("from") }, "From this step")), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: showFullGraph }, "Show full graph"))) : null,
+      currentRouteTestEditor ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-test-global-safety", role: "status" }, routeTestOutcome?.passed ? "Route test completed - external actions were blocked" : routeTestRunning ? "Testing route - XTS and external actions are blocked" : "Reviewing route test - protected execution starts only when you run this route test") : null,
+      /* @__PURE__ */ import_react15.default.createElement(
         "div",
         {
-          className: "inspector-resizer",
-          role: "separator",
-          "aria-label": "Resize step details",
-          "aria-orientation": "vertical",
-          "aria-controls": "step-details-panel",
-          "aria-valuemin": MIN_INSPECTOR_RATIO * 100,
-          "aria-valuemax": MAX_INSPECTOR_RATIO * 100,
-          "aria-valuenow": Math.round(inspectorRatio * 100),
-          tabIndex: 0,
-          title: "Drag to resize the details panel",
-          onDoubleClick: () => setInspectorRatio(DEFAULT_INSPECTOR_RATIO),
-          onKeyDown: resizeInspectorByKey,
-          onPointerDown: (event) => {
-            event.preventDefault();
-            resizePointerIDRef.current = event.pointerId;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            resizeInspectorFromClientX(event.clientX);
-          },
-          onPointerMove: (event) => {
-            if (resizePointerIDRef.current === event.pointerId) resizeInspectorFromClientX(event.clientX);
-          },
-          onPointerUp: (event) => {
-            if (resizePointerIDRef.current === event.pointerId) resizePointerIDRef.current = void 0;
-          },
-          onPointerCancel: (event) => {
-            if (resizePointerIDRef.current === event.pointerId) resizePointerIDRef.current = void 0;
-          }
-        }
-      ) : null,
-      /* @__PURE__ */ import_react15.default.createElement("aside", { id: "step-details-panel", className: "inspector", "aria-label": "Step details" }, /* @__PURE__ */ import_react15.default.createElement(
-        CurrentActivity,
-        {
-          activities,
-          runStatus,
-          remaining: progressCounts.remaining,
-          onLocate: locateExecutionNode,
-          locationNotice: activityLocationNotice
-        }
-      ), pending2 ? /* @__PURE__ */ import_react15.default.createElement(
-        InteractionPane,
-        {
-          key: `${pending2.turnID}:${runError ?? ""}`,
-          interaction: pending2,
-          onSubmit: onSubmitInteraction,
-          onConfirmHostAction,
-          xtsOpened
-        }
-      ) : currentRouteTestEditor && routeTarget && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement(
-        RouteTestPane,
-        {
-          key: currentRouteTestEditor.key,
-          document: document2,
-          target: routeTarget,
-          candidates: routeTestCandidates,
-          blockers: routeTestBlockers,
-          context: routeTestContext,
-          initial: currentRouteTestEditor.artifact,
-          needsReview: currentRouteTestEditor.needsReview,
-          inputValues,
-          runStatus,
-          runStarting,
-          outcome: routeTestOutcome,
-          error: routeTestError,
-          onSave: onSaveRouteTest,
-          onRun: onRunRouteTest,
-          onStop: onCancel,
-          onClose: () => setRouteTestEditor(void 0)
-        }
-      ) : selected ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "selected-step-panel" }, !routeTargetID || routeTargetID !== selected.id ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-context-action" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: () => showRoutesThrough(selected.id) }, "Show routes through this step")) : null, routeTargetID === selected.id && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-test-launcher", "aria-label": "Route tests" }, /* @__PURE__ */ import_react15.default.createElement(
-        "button",
-        {
-          type: "button",
-          className: "primary",
-          disabled: runActive,
-          onClick: () => setRouteTestEditor({ key: `new:${selected.id}:${Date.now()}`, contextKey: routeTestContextKey })
+          ref: workspaceRef,
+          className: "workspace",
+          style: { "--inspector-width": `${inspectorRatio * 100}%` }
         },
-        "Test reaching this step"
-      ), savedRouteTests.length > 0 ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "saved-route-tests" }, /* @__PURE__ */ import_react15.default.createElement("h3", null, "Saved route tests"), savedRouteTests.map((saved) => /* @__PURE__ */ import_react15.default.createElement(
-        "button",
-        {
-          type: "button",
-          key: saved.artifact.id,
-          disabled: runActive,
-          onClick: () => setRouteTestEditor({
-            artifact: saved.artifact,
-            needsReview: saved.needsReview,
-            key: `saved:${saved.artifact.id}:${Date.now()}`,
-            contextKey: routeTestContextKey
-          })
-        },
-        /* @__PURE__ */ import_react15.default.createElement("span", null, saved.artifact.name),
-        /* @__PURE__ */ import_react15.default.createElement("small", null, saved.needsReview ? "Needs review" : saved.artifact.last_result?.status ?? "Draft")
-      ))) : null) : null, inspectedNode?.data.kind === "results" ? /* @__PURE__ */ import_react15.default.createElement(ResultsViewer, { results, nodeID: inspectedNode.id }) : null, inspectedNode ? /* @__PURE__ */ import_react15.default.createElement(
-        StepInspector,
-        {
-          node: inspectedNode,
-          runtime: runtimeNodes[selected.id],
-          requestedOccurrenceID: issueSelection?.nodeID === selected.id ? issueSelection.occurrenceID : void 0,
-          snapshotDigest: typeof inspectedNode.data.display_plan_snapshot_digest === "string" ? inspectedNode.data.display_plan_snapshot_digest : typeof inspectedNode.data.executable_snapshot_hash === "string" ? inspectedNode.data.executable_snapshot_hash : document2.display_plan_snapshot_digest ?? document2.execution_plan_hash ?? document2.presentation_state?.plan_snapshot_digest ?? "missing-binding",
-          onOccurrenceChange: (occurrence) => {
-            setIssueSelection(void 0);
-            if (occurrence.graphRevision !== void 0 && selectedSegmentID) {
-              setInspectionRevision({ nodeID: selected.id, revision: occurrence.graphRevision });
-              onRequestGraphRevision(
-                revisionNodeKey(selectedSegmentID, occurrence.graphRevision, selectedOriginalNodeID),
-                selectedSegmentID,
-                occurrence.graphRevision,
-                selectedOriginalNodeID
-              );
+        /* @__PURE__ */ import_react15.default.createElement("section", { ref: canvasRef, className: "canvas", "aria-label": "Runbook structure" }, /* @__PURE__ */ import_react15.default.createElement(RuntimeNodesContext.Provider, { value: runtimeNodes }, /* @__PURE__ */ import_react15.default.createElement(ExecutionPositionContext.Provider, { value: executionPosition }, /* @__PURE__ */ import_react15.default.createElement(DebugBreakpointsContext.Provider, { value: breakpointKeys }, /* @__PURE__ */ import_react15.default.createElement(ReactFlowProvider, null, /* @__PURE__ */ import_react15.default.createElement(
+          ReactFlow,
+          {
+            nodes: renderNodes,
+            onNodesChange: (changes) => {
+              const measurements = changes.filter((change) => change.type === "dimensions");
+              if (measurements.length) setMeasuredNodes((current) => applyNodeChanges(measurements, preserveLayoutMeasurements(displayNodes, current)));
+            },
+            edges: runtimeEdges,
+            nodeTypes,
+            fitView: true,
+            fitViewOptions: { padding: 0.2 },
+            minZoom: 0.2,
+            maxZoom: 1.8,
+            nodesDraggable: false,
+            onInit: (instance) => {
+              flowRef.current = instance;
+              setFlowReady(true);
+            },
+            onMoveStart: (event) => {
+              if (event) stopExecutionPanRef.current?.();
+            },
+            onNodeClick: (_, node) => {
+              if (node.data.synthetic !== true) {
+                setIssueSelection(void 0);
+                setSelectedId(node.id);
+              }
+            },
+            onPaneClick: () => {
+              setSelectedId(void 0);
             }
           },
-          availableGraphRevisions,
-          selectedGraphRevision,
-          onGraphRevisionChange: (revision) => {
-            setInspectionRevision({ nodeID: selected.id, revision });
-            if (revision !== latestGraphRevision) {
-              onRequestGraphRevision(
-                revisionNodeKey(selectedSegmentID, revision, selectedOriginalNodeID),
-                selectedSegmentID,
-                revision,
-                selectedOriginalNodeID
-              );
-            }
-          },
-          debugControls: selectedGraphRevision === latestGraphRevision ? /* @__PURE__ */ import_react15.default.createElement(
-            DebugSelectionControls,
+          /* @__PURE__ */ import_react15.default.createElement(Background$1, { variant: BackgroundVariant.Dots, gap: 20, size: 1 }),
+          /* @__PURE__ */ import_react15.default.createElement(Controls$1, { showInteractive: false }),
+          /* @__PURE__ */ import_react15.default.createElement(
+            MiniMap$1,
             {
-              document: document2,
-              node: selected,
-              breakpoints,
-              watches,
-              disabled: runActive,
-              onToggle: onToggleBreakpoint,
-              onWatchesChange
+              pannable: true,
+              zoomable: true,
+              ariaLabel: "Runbook overview",
+              nodeColor: (node) => node.id === resolvedExecutionNodeID ? executionTerminal ? "var(--vscode-charts-blue)" : "var(--vscode-charts-green)" : node.selected ? "var(--vscode-charts-yellow)" : ["running", "delaying"].includes(runtimeNodes[node.id]?.status ?? "") ? "var(--vscode-charts-green)" : "var(--vscode-foreground)",
+              nodeStrokeColor: (node) => node.selected ? "var(--vscode-editor-background)" : "transparent",
+              nodeStrokeWidth: 3
             }
-          ) : /* @__PURE__ */ import_react15.default.createElement("p", { className: "debug-protected" }, "Historical graph revisions are read-only.")
-        }
-      ) : /* @__PURE__ */ import_react15.default.createElement("div", { className: "inspector-blank", role: "status" }, "Historical graph unavailable or loading \u2014 no current-source substitution.")) : /* @__PURE__ */ import_react15.default.createElement(
-        RunOverview,
-        {
-          document: document2,
-          runtimeNodes,
-          executionNodeID: resolvedExecutionNodeID,
-          runID,
-          runStatus: runStarting ? "starting" : runStatus,
-          inputs: declarations.map((declaration) => ({
-            name: declaration.name,
-            value: inputValues[declaration.name] ?? "",
-            secret: declaration.type === "secret"
-          })),
-          breakpointCount: breakpoints.length,
-          diagnostics: runDiagnostics,
-          activeNodeIDs
-        }
-      ))
-    )));
+          )
+        )))))),
+        showPanel ? /* @__PURE__ */ import_react15.default.createElement(
+          "div",
+          {
+            className: "inspector-resizer",
+            role: "separator",
+            "aria-label": "Resize step details",
+            "aria-orientation": "vertical",
+            "aria-controls": "step-details-panel",
+            "aria-valuemin": MIN_INSPECTOR_RATIO * 100,
+            "aria-valuemax": MAX_INSPECTOR_RATIO * 100,
+            "aria-valuenow": Math.round(inspectorRatio * 100),
+            tabIndex: 0,
+            title: "Drag to resize the details panel",
+            onDoubleClick: () => setInspectorRatio(DEFAULT_INSPECTOR_RATIO),
+            onKeyDown: resizeInspectorByKey,
+            onPointerDown: (event) => {
+              event.preventDefault();
+              resizePointerIDRef.current = event.pointerId;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              resizeInspectorFromClientX(event.clientX);
+            },
+            onPointerMove: (event) => {
+              if (resizePointerIDRef.current === event.pointerId) resizeInspectorFromClientX(event.clientX);
+            },
+            onPointerUp: (event) => {
+              if (resizePointerIDRef.current === event.pointerId) resizePointerIDRef.current = void 0;
+            },
+            onPointerCancel: (event) => {
+              if (resizePointerIDRef.current === event.pointerId) resizePointerIDRef.current = void 0;
+            }
+          }
+        ) : null,
+        /* @__PURE__ */ import_react15.default.createElement("aside", { id: "step-details-panel", className: "inspector", "aria-label": "Step details" }, /* @__PURE__ */ import_react15.default.createElement(
+          CurrentActivity,
+          {
+            activities,
+            runStatus,
+            remaining: progressCounts.remaining,
+            onLocate: locateExecutionNode,
+            locationNotice: activityLocationNotice
+          }
+        ), pending2 ? /* @__PURE__ */ import_react15.default.createElement(
+          InteractionPane,
+          {
+            key: `${pending2.turnID}:${runError ?? ""}`,
+            interaction: pending2,
+            onSubmit: onSubmitInteraction,
+            onConfirmHostAction,
+            xtsOpened
+          }
+        ) : currentRouteTestEditor && routeTarget && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement(
+          RouteTestPane,
+          {
+            key: currentRouteTestEditor.key,
+            document: document2,
+            target: routeTarget,
+            candidates: routeTestCandidates,
+            blockers: routeTestBlockers,
+            context: routeTestContext,
+            initial: currentRouteTestEditor.artifact,
+            needsReview: currentRouteTestEditor.needsReview,
+            inputValues,
+            runStatus,
+            runStarting,
+            outcome: routeTestOutcome,
+            error: routeTestError,
+            onSave: onSaveRouteTest,
+            onRun: onRunRouteTest,
+            onStop: onCancel,
+            onClose: () => setRouteTestEditor(void 0)
+          }
+        ) : selected ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "selected-step-panel" }, !routeTargetID || routeTargetID !== selected.id ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-context-action" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: () => showRoutesThrough(selected.id) }, "Show routes through this step")) : null, routeTargetID === selected.id && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-test-launcher", "aria-label": "Route tests" }, /* @__PURE__ */ import_react15.default.createElement(
+          "button",
+          {
+            type: "button",
+            className: "primary",
+            disabled: runActive,
+            onClick: () => setRouteTestEditor({ key: `new:${selected.id}:${Date.now()}`, contextKey: routeTestContextKey })
+          },
+          "Test reaching this step"
+        ), savedRouteTests.length > 0 ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "saved-route-tests" }, /* @__PURE__ */ import_react15.default.createElement("h3", null, "Saved route tests"), savedRouteTests.map((saved) => /* @__PURE__ */ import_react15.default.createElement(
+          "button",
+          {
+            type: "button",
+            key: saved.artifact.id,
+            disabled: runActive,
+            onClick: () => setRouteTestEditor({
+              artifact: saved.artifact,
+              needsReview: saved.needsReview,
+              key: `saved:${saved.artifact.id}:${Date.now()}`,
+              contextKey: routeTestContextKey
+            })
+          },
+          /* @__PURE__ */ import_react15.default.createElement("span", null, saved.artifact.name),
+          /* @__PURE__ */ import_react15.default.createElement("small", null, saved.needsReview ? "Needs review" : saved.artifact.last_result?.status ?? "Draft")
+        ))) : null) : null, inspectedNode?.data.kind === "results" ? /* @__PURE__ */ import_react15.default.createElement(ResultsViewer, { results, nodeID: inspectedNode.id }) : null, inspectedNode ? /* @__PURE__ */ import_react15.default.createElement(
+          StepInspector,
+          {
+            node: inspectedNode,
+            runtime: runtimeNodes[selected.id],
+            requestedOccurrenceID: issueSelection?.nodeID === selected.id ? issueSelection.occurrenceID : void 0,
+            snapshotDigest: typeof inspectedNode.data.display_plan_snapshot_digest === "string" ? inspectedNode.data.display_plan_snapshot_digest : typeof inspectedNode.data.executable_snapshot_hash === "string" ? inspectedNode.data.executable_snapshot_hash : document2.display_plan_snapshot_digest ?? document2.execution_plan_hash ?? document2.presentation_state?.plan_snapshot_digest ?? "missing-binding",
+            onOccurrenceChange: (occurrence) => {
+              setIssueSelection(void 0);
+              if (occurrence.graphRevision !== void 0 && selectedSegmentID) {
+                setInspectionRevision({ nodeID: selected.id, revision: occurrence.graphRevision });
+                onRequestGraphRevision(
+                  revisionNodeKey(selectedSegmentID, occurrence.graphRevision, selectedOriginalNodeID),
+                  selectedSegmentID,
+                  occurrence.graphRevision,
+                  selectedOriginalNodeID
+                );
+              }
+            },
+            availableGraphRevisions,
+            selectedGraphRevision,
+            onGraphRevisionChange: (revision) => {
+              setInspectionRevision({ nodeID: selected.id, revision });
+              if (revision !== latestGraphRevision) {
+                onRequestGraphRevision(
+                  revisionNodeKey(selectedSegmentID, revision, selectedOriginalNodeID),
+                  selectedSegmentID,
+                  revision,
+                  selectedOriginalNodeID
+                );
+              }
+            },
+            debugControls: selectedGraphRevision === latestGraphRevision ? /* @__PURE__ */ import_react15.default.createElement(
+              DebugSelectionControls,
+              {
+                document: document2,
+                node: selected,
+                breakpoints,
+                watches,
+                disabled: runActive,
+                onToggle: onToggleBreakpoint,
+                onWatchesChange
+              }
+            ) : /* @__PURE__ */ import_react15.default.createElement("p", { className: "debug-protected" }, "Historical graph revisions are read-only.")
+          }
+        ) : /* @__PURE__ */ import_react15.default.createElement("div", { className: "inspector-blank", role: "status" }, "Historical graph unavailable or loading \u2014 no current-source substitution.")) : /* @__PURE__ */ import_react15.default.createElement(
+          RunOverview,
+          {
+            document: document2,
+            runtimeNodes,
+            executionNodeID: resolvedExecutionNodeID,
+            runID,
+            runStatus: runStarting ? "starting" : runStatus,
+            inputs: declarations.map((declaration) => ({
+              name: declaration.name,
+              value: inputValues[declaration.name] ?? "",
+              secret: declaration.type === "secret"
+            })),
+            breakpointCount: breakpoints.length,
+            diagnostics: runDiagnostics,
+            activeNodeIDs
+          }
+        ))
+      )
+    ));
   }
   function App() {
     const [document2, setDocument] = (0, import_react15.useState)();
@@ -39945,8 +39996,8 @@
       displayWithdrawalsRef.current = retainDirectDisplayWithdrawals(displayWithdrawalsRef.current, runtimeNodes);
       vscode.setState?.({ ...recordValue(vscode.getState?.()), displayWithdrawals: displayWithdrawalsRef.current });
     }, [runtimeNodes]);
-    const clearActiveRun = () => {
-      visualPacerRef.current?.bypass();
+    const clearActiveRun = (preserveVisualPlayback = false) => {
+      if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
       hostRequestRef.current = void 0;
       pendingRef.current = void 0;
       runIDRef.current = void 0;
@@ -39969,14 +40020,17 @@
         const message = event.data;
         if (!message || typeof message !== "object") return;
         if (message.type === "loading") {
-          pacer.bypass();
           setError(void 0);
         } else if (message.type === "preview.visibility") {
           hostVisible = message.visible;
           visibility();
         } else if (message.type === "graph") {
-          pacer.bypass();
-          setResults(void 0);
+          const previous = directDocumentRef.current;
+          const sameGraph = previous?.hash !== void 0 && previous.hash === message.document.hash && previous.runbook.path === message.document.runbook.path && previous.runbook.id === message.document.runbook.id;
+          if (!sameGraph) {
+            pacer.bypass();
+            setResults(void 0);
+          }
           directDocumentRef.current = message.document;
           setDocument(message.document);
           if (message.document.presentation_state) {
@@ -40027,13 +40081,15 @@
           const urgentNode = Object.entries(state.runtimeNodes).find(([id2, value]) => isIssueStepStatus(value.status) && value.status !== sessionRuntimeRef.current[id2]?.status || value.output?.outcome_category === "blocked" && sessionRuntimeRef.current[id2]?.output?.outcome_category !== "blocked")?.[0];
           sessionRuntimeRef.current = state.runtimeNodes;
           const position = state.pending?.nodeID ?? urgentNode ?? state.executionNodeID;
-          if (!message.live || state.pending || urgentNode || isExecutionEnded(state.runStatus) || ["paused", "paused_at_boundary", "handoff_pending"].includes(state.runStatus)) {
+          const successful = ["completed", "resolved"].includes(state.runStatus);
+          if (!message.live || state.pending || urgentNode || isExecutionEnded(state.runStatus) && !successful || ["paused", "paused_at_boundary", "handoff_pending"].includes(state.runStatus)) {
             pacer.bypass(!isExecutionEnded(state.runStatus) && position ? {
               nodeID: position,
               progressing: !state.pending && !urgentNode && state.runStatus === "running"
             } : void 0);
           } else {
             for (const nodeID of message.liveSteps ?? []) pacer.ordinary(nodeID);
+            if (successful) pacer.complete();
           }
           sessionIDRef.current = state.sessionID;
           sessionStatusRef.current = state.sessionStatus;
@@ -40074,7 +40130,7 @@
         } else if (message.type === "session.stderr") {
           setRunDiagnostics((current) => `${current}${message.text}`.slice(-16 * 1024));
         } else if (message.type === "session.exit") {
-          pacer.bypass();
+          if (!runFinishedRef.current || message.code !== 0) pacer.bypass();
           setSessionAttached(false);
           setRunStarting(false);
           if (!runFinishedRef.current && !["paused", "indeterminate", "failed"].includes(sessionStatusRef.current ?? "")) {
@@ -40143,7 +40199,8 @@
             }
             if (frame2.event.kind === "run/started" && !pendingRef.current && !runFinishedRef.current) setRunStatus((current) => isTerminalRunStatus(current) ? current : "running");
             else if (frame2.event.kind === "run/completed") {
-              clearActiveRun();
+              clearActiveRun(true);
+              pacer.complete();
               runFinishedRef.current = true;
               setRunStatus("completed");
             } else if (frame2.event.kind === "run/failed") {
@@ -40183,7 +40240,9 @@
             if (frame2.runID && directRunScopeRef.current && frame2.runID !== directRunScopeRef.current) return;
             setResults(frame2.resultsAvailability ?? { state: "unavailable", reason: "runtime-did-not-deliver-results" });
             const summaryRunID = frame2.runID ?? directRunScopeRef.current;
-            clearActiveRun();
+            const successful = (frame2.status ?? "completed") === "completed" && !frame2.steps?.some((step) => isIssueStepStatus(step.status ?? "") || step.output?.outcome_category === "blocked");
+            clearActiveRun(successful);
+            if (successful) pacer.complete();
             runFinishedRef.current = true;
             setRunStarting(false);
             setRouteTestRunning(false);
@@ -40210,7 +40269,7 @@
         } else if (message.type === "run.stderr") {
           setRunDiagnostics((current) => `${current}${message.text}`.slice(-16 * 1024));
         } else if (message.type === "run.exit") {
-          clearActiveRun();
+          clearActiveRun(runFinishedRef.current && message.code === 0);
           setRunStarting(false);
           setRouteTestRunning(false);
           if (!runFinishedRef.current) {
@@ -40598,7 +40657,7 @@
         });
       });
       return () => cancelAnimationFrame(frame2);
-    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
+    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
     if (loading) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "Loading runbook...");
     if (error) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state error", role: "alert" }, error);
     if (!document2) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "No graph loaded");

@@ -929,7 +929,8 @@ suite('Yawr extension smoke tests', () => {
       assert.strictEqual(resumedState.executionPositionTitle, 'Resume workflow');
 
       const completed = waitForUI(
-        (state) => state.runStatus === 'completed' && state.nodeStatuses['parent-container'] === 'completed',
+        (state) => state.runStatus === 'completed' && state.nodeStatuses['parent-container'] === 'completed' &&
+          state.currentExecutionMarkerCount === 0,
         'direct webview did not complete after the host interaction',
       );
       writeFrame({
@@ -1027,7 +1028,7 @@ suite('Yawr extension smoke tests', () => {
   });
 
   test('execution transitions keep one current marker, fixed geometry and bounded offscreen pans', async function () {
-    this.timeout(45_000);
+    this.timeout(60_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext);
     await ext.activate();
@@ -1041,7 +1042,7 @@ suite('Yawr extension smoke tests', () => {
     fixture.nodes = Array.from({ length: 10 }, (_, index) => ({
       ...template, id: `step-${index}`, type: 'step',
       data: { ...template.data, id: `step-${index}`, step_id: `step-${index}`,
-        kind: 'assign', title: `Transition ${index}`, group_id: '', frame_id: '', order: index },
+        kind: index === 2 ? 'results' : 'assign', title: `Transition ${index}`, group_id: '', frame_id: '', order: index },
     }));
     fixture.edges = fixture.nodes.slice(1).map((node: { id: string }, index: number) => ({
       id: `edge-${index}`, source: `step-${index}`, target: node.id, type: 'sequence',
@@ -1060,6 +1061,7 @@ suite('Yawr extension smoke tests', () => {
     type Sample = {
       currentIDs: string[]; selectedIDs: string[]; progressing: string[]; topLogCount: number; reducedMotion: boolean;
       viewport: Viewport; canvas: object; positions: Visibility['positions']; at: number;
+      runStatus?: string; resultsState?: string;
     };
     const message = <T,>(type: string): Promise<T> => new Promise((resolve, reject) => {
       const timer = setTimeout(() => { subscription.dispose(); reject(new Error(`Missing ${type}`)); }, 10_000);
@@ -1094,6 +1096,15 @@ suite('Yawr extension smoke tests', () => {
       await transition();
       return (await result).samples;
     };
+    const { publicationDigest }: { publicationDigest(value: unknown): string } =
+      require(path.join(ext.extensionPath, 'out', 'typedResults'));
+    const resultBody = {
+      schema_version: 'yawr.run-results/v1', publication_id: 'transition-run/root/results/1',
+      plan_snapshot_digest: `sha256:${'a'.repeat(64)}`, checkpoint_sequence: 42,
+      origin: { node_id: 'step-2', invocation: 1 },
+      outputs: { retained: { type: 'boolean', value: true } },
+    };
+    const resultsAvailability = { state: 'available', publication: { ...resultBody, digest: publicationDigest(resultBody) } };
     try {
       await message('ui.state');
       await panel.webview.postMessage({ type: 'run.starting' });
@@ -1165,6 +1176,57 @@ suite('Yawr extension smoke tests', () => {
         console.log(`Visual pacing ${interval ?? 200}ms: ${changes.map(value => `${value.currentIDs[0]}@${value.at.toFixed(1)}`).join(', ')}`);
         await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'completed' } });
         await settle(value => value.currentMarkerCount === 0);
+      }
+      for (const interval of [200, 500]) {
+        await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: interval });
+        await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+        await panel.webview.postMessage({ type: 'test.action', action: 'select-node', name: 'step-0' });
+        await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport',
+          value: JSON.stringify({ x: 100, y: 30, zoom: 0.2 }) });
+        const samples = await trace(async () => {
+          for (const nodeID of ['step-0', 'step-1', 'step-2', 'step-3']) {
+            await step(nodeID, 'started');
+            await step(nodeID, 'completed');
+          }
+          await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.event',
+            event: { kind: 'run/completed', run_id: 'transition-run', sequence: ++sequence } } });
+          await panel.webview.postMessage({ type: 'run.frame', frame: {
+            type: 'run.finished', status: 'completed', resultsAvailability,
+          } });
+          await panel.webview.postMessage({ type: 'run.exit', code: 0, signal: null });
+          await panel.webview.postMessage({ type: 'loading' });
+          await panel.webview.postMessage({ type: 'graph', document: fixture, style: 'smooth-curves', testMode: true });
+        }, true);
+        const first = samples.findIndex(value => value.currentIDs.length > 0);
+        assert.ok(first >= 0, 'completion must not erase the initial current step before paint');
+        const playback = samples.slice(first);
+        const finished = playback.findIndex(value => value.currentIDs.length === 0);
+        assert.ok(finished > 0, 'visual playback must finish after its final dwell');
+        const active = playback.slice(0, finished);
+        assert.ok(active.every(value => value.currentIDs.length === 1), 'no no-current frames inside completed-run playback');
+        const transitions = playback.slice(0, finished + 1).filter((value, index) =>
+          index === 0 || value.currentIDs[0] !== playback[index - 1].currentIDs[0]);
+        assert.deepStrictEqual(transitions.map(value => value.currentIDs[0]),
+          ['step-0', 'step-1', 'step-2', 'step-3', undefined]);
+        for (let index = 1; index < transitions.length; index++) {
+          const elapsed = transitions[index].at - transitions[index - 1].at;
+          assert.ok(elapsed >= interval - 35,
+            `${transitions[index - 1].currentIDs[0]} held ${elapsed}ms after runtime completion, minimum ${interval - 35}ms`);
+        }
+        const internalCompletion = active.find(value => value.runStatus === 'completed' && value.resultsState === 'available');
+        assert.equal(internalCompletion?.currentIDs[0], 'step-0', 'runtime completion and Results must be available while later visuals remain queued');
+        for (const value of active) {
+          assert.deepStrictEqual(value.selectedIDs, ['step-0'], 'automatic Results selection must wait for playback');
+          assert.deepStrictEqual(value.progressing, value.currentIDs, 'the paced current step keeps its progress treatment');
+          assert.deepStrictEqual(value.positions, active[0].positions);
+          assert.deepStrictEqual(value.canvas, active[0].canvas);
+          assert.equal(value.viewport.zoom, 0.2);
+          assert.deepStrictEqual(value.viewport, active[0].viewport, 'on-screen playback must not pan the viewport');
+          assert.equal(value.topLogCount, 0);
+        }
+        assert.ok(playback.slice(finished).every(value => value.currentIDs.length === 0), 'duplicate completion and exit must not replay');
+        await settle(value => value.currentMarkerCount === 0 && value.selectedID === 'step-2');
+        console.log(`Completed-run pacing ${interval}ms: ${transitions.map(value => `${value.currentIDs[0] ?? 'drained'}@${value.at.toFixed(1)}`).join(', ')}`);
       }
       await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: 5000 });
       await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });

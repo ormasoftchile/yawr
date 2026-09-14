@@ -39,12 +39,16 @@ Each run/session snapshots the setting at start (including reattachment);
 mid-run changes apply to the next run/session.
 
 Ordinary live steps are displayed in event order for at least that interval.
-Failure, cancellation, blocked outcomes, input/debug prompts and completion
-discard queued visual steps immediately. Results are processed and persisted
-without waiting for the visual queue. Reconnect applies historical snapshots
+Successful runtime completion does not discard queued visuals: playback continues
+through every ordinary step, including Results, and the final step's full interval.
+Runtime status and Results processing/persistence update immediately; automatic
+Results selection waits for playback to finish so it does not move selection mid-step.
+Failure, cancellation (including user cancellation), blocked outcomes and input/debug
+prompts discard queued visual steps immediately. Reconnect applies historical snapshots
 directly until the attachment handshake; only later live starts are paced.
-Hiding cancels timers and showing converges to the latest cursor; disposing or
-replacing the graph invalidates pending callbacks.
+Hiding cancels timers and showing converges to the latest cursor (or completed
+state); disposing or replacing the graph invalidates pending callbacks. Refreshing
+the same graph and normal process exit do not interrupt successful playback.
 
 Reduced motion changes the glow/pan animation, **not** the visibility interval.
 Fake-clock tests enforce exact deadlines. Frame-sampled webview tests allow
@@ -54,7 +58,8 @@ this is a measurement tolerance, not time subtracted from the configured delay.
 One green **Current** marker tracks execution independently of the yellow user
 selection. It remains on the last reached step between runtime events, without
 changing that step's completed/failed status, and becomes **Last reached** when
-the run ends. Concurrent lanes retain their individual statuses; a new lane does
+successful playback finishes (or immediately on unsuccessful termination).
+Concurrent lanes retain their individual statuses; a new lane does
 not steal the current marker from an active leaf. Input requests take priority.
 A restrained, non-resizing glow indicates work in progress and respects reduced
 motion preferences.

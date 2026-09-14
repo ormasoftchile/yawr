@@ -1716,14 +1716,15 @@ function GraphView({
     setSelectedId(current => current && canonicalIDs.has(current) ? current : undefined);
   }, [document.hash, document.runbook.path, sessionID]);
   const [showPanel, setShowPanel] = useState(true);
+  const visualPlayback = !!visualStep && (!isExecutionEnded(runStatus) || ['completed', 'resolved'].includes(runStatus));
   useEffect(() => {
-    if (results?.state === 'available' && runStatus === 'completed') {
+    if (results?.state === 'available' && runStatus === 'completed' && !visualPlayback) {
       const origin = results.publication.origin.node_id;
       if (document.nodes.some(node => node.id === origin && node.data.kind === 'results')) {
         setSelectedId(origin); setShowPanel(true);
       }
     }
-  }, [results, runStatus]);
+  }, [results, runStatus, visualPlayback]);
   const [inspectorRatio, setInspectorRatio] = useState(restoredInspectorRatio);
   const [routeTargetID, setRouteTargetID] = useState<string>();
   const [routeScope, setRouteScope] = useState<RouteProjectionScope>('through');
@@ -1739,7 +1740,7 @@ function GraphView({
     graphExecutionNodeID(document, executionNodeID),
     previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : undefined,
     pending?.nodeID ?? pending?.stepID);
-  const currentNodeID = !isExecutionEnded(runStatus) && !pending && visualStep
+  const currentNodeID = visualPlayback && !pending && visualStep
     ? graphExecutionNodeID(document, visualStep.nodeID) ?? liveCurrentNodeID : liveCurrentNodeID;
   useLayoutEffect(() => {
     previousExecutionRef.current = { scope: executionScope, nodeID: liveCurrentNodeID };
@@ -1845,7 +1846,7 @@ function GraphView({
     ? document.nodes.find((node) => node.id === currentNodeID)
     : undefined;
   const resolvedExecutionNodeID = executionNode?.id;
-  const executionTerminal = isExecutionEnded(runStatus);
+  const executionTerminal = isExecutionEnded(runStatus) && !visualPlayback;
   const executionStatus = executionTerminal ? undefined
     : ['paused', 'paused_at_boundary', 'handoff_pending'].includes(runStatus) || pending?.kind === 'debug_break' ? 'paused'
     : pending ? 'waiting' : undefined;
@@ -2059,6 +2060,8 @@ function GraphView({
         const nodes = Array.from(canvas?.querySelectorAll<HTMLElement>('.react-flow__node-yawrStep') ?? []);
         samples.push({
           at: performance.now(),
+          runStatus: window.document.querySelector<HTMLElement>('.app')?.dataset.runStatus,
+          resultsState: window.document.querySelector<HTMLElement>('.app')?.dataset.resultsState,
           currentIDs: nodes.filter(node => node.querySelector('.execution-current')).map(node => node.dataset.id),
           selectedIDs: nodes.filter(node => node.querySelector('.selected')).map(node => node.dataset.id),
           progressing: nodes.filter(node => node.querySelector('.execution-progress')).map(node => node.dataset.id),
@@ -2260,7 +2263,8 @@ function GraphView({
 
   return (
     <>
-    <main className={`app style-${style}${showPanel ? '' : ' panel-hidden'} has-panel-content`}>
+    <main className={`app style-${style}${showPanel ? '' : ' panel-hidden'} has-panel-content`}
+      data-run-status={runStatus} data-results-state={results?.state}>
       <header className="toolbar">
         <div className="identity">
           <strong>{document.runbook.name ?? document.runbook.id ?? 'Runbook'}</strong>
@@ -2274,7 +2278,9 @@ function GraphView({
               onClick={() => changePreference({ workflowMode: mode })}>
               {mode === 'workflow' ? 'Workflow' : 'All steps'}</button>)}
           </div>
-          <span className={`run-status status-${runStatus}`} role="status" aria-live="polite">{runStarting ? 'starting' : runStatus}</span>
+          <span className={`run-status status-${runStatus}`} role="status" aria-live="polite"
+            title={isExecutionEnded(runStatus) && visualPlayback ? `Runtime ${runStatus}; ordered visual playback continues.` : undefined}>
+            {runStarting ? 'starting' : runStatus}</span>
           {!runActive && !sessionID ? (
             <button
               className="primary"
@@ -2377,7 +2383,7 @@ function GraphView({
         {issueSelection && !selected ? <span role="status">Historical graph unavailable — occurrence remains in the issue index.</span> : null}
       </section> : null}
       <div className="workflow-summary" role="status">
-        {progressCounts.total} canonical steps · {progressCounts.completed} done · {progressCounts.issues} issues · {progressCounts.skipped} skipped · {progressCounts.running} running · {progressCounts.remaining} {executionTerminal ? 'without final status' : 'remaining'}
+        {progressCounts.total} canonical steps · {progressCounts.completed} done · {progressCounts.issues} issues · {progressCounts.skipped} skipped · {progressCounts.running} running · {progressCounts.remaining} {isExecutionEnded(runStatus) ? 'without final status' : 'remaining'}
         {' · '}{workflow.segments.size} visual technical groups · hidden is not skipped
       </div>
       {routeTargetID && routeProjection ? (
@@ -2690,8 +2696,8 @@ function App() {
     vscode.setState?.({ ...recordValue(vscode.getState?.()), displayWithdrawals: displayWithdrawalsRef.current });
   }, [runtimeNodes]);
 
-  const clearActiveRun = () => {
-    visualPacerRef.current?.bypass();
+  const clearActiveRun = (preserveVisualPlayback = false) => {
+    if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
     hostRequestRef.current = undefined;
     pendingRef.current = undefined;
     runIDRef.current = undefined;
@@ -2715,14 +2721,18 @@ function App() {
       const message = event.data;
       if (!message || typeof message !== 'object') return;
       if (message.type === 'loading') {
-        pacer.bypass();
         setError(undefined);
       } else if (message.type === 'preview.visibility') {
         hostVisible = message.visible;
         visibility();
       } else if (message.type === 'graph') {
-        pacer.bypass();
-        setResults(undefined);
+        const previous = directDocumentRef.current;
+        const sameGraph = previous?.hash !== undefined && previous.hash === message.document.hash &&
+          previous.runbook.path === message.document.runbook.path && previous.runbook.id === message.document.runbook.id;
+        if (!sameGraph) {
+          pacer.bypass();
+          setResults(undefined);
+        }
         directDocumentRef.current = message.document;
         setDocument(message.document);
         if (message.document.presentation_state) {
@@ -2774,13 +2784,15 @@ function App() {
           (value.output?.outcome_category === 'blocked' && sessionRuntimeRef.current[id]?.output?.outcome_category !== 'blocked'))?.[0];
         sessionRuntimeRef.current = state.runtimeNodes;
         const position = state.pending?.nodeID ?? urgentNode ?? state.executionNodeID;
-        if (!message.live || state.pending || urgentNode || isExecutionEnded(state.runStatus) ||
+        const successful = ['completed', 'resolved'].includes(state.runStatus);
+        if (!message.live || state.pending || urgentNode || (isExecutionEnded(state.runStatus) && !successful) ||
             ['paused', 'paused_at_boundary', 'handoff_pending'].includes(state.runStatus)) {
           pacer.bypass(!isExecutionEnded(state.runStatus) && position ? {
             nodeID: position, progressing: !state.pending && !urgentNode && state.runStatus === 'running',
           } : undefined);
         } else {
           for (const nodeID of message.liveSteps ?? []) pacer.ordinary(nodeID);
+          if (successful) pacer.complete();
         }
         sessionIDRef.current = state.sessionID;
         sessionStatusRef.current = state.sessionStatus;
@@ -2821,7 +2833,7 @@ function App() {
       } else if (message.type === 'session.stderr') {
         setRunDiagnostics((current) => `${current}${message.text}`.slice(-16 * 1024));
       } else if (message.type === 'session.exit') {
-        pacer.bypass();
+        if (!runFinishedRef.current || message.code !== 0) pacer.bypass();
         setSessionAttached(false);
         setRunStarting(false);
         if (!runFinishedRef.current && !['paused', 'indeterminate', 'failed'].includes(sessionStatusRef.current ?? '')) {
@@ -2893,7 +2905,7 @@ function App() {
             pacer.bypass(nodeID ? { nodeID, progressing: false } : undefined);
           }
           if (frame.event.kind === 'run/started' && !pendingRef.current && !runFinishedRef.current) setRunStatus(current => isTerminalRunStatus(current) ? current : 'running');
-          else if (frame.event.kind === 'run/completed') { clearActiveRun(); runFinishedRef.current = true; setRunStatus('completed'); }
+          else if (frame.event.kind === 'run/completed') { clearActiveRun(true); pacer.complete(); runFinishedRef.current = true; setRunStatus('completed'); }
           else if (frame.event.kind === 'run/failed') { clearActiveRun(); runFinishedRef.current = true; setRunStatus('failed'); }
           else if (frame.event.kind === 'run/cancelled') { clearActiveRun(); runFinishedRef.current = true; setRunStatus('cancelled'); }
           else if (frame.event.kind === 'run/indeterminate') { clearActiveRun(); runFinishedRef.current = true; setRunStatus('indeterminate'); }
@@ -2924,7 +2936,10 @@ function App() {
           if (frame.runID && directRunScopeRef.current && frame.runID !== directRunScopeRef.current) return;
           setResults(frame.resultsAvailability ?? { state: 'unavailable', reason: 'runtime-did-not-deliver-results' });
           const summaryRunID = frame.runID ?? directRunScopeRef.current;
-          clearActiveRun();
+          const successful = (frame.status ?? 'completed') === 'completed' &&
+            !frame.steps?.some(step => isIssueStepStatus(step.status ?? '') || step.output?.outcome_category === 'blocked');
+          clearActiveRun(successful);
+          if (successful) pacer.complete();
           runFinishedRef.current = true;
           setRunStarting(false);
           setRouteTestRunning(false);
@@ -2949,7 +2964,7 @@ function App() {
       } else if (message.type === 'run.stderr') {
         setRunDiagnostics((current) => `${current}${message.text}`.slice(-16 * 1024));
       } else if (message.type === 'run.exit') {
-        clearActiveRun();
+        clearActiveRun(runFinishedRef.current && message.code === 0);
         setRunStarting(false);
         setRouteTestRunning(false);
         if (!runFinishedRef.current) {
@@ -3372,7 +3387,7 @@ function App() {
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
+  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
 
   if (loading) return <div className="state" role="status">Loading runbook...</div>;
   if (error) return <div className="state error" role="alert">{error}</div>;

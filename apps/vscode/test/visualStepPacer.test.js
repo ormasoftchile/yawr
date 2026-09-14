@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
+const { transformSync } = require('esbuild');
 const { VisualStepPacer, minimumStepDisplayMs } = require('../out/visualStepPacer');
 const { sessionVisualSteps, sessionGraphNodeID } = require('../out/sessionCompositeGraph');
 
@@ -68,11 +70,11 @@ test('a long-running current step can advance immediately after its minimum expi
   assert.equal(h.writes.at(-1).at, 1000);
 });
 
-for (const reason of ['failure', 'cancelled', 'blocked', 'denied', 'interaction', 'debug pause', 'Results', 'runtime completion', 'user cancel', 'error']) {
+for (const reason of ['failure', 'cancelled', 'blocked', 'denied', 'interaction', 'debug pause', 'user cancel', 'error']) {
   test(`${reason} bypass discards the visual backlog immediately`, () => {
     const h = harness(500);
     h.pacer.ordinary('a'); h.pacer.ordinary('b'); h.advance(50);
-    const critical = ['Results', 'runtime completion', 'user cancel', 'error'].includes(reason)
+    const critical = ['user cancel', 'error'].includes(reason)
       ? undefined : { nodeID: reason, progressing: false };
     h.pacer.bypass(critical);
     assert.deepEqual(h.writes.at(-1), { at: 50, step: critical });
@@ -95,6 +97,82 @@ test('reconnect snapshots converge immediately and only subsequent live steps ar
   h.advance(199); assert.equal(h.writes.at(-1).step.nodeID, 'live-a');
   h.advance(200); assert.equal(h.writes.at(-1).step.nodeID, 'live-b');
 });
+
+for (const interval of [200, 500]) {
+  test(`successful completion drains every queued step and final Results dwell at ${interval}ms`, () => {
+    const h = harness(interval);
+    h.pacer.ordinary('a'); h.pacer.ordinary('b'); h.pacer.ordinary('Results');
+    h.advance(20); h.pacer.complete();
+    h.advance(30); h.pacer.complete();
+    h.advance(interval * 3 - 1);
+    assert.deepEqual(h.writes.map(value => [value.at, value.step?.nodeID]), [
+      [0, 'a'], [interval, 'b'], [interval * 2, 'Results'],
+    ]);
+    h.advance(interval * 3);
+    assert.deepEqual(h.writes.at(-1), { at: interval * 3, step: undefined });
+    assert.equal(h.timers.size, 0);
+  });
+}
+
+test('successful completion before first React commit still gives every step its full committed dwell', () => {
+  const h = harness(200, true);
+  h.pacer.ordinary('a'); h.pacer.ordinary('Results'); h.pacer.complete();
+  h.advance(1000); assert.equal(h.writes.length, 1);
+  h.pacer.acknowledge(h.writes[0].step);
+  h.advance(1200); assert.equal(h.writes.at(-1).step.nodeID, 'Results');
+  h.advance(2000); assert.equal(h.writes.at(-1).step.nodeID, 'Results');
+  h.pacer.acknowledge(h.writes.at(-1).step);
+  h.advance(2199); assert.equal(h.writes.at(-1).step.nodeID, 'Results');
+  h.advance(2200); assert.equal(h.writes.at(-1).step, undefined);
+});
+
+test('completion after an already satisfied final dwell does not add another interval', () => {
+  const h = harness(200);
+  h.pacer.ordinary('Results'); h.advance(1000); h.pacer.complete(); h.advance(1000);
+  assert.deepEqual(h.writes.at(-1), { at: 1000, step: undefined });
+});
+
+test('zero and empty playback complete without timers', () => {
+  for (const interval of [0, 200]) {
+    const h = harness(interval);
+    if (interval === 0) h.pacer.ordinary('Results');
+    h.pacer.complete();
+    assert.equal(h.writes.at(-1).step, undefined);
+    assert.equal(h.timers.size, 0);
+  }
+});
+
+test('a live continuation cancels only the final completion timer, including duplicate current identities', () => {
+  for (const nodeID of ['a', 'b']) {
+    const h = harness(200);
+    h.pacer.ordinary('a'); h.pacer.complete(); h.advance(50);
+    h.pacer.ordinary(nodeID);
+    for (const callback of h.cancelled) callback?.();
+    h.advance(1000);
+    assert.equal(h.writes.at(-1).step.nodeID, nodeID);
+    assert.ok(h.writes.every(value => value.step), 'an obsolete final timer must not clear live playback');
+    assert.equal(h.timers.size, 0);
+  }
+});
+
+for (const interruption of ['bypass', 'hide', 'dispose', 'new-run']) {
+  test(`${interruption} cancels successful post-runtime playback without stale callbacks`, () => {
+    const h = harness(500);
+    h.pacer.ordinary('a'); h.pacer.ordinary('Results'); h.pacer.complete();
+    if (interruption === 'bypass') h.pacer.bypass();
+    if (interruption === 'hide') h.pacer.setVisible(false);
+    if (interruption === 'dispose') h.pacer.dispose();
+    if (interruption === 'new-run') h.pacer.start(200);
+    const count = h.writes.length;
+    for (const callback of h.cancelled) callback?.();
+    h.advance(5000); assert.equal(h.writes.length, count);
+    assert.equal(h.timers.size, 0);
+    if (interruption === 'hide') {
+      h.pacer.setVisible(true);
+      assert.equal(h.writes.at(-1).step, undefined, 'revealing a finished run must not replay obsolete history');
+    }
+  });
+}
 
 test('hide clears timers, hidden events do not publish, reveal converges without replay', () => {
   const h = harness(200);
@@ -165,6 +243,54 @@ test('session transactions retain all start identities in event order without fo
     [nodeID]: { status: 'completed', occurrences: [{ startedEventSequence: 10 }] },
   }), [nodeID], 'a start completed within the same transaction is still paced');
 });
+
+for (const mode of ['success', 'reconnect', 'failure', 'blocked', 'interaction']) {
+  test(`actual session update handles ${mode} during queued playback`, () => {
+    const source = fs.readFileSync(require.resolve('../webview/graph.tsx'), 'utf8');
+    const marker = "      } else if (message.type === 'session.update') {";
+    const start = source.indexOf(marker) + marker.length;
+    const end = source.indexOf("      } else if (message.type === 'session.graph-revision')", start);
+    const closedStart = source.indexOf('function isClosedSessionStatus(');
+    const closed = source.slice(closedStart, source.indexOf('\n}', closedStart) + 2);
+    const h = harness(200);
+    const context = {
+      pacer: h.pacer, sessionRuntimeRef: { current: {} }, sessionIDRef: {}, sessionStatusRef: {},
+      runIDRef: {}, pendingRef: {}, runFinishedRef: {},
+      ...require('../out/executionProgress'), ...require('../out/runStatus'),
+    };
+    for (const name of ['SessionID', 'SessionStatus', 'SessionAttached', 'SegmentGraphRevisions',
+      'UnloadedSegmentIDs', 'Document', 'Style', 'RouteTestContext', 'RouteTests', 'RouteTestOutcome',
+      'RouteTestRunning', 'RouteTestError', 'RuntimeNodes', 'ExecutionNodeID', 'Pending', 'RunID',
+      'RunStarting', 'RunError', 'Loading', 'Error']) context[`set${name}`] = () => {};
+    let runtimeStatus;
+    context.setRunStatus = value => { runtimeStatus = value; };
+    const receive = vm.runInNewContext(transformSync(
+      `${closed}\nfunction receive(message) {${source.slice(start, end)}}\nreceive`,
+      { loader: 'ts', target: 'es2022' }).code, context);
+    const state = { sessionID: 'session', sessionStatus: 'active', runStatus: 'running',
+      runtimeNodes: {}, executionNodeID: 'b' };
+    receive({ live: true, liveSteps: ['a', 'b'], state });
+    const final = { ...state, runStatus: 'resolved', sessionStatus: 'resolved' };
+    if (mode === 'failure') final.runStatus = 'failed';
+    if (mode === 'blocked') Object.assign(final, { runStatus: 'running', runtimeNodes: { blocked: { status: 'blocked' } } });
+    if (mode === 'interaction') Object.assign(final, { runStatus: 'waiting', pending: { nodeID: 'prompt', kind: 'collector' } });
+    receive({ live: mode !== 'reconnect', liveSteps: mode === 'success' ? ['Results'] : [], state: final });
+    assert.equal(runtimeStatus, final.runStatus, 'runtime state is applied without a timer');
+    if (mode === 'success') {
+      assert.equal(context.runFinishedRef.current, true, 'session closes before visual playback finishes');
+      assert.equal(h.writes.at(-1).step.nodeID, 'a');
+      h.advance(600);
+      assert.deepEqual(h.writes.map(value => [value.at, value.step?.nodeID]),
+        [[0, 'a'], [200, 'b'], [400, 'Results'], [600, undefined]]);
+    } else {
+      assert.equal(h.writes.at(-1).step?.nodeID, mode === 'blocked' ? 'blocked' : mode === 'interaction' ? 'prompt' : undefined);
+      const count = h.writes.length;
+      h.advance(1000);
+      assert.equal(h.writes.length, count);
+      assert.equal(h.timers.size, 0);
+    }
+  });
+}
 
 test('setting metadata and host lifecycle wiring keep pacing strictly in the webview', () => {
   const manifest = require('../package.json');
