@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -18,13 +17,9 @@ import (
 // (parent_step_id, parent_kind, include_alias, branch_label) for the canonical
 // collect-health runbook. This is the wire-format contract for downstream
 // consumers (TUI, harness, SDKs).
+// Tool availability and platform-specific ping flags may select either result
+// arm; the structural contract requires exactly one arm regardless of success.
 func TestStepStartedEvent_StructuralMetadata_CollectHealth(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// The collect-health runbook invokes ping/nslookup with POSIX-style
-		// flags ("-c"); Windows ping uses "-n", so the captured errors do not
-		// match the runbook's success branch. Tracked in yawr#34.
-		t.Skip("collect-health runbook uses POSIX-only ping flags; not portable to Windows")
-	}
 	var (
 		mu     sync.Mutex
 		events []engine.Event
@@ -48,6 +43,7 @@ func TestStepStartedEvent_StructuralMetadata_CollectHealth(t *testing.T) {
 		Client:      "engine-contract-test",
 		OnEvent:     collect,
 		OnSubEvent:  collect,
+		Output:      io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("run.Start: %v", err)
