@@ -4579,7 +4579,7 @@
             var dispatcher = resolveDispatcher();
             return dispatcher.useInsertionEffect(create2, deps);
           }
-          function useLayoutEffect(create2, deps) {
+          function useLayoutEffect2(create2, deps) {
             var dispatcher = resolveDispatcher();
             return dispatcher.useLayoutEffect(create2, deps);
           }
@@ -5358,7 +5358,7 @@
           exports.useId = useId2;
           exports.useImperativeHandle = useImperativeHandle;
           exports.useInsertionEffect = useInsertionEffect;
-          exports.useLayoutEffect = useLayoutEffect;
+          exports.useLayoutEffect = useLayoutEffect2;
           exports.useMemo = useMemo3;
           exports.useReducer = useReducer;
           exports.useRef = useRef6;
@@ -27079,7 +27079,7 @@
             inst: { value, getSnapshot }
           });
           var inst = cachedValue[0].inst, forceUpdate = cachedValue[1];
-          useLayoutEffect(
+          useLayoutEffect2(
             function() {
               inst.value = value;
               inst.getSnapshot = getSnapshot;
@@ -27113,7 +27113,7 @@
           return getSnapshot();
         }
         "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-        var React13 = require_react(), objectIs = "function" === typeof Object.is ? Object.is : is, useState9 = React13.useState, useEffect9 = React13.useEffect, useLayoutEffect = React13.useLayoutEffect, useDebugValue2 = React13.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
+        var React13 = require_react(), objectIs = "function" === typeof Object.is ? Object.is : is, useState9 = React13.useState, useEffect9 = React13.useEffect, useLayoutEffect2 = React13.useLayoutEffect, useDebugValue2 = React13.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
         exports.useSyncExternalStore = void 0 !== React13.useSyncExternalStore ? React13.useSyncExternalStore : shim;
         "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
       })();
@@ -35584,6 +35584,12 @@
     for (const node of document2.nodes) resolve(node.id);
     return aliases;
   }
+  function graphExecutionNodeID(document2, nodeID) {
+    if (!nodeID) return void 0;
+    if (document2.nodes.some((node) => node.id === nodeID)) return nodeID;
+    for (const [id2, alias] of graphProgressAliases(document2)) if (alias === nodeID) return id2;
+    return void 0;
+  }
   function directOccurrenceID(runID, nodeID, payload) {
     const evidence = (value) => value === void 0 ? ["absent"] : ["supplied", value];
     return JSON.stringify([runID, nodeID, ...[
@@ -35734,11 +35740,64 @@
     const leafCount = activities.filter((value) => !value.container).length;
     const containerCount = activities.length - leafCount;
     const message = terminal ? remaining > 0 ? "Run ended, some steps lack final status." : `Run ${runStatus}.` : runStatus === "idle" ? "Not started." : ["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) ? "Paused \u2014 waiting for a resume command." : runStatus === "starting" ? "Starting \u2014 waiting for the first step event." : "Waiting for runtime activity \u2014 no active step reported.";
-    return /* @__PURE__ */ import_react9.default.createElement("section", { className: "execution-position-strip current-activity", "aria-label": "Current activity" }, /* @__PURE__ */ import_react9.default.createElement("div", null, /* @__PURE__ */ import_react9.default.createElement("span", null, "Current activity"), /* @__PURE__ */ import_react9.default.createElement("strong", { role: "status" }, activities.length ? `${leafCount} active runtime ${leafCount === 1 ? "step" : "steps"}${containerCount ? ` \xB7 ${containerCount} active ${containerCount === 1 ? "container" : "containers"}` : ""}` : message), activities.slice(0, 4).map((activity) => {
+    return /* @__PURE__ */ import_react9.default.createElement("details", { className: "current-activity" }, /* @__PURE__ */ import_react9.default.createElement("summary", null, "Execution activity (", activities.length, ")"), /* @__PURE__ */ import_react9.default.createElement("section", { "aria-label": "Current activity" }, /* @__PURE__ */ import_react9.default.createElement("div", null, /* @__PURE__ */ import_react9.default.createElement("span", null, "Current activity"), /* @__PURE__ */ import_react9.default.createElement("strong", { role: "status" }, activities.length ? `${leafCount} active runtime ${leafCount === 1 ? "step" : "steps"}${containerCount ? ` \xB7 ${containerCount} active ${containerCount === 1 ? "container" : "containers"}` : ""}` : message), activities.slice(0, 4).map((activity) => {
       const timestamp = activity.lastActivityAt || activity.startedAt;
       const time = timestamp ? Date.parse(timestamp) : NaN;
       return /* @__PURE__ */ import_react9.default.createElement("div", { className: "current-activity-item", key: `${activity.nodeID}:${activity.occurrenceID ?? ""}` }, /* @__PURE__ */ import_react9.default.createElement("div", null, /* @__PURE__ */ import_react9.default.createElement("strong", null, activity.label, ": ", activity.title), /* @__PURE__ */ import_react9.default.createElement("code", { title: activity.path }, activity.path), activity.runID ? /* @__PURE__ */ import_react9.default.createElement("small", null, "Run ", activity.runID, activity.invocation !== void 0 ? ` \xB7 invocation ${activity.invocation}` : "", activity.retryAttempt !== void 0 ? ` \xB7 retry ${activity.retryAttempt}` : "", activity.executionLane ? ` \xB7 lane ${activity.executionLane}` : "") : null, Number.isFinite(time) ? /* @__PURE__ */ import_react9.default.createElement("small", { title: timestamp }, "Last update ", Math.max(0, Math.floor((now2 - time) / 1e3)), "s ago") : null, !activity.inGraph ? /* @__PURE__ */ import_react9.default.createElement("small", null, "Executing outside the loaded graph \u2014 exact runtime path shown.") : null), /* @__PURE__ */ import_react9.default.createElement("button", { type: "button", onClick: () => onLocate(activity), title: `Locate ${activity.path}` }, /* @__PURE__ */ import_react9.default.createElement(LocateFixed, { "aria-hidden": "true" }), /* @__PURE__ */ import_react9.default.createElement("span", null, "Locate")));
-    }), activities.length > 4 ? /* @__PURE__ */ import_react9.default.createElement("small", null, "+", activities.length - 4, " other active runtime locations") : null, locationNotice ? /* @__PURE__ */ import_react9.default.createElement("p", { role: "status" }, locationNotice) : null));
+    }), activities.length > 4 ? /* @__PURE__ */ import_react9.default.createElement("small", null, "+", activities.length - 4, " other active runtime locations") : null, locationNotice ? /* @__PURE__ */ import_react9.default.createElement("p", { role: "status" }, locationNotice) : null)));
+  }
+
+  // src/executionView.ts
+  function executionViewMode(preference, runStatus) {
+    return ["idle", "not-started"].includes(runStatus) ? preference : "all";
+  }
+  function currentExecutionNode(activities, runStatus, graphIDs, reachedID, previousID, pendingID) {
+    if (["idle", "not-started", "starting"].includes(runStatus)) return void 0;
+    const known = (id2) => id2 && graphIDs.has(id2) ? id2 : void 0;
+    if (isExecutionEnded(runStatus)) return known(reachedID) ?? known(previousID);
+    const visible = activities.filter((activity) => activity.inGraph && graphIDs.has(activity.nodeID));
+    const pending2 = pendingID ? visible.find((activity) => activity.nodeID === pendingID || activity.path === pendingID) : void 0;
+    if (pending2) return pending2.nodeID;
+    const leaves = visible.filter((activity) => !activity.container);
+    const candidates = leaves.length ? leaves : visible;
+    return candidates.find((activity) => activity.nodeID === previousID)?.nodeID ?? candidates[0]?.nodeID ?? known(reachedID) ?? known(previousID);
+  }
+  var EXECUTION_PAN_DURATION = 280;
+  function animateExecutionViewport(from, to, write, clock2, reducedMotion) {
+    if (reducedMotion) {
+      write(to);
+      return () => {
+      };
+    }
+    const start2 = clock2.now();
+    let frame2 = 0;
+    let cancelled = false;
+    const advance = (time) => {
+      if (cancelled) return;
+      const elapsed = Math.min(1, Math.max(0, (time - start2) / EXECUTION_PAN_DURATION));
+      const eased = 1 - (1 - elapsed) ** 3;
+      write({ x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased, zoom: from.zoom });
+      if (elapsed < 1) frame2 = clock2.requestFrame(advance);
+    };
+    frame2 = clock2.requestFrame(advance);
+    return () => {
+      cancelled = true;
+      clock2.cancelFrame(frame2);
+    };
+  }
+  function executionViewport(viewport, canvas, node) {
+    if (canvas.right <= canvas.left || canvas.bottom <= canvas.top || node.right <= node.left || node.bottom <= node.top) return void 0;
+    const shift = (start2, end, near, far) => {
+      if (start2 >= near && end <= far || start2 <= near && end >= far) return 0;
+      const margin = Math.min(24, (far - near) / 10);
+      if (end - start2 > far - near - margin * 2) {
+        return start2 > near ? near + margin - start2 : far - margin - end;
+      }
+      return start2 < near ? near + margin - start2 : end > far ? far - margin - end : 0;
+    };
+    const x = shift(node.left, node.right, canvas.left, canvas.right);
+    const y = shift(node.top, node.bottom, canvas.top, canvas.bottom);
+    return x || y ? { x: viewport.x + x, y: viewport.y + y, zoom: viewport.zoom } : void 0;
   }
 
   // src/workflowView.ts
@@ -37854,18 +37913,31 @@
     const title = typeof data.title === "string" ? data.title : "";
     const isTerminal = kind === "end";
     const runtime = runtimeNodes[id2];
-    const observedStatus = runtime?.status ?? (typeof data.status === "string" ? data.status : "pending");
+    const isCurrent = executionPosition.nodeID === id2;
+    const observedStatus = isCurrent && executionPosition.status ? executionPosition.status : runtime?.output?.outcome_category === "blocked" ? "blocked" : runtime?.status ?? (typeof data.status === "string" ? data.status : "pending");
     const status = executionPosition.terminal && ["running", "delaying", "waiting"].includes(observedStatus) ? "no-final-status" : observedStatus;
     const error = runtime?.error ?? (typeof data.error === "string" ? data.error : "");
     const hasBeforeBreakpoint = debugBreakpoints.has(breakpointKey(id2, "before"));
     const hasAfterBreakpoint = debugBreakpoints.has(breakpointKey(id2, "after"));
-    const isCurrent = executionPosition.nodeID === id2;
     const locatorText = title || id2;
     const focusedLabel = `Focused step: ${locatorText}`;
     const currentLabel = `Current step: ${locatorText}`;
     const executionLabel = executionPosition.terminal ? "Last reached" : "Current";
     const executionAriaLabel = executionPosition.terminal ? `Last reached step: ${locatorText}` : currentLabel;
-    return /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement(NodeToolbar, { isVisible: selected, position: Position.Left, align: "center", offset: 12 }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "node-locator focused", role: "status", "aria-label": focusedLabel, title: focusedLabel }, /* @__PURE__ */ import_react15.default.createElement("span", null, "Focused"), /* @__PURE__ */ import_react15.default.createElement("code", { title: id2 }, locatorText), /* @__PURE__ */ import_react15.default.createElement(ArrowRight, { "aria-hidden": "true" }))), /* @__PURE__ */ import_react15.default.createElement(NodeToolbar, { isVisible: isCurrent, position: Position.Right, align: "center", offset: 12 }, /* @__PURE__ */ import_react15.default.createElement("div", { className: `node-locator ${executionPosition.terminal ? "last-reached" : "current"}`, role: "status", "aria-label": executionAriaLabel, title: executionAriaLabel }, /* @__PURE__ */ import_react15.default.createElement(ArrowLeft, { "aria-hidden": "true" }), /* @__PURE__ */ import_react15.default.createElement("span", null, executionLabel), /* @__PURE__ */ import_react15.default.createElement("code", { title: id2 }, locatorText))), /* @__PURE__ */ import_react15.default.createElement("div", { className: `step-node kind-${kind} status-${status}${selected ? " selected" : ""}${isCurrent ? executionPosition.terminal ? " execution-last" : " execution-current" : ""}` }, /* @__PURE__ */ import_react15.default.createElement(Handle$1, { type: "target", position: Position.Top }), /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-heading" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "kind-mark", "aria-hidden": "true" }, kind.slice(0, 2).toUpperCase()), /* @__PURE__ */ import_react15.default.createElement("span", null, kindLabels2[kind] ?? kind)), /* @__PURE__ */ import_react15.default.createElement("div", { className: "debug-node-markers" }, hasBeforeBreakpoint ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "Before breakpoint", title: "Pause before execution" }, /* @__PURE__ */ import_react15.default.createElement(CircleDot, { className: "debug-before-marker", "aria-hidden": "true" })) : null, hasAfterBreakpoint ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "After breakpoint", title: "Pause after execution" }, /* @__PURE__ */ import_react15.default.createElement(CircleDot, { className: "debug-after-marker", "aria-hidden": "true" })) : null, runtime?.debugOverride ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "Debug override applied", title: "Debug override applied" }, /* @__PURE__ */ import_react15.default.createElement(Bug, { className: "debug-override-marker", "aria-hidden": "true" })) : null), /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-id" }, id2), title && title !== id2 ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-title" }, title) : null, status !== "pending" ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-status" }, status === "no-final-status" ? "No final status" : status, error ? `: ${error}` : "") : null, !isTerminal ? /* @__PURE__ */ import_react15.default.createElement(Handle$1, { type: "source", position: Position.Bottom }) : null));
+    return /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement(NodeToolbar, { isVisible: selected, position: Position.Left, align: "center", offset: 12 }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "node-locator focused", role: "status", "aria-label": focusedLabel, title: focusedLabel }, /* @__PURE__ */ import_react15.default.createElement("span", null, "Focused"), /* @__PURE__ */ import_react15.default.createElement("code", { title: id2 }, locatorText), /* @__PURE__ */ import_react15.default.createElement(ArrowRight, { "aria-hidden": "true" }))), /* @__PURE__ */ import_react15.default.createElement(NodeToolbar, { isVisible: isCurrent, position: Position.Right, align: "center", offset: 12 }, /* @__PURE__ */ import_react15.default.createElement("div", { className: `node-locator ${executionPosition.terminal ? "last-reached" : "current"}`, role: "status", "aria-label": executionAriaLabel, title: executionAriaLabel }, /* @__PURE__ */ import_react15.default.createElement(ArrowLeft, { "aria-hidden": "true" }), /* @__PURE__ */ import_react15.default.createElement("span", null, executionLabel), /* @__PURE__ */ import_react15.default.createElement("code", { title: id2 }, locatorText))), /* @__PURE__ */ import_react15.default.createElement(
+      "div",
+      {
+        "aria-current": isCurrent && !executionPosition.terminal ? "step" : void 0,
+        className: `step-node kind-${kind} status-${status}${selected ? " selected" : ""}${isCurrent ? executionPosition.terminal ? " execution-last" : " execution-current" : ""}${isCurrent && executionPosition.progressing ? " execution-progress" : ""}`
+      },
+      /* @__PURE__ */ import_react15.default.createElement(Handle$1, { type: "target", position: Position.Top }),
+      /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-heading" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "kind-mark", "aria-hidden": "true" }, kind.slice(0, 2).toUpperCase()), /* @__PURE__ */ import_react15.default.createElement("span", null, kindLabels2[kind] ?? kind)),
+      /* @__PURE__ */ import_react15.default.createElement("div", { className: "debug-node-markers" }, hasBeforeBreakpoint ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "Before breakpoint", title: "Pause before execution" }, /* @__PURE__ */ import_react15.default.createElement(CircleDot, { className: "debug-before-marker", "aria-hidden": "true" })) : null, hasAfterBreakpoint ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "After breakpoint", title: "Pause after execution" }, /* @__PURE__ */ import_react15.default.createElement(CircleDot, { className: "debug-after-marker", "aria-hidden": "true" })) : null, runtime?.debugOverride ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "Debug override applied", title: "Debug override applied" }, /* @__PURE__ */ import_react15.default.createElement(Bug, { className: "debug-override-marker", "aria-hidden": "true" })) : null),
+      /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-id" }, id2),
+      title && title !== id2 ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-title" }, title) : null,
+      status !== "pending" ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-status" }, status === "no-final-status" ? "No final status" : status, error ? `: ${error}` : "") : null,
+      !isTerminal ? /* @__PURE__ */ import_react15.default.createElement(Handle$1, { type: "source", position: Position.Bottom }) : null
+    ));
   }
   function FrameNode({ data }) {
     const segmentStatus = typeof data.segment_status === "string" ? data.segment_status : "";
@@ -38820,6 +38892,8 @@
       return () => window.removeEventListener("error", report);
     }, [testMode]);
     const [viewPreference, setViewPreference] = (0, import_react15.useState)(() => decodeWorkflowPreference(recordValue(vscode.getState?.())?.workflowView));
+    const effectiveWorkflowMode = executionViewMode(viewPreference.workflowMode, runStatus);
+    const executionLayoutLocked = executionViewMode("workflow", runStatus) === "all";
     const [expandedTechnicalIDs, setExpandedTechnicalIDs] = (0, import_react15.useState)(/* @__PURE__ */ new Set());
     const [issueSelection, setIssueSelection] = (0, import_react15.useState)();
     const [issueNotice, setIssueNotice] = (0, import_react15.useState)(false);
@@ -38854,10 +38928,25 @@
       () => currentActivities(document2, observedRuntimeNodes, runStatus, runID, pending2),
       [document2, observedRuntimeNodes, runStatus, runID, pending2]
     );
+    const previousExecutionRef = (0, import_react15.useRef)();
+    const executionScope = sessionID ?? document2.runbook.path ?? document2.hash ?? document2;
+    const currentNodeID = currentExecutionNode(
+      activities,
+      runStatus,
+      new Set(document2.nodes.filter((node) => node.data.synthetic !== true).map((node) => node.id)),
+      graphExecutionNodeID(document2, executionNodeID),
+      previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : void 0,
+      pending2?.nodeID ?? pending2?.stepID
+    );
+    (0, import_react15.useLayoutEffect)(() => {
+      previousExecutionRef.current = { scope: executionScope, nodeID: currentNodeID };
+    }, [executionScope, currentNodeID]);
     const progressCounts = (0, import_react15.useMemo)(() => canonicalProgress(document2, observedRuntimeNodes, runStatus), [document2, observedRuntimeNodes, runStatus]);
     const [closeStatus, setCloseStatus] = (0, import_react15.useState)("resolved");
     const [inspectionRevision, setInspectionRevision] = (0, import_react15.useState)();
     const flowRef = (0, import_react15.useRef)();
+    const [flowReady, setFlowReady] = (0, import_react15.useState)(false);
+    const stopExecutionPanRef = (0, import_react15.useRef)();
     const canvasRef = (0, import_react15.useRef)(null);
     const workspaceRef = (0, import_react15.useRef)(null);
     const resizePointerIDRef = (0, import_react15.useRef)();
@@ -38884,21 +38973,22 @@
     const pinnedNodeIDs = (0, import_react15.useMemo)(() => /* @__PURE__ */ new Set([
       ...selectedId ? [selectedId] : [],
       ...locateNodeID ? [locateNodeID] : [],
+      ...currentNodeID ? [currentNodeID] : [],
       ...activities.filter((value) => value.inGraph).map((value) => value.nodeID),
       ...pending2?.nodeID ? [pending2.nodeID] : [],
       ...breakpoints.map((value) => value.nodeID)
-    ]), [selectedId, locateNodeID, pending2?.nodeID, breakpoints, activities]);
+    ]), [selectedId, locateNodeID, currentNodeID, pending2?.nodeID, breakpoints, activities]);
     const issueContextDocument = (0, import_react15.useMemo)(() => {
       const structuralIDs = new Set(structuralDocument.nodes.map((node) => node.id));
       const canonicalIDs = new Set(document2.nodes.map((node) => node.id));
       return issues.some((issue) => !structuralIDs.has(issue.nodeID) && canonicalIDs.has(issue.nodeID)) ? document2 : structuralDocument;
     }, [document2, structuralDocument, issues]);
     const workflow = (0, import_react15.useMemo)(() => projectWorkflow(issueContextDocument, runtimeNodes, {
-      mode: routeProjection ? "all" : viewPreference.workflowMode,
+      mode: routeProjection ? "all" : effectiveWorkflowMode,
       expandedNodeIDs: expandedTechnicalIDs,
       pinnedNodeIDs,
       collapsedGroupIDs: /* @__PURE__ */ new Set()
-    }, routeDisplayDocument), [issueContextDocument, runtimeNodes, viewPreference.workflowMode, expandedTechnicalIDs, pinnedNodeIDs, routeDisplayDocument, routeProjection]);
+    }, routeDisplayDocument), [issueContextDocument, runtimeNodes, effectiveWorkflowMode, expandedTechnicalIDs, pinnedNodeIDs, routeDisplayDocument, routeProjection]);
     const displayDocument = workflow.document;
     (0, import_react15.useEffect)(() => {
       if (!routeTargetID) return;
@@ -38939,18 +39029,17 @@
       } } : {},
       selected: node.id === focusedNodeID
     })), [focusedNodeID, layout.nodes, workflow, runtimeNodes]);
-    const [renderNodes, setRenderNodes] = (0, import_react15.useState)(displayNodes);
-    (0, import_react15.useEffect)(() => {
-      setRenderNodes((current) => preserveLayoutMeasurements(displayNodes, current));
-    }, [displayNodes]);
+    const [measuredNodes, setMeasuredNodes] = (0, import_react15.useState)([]);
+    const renderNodes = (0, import_react15.useMemo)(() => preserveLayoutMeasurements(displayNodes, measuredNodes), [displayNodes, measuredNodes]);
     const activeNodeIDs = (0, import_react15.useMemo)(() => activeGraphNodeIDs(structuralDocument, runtimeNodes), [structuralDocument, runtimeNodes]);
-    const currentNodeID = isExecutionEnded(runStatus) ? executionNodeID : activities[0]?.nodeID;
     const executionNode = currentNodeID ? document2.nodes.find((node) => node.id === currentNodeID) : void 0;
     const resolvedExecutionNodeID = executionNode?.id;
     const executionTerminal = isExecutionEnded(runStatus);
+    const executionStatus = executionTerminal ? void 0 : ["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) || pending2?.kind === "debug_break" ? "paused" : pending2 ? "waiting" : void 0;
+    const executionProgressing = !executionTerminal && !pending2 && !["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) && activities.some((activity) => activity.nodeID === resolvedExecutionNodeID && activity.status === "running");
     const executionPosition = (0, import_react15.useMemo)(
-      () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal }),
-      [executionTerminal, resolvedExecutionNodeID]
+      () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal, progressing: executionProgressing, status: executionStatus }),
+      [executionTerminal, resolvedExecutionNodeID, executionProgressing, executionStatus]
     );
     const breakpointKeys = (0, import_react15.useMemo)(
       () => new Set(breakpoints.map((breakpoint) => breakpointKey(breakpoint.nodeID, breakpoint.phase))),
@@ -39006,6 +39095,7 @@
       }
     };
     const showRoutesThrough = (nodeID) => {
+      stopExecutionPanRef.current?.();
       if (!routeTargetID) restoreViewportRef.current = flowRef.current?.getViewport();
       setRouteScope("through");
       setRouteTargetID(nodeID);
@@ -39021,6 +39111,7 @@
       setRouteTestEditor(void 0);
     };
     const locateExecutionNode = (activity) => {
+      stopExecutionPanRef.current?.();
       setActivityLocationNotice(void 0);
       if (!activity.inGraph) {
         if (sessionID && activity.segmentID && activity.graphRevision !== void 0) {
@@ -39141,10 +39232,43 @@
     }, [selected?.id, testMode]);
     (0, import_react15.useEffect)(() => {
       if (!testMode) return;
+      let frame2 = 0;
+      const receive = (event) => {
+        if (event.data?.type !== "test.action" || event.data.action !== "sample-execution-transition") return;
+        cancelAnimationFrame(frame2);
+        const samples = [];
+        const sample = () => {
+          const canvas = canvasRef.current;
+          const nodes = Array.from(canvas?.querySelectorAll(".react-flow__node-yawrStep") ?? []);
+          samples.push({
+            currentIDs: nodes.filter((node) => node.querySelector(".execution-current")).map((node) => node.dataset.id),
+            selectedIDs: nodes.filter((node) => node.querySelector(".selected")).map((node) => node.dataset.id),
+            progressing: nodes.filter((node) => node.querySelector(".execution-progress")).map((node) => node.dataset.id),
+            reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+            topLogCount: window.document.querySelectorAll("main > .current-activity, .execution-position-strip").length,
+            canvas: canvas?.getBoundingClientRect().toJSON(),
+            viewport: flowRef.current?.getViewport(),
+            positions: flowRef.current?.getNodes().map((node) => ({ id: node.id, position: node.position, width: node.width, height: node.height }))
+          });
+          if (samples.length < 30) frame2 = requestAnimationFrame(sample);
+          else vscode.postMessage({ type: "execution.transition-samples", samples });
+        };
+        frame2 = requestAnimationFrame(sample);
+        vscode.postMessage({ type: "execution.transition-sampling" });
+      };
+      window.addEventListener("message", receive);
+      return () => {
+        window.removeEventListener("message", receive);
+        cancelAnimationFrame(frame2);
+      };
+    }, [testMode]);
+    (0, import_react15.useEffect)(() => {
+      if (!testMode) return;
       const receive = (event) => {
         const message = event.data;
         if (message?.type !== "test.action") return;
         if (message.action === "set-graph-viewport" && message.value) {
+          stopExecutionPanRef.current?.();
           void flowRef.current?.setViewport(JSON.parse(message.value));
         }
         if (message.action !== "inspect-graph-visibility") return;
@@ -39184,10 +39308,13 @@
           })),
           edgePaths: window.document.querySelectorAll(".react-flow__edge-path").length,
           edgeClasses: Array.from(window.document.querySelectorAll(".react-flow__edge")).map((edge) => edge.getAttribute("class")),
-          mode: viewPreference.workflowMode,
+          mode: effectiveWorkflowMode,
           selectedID: selectedId,
           routeTargetID,
           runtimeStatuses: Object.fromEntries(Object.entries(runtimeNodes).map(([id2, value]) => [id2, value.status])),
+          currentNodeID: resolvedExecutionNodeID,
+          currentMarkerCount: window.document.querySelectorAll(".step-node.execution-current").length,
+          topExecutionLogCount: window.document.querySelectorAll("main > .current-activity, .execution-position-strip").length,
           activity: {
             text: window.document.querySelector(".current-activity")?.textContent,
             items: activities.map(({ nodeID, path, title, label, container, inGraph, occurrenceID }) => ({ nodeID, path, title, label, container, inGraph, occurrenceID })),
@@ -39208,7 +39335,7 @@
       testMode,
       document2,
       displayDocument,
-      viewPreference.workflowMode,
+      effectiveWorkflowMode,
       selectedId,
       routeTargetID,
       issues,
@@ -39218,8 +39345,40 @@
       layoutTopologyKey,
       runtimeNodes,
       activities,
-      progressCounts
+      progressCounts,
+      resolvedExecutionNodeID
     ]);
+    (0, import_react15.useEffect)(() => {
+      if (!flowReady || !resolvedExecutionNodeID || executionTerminal || routeTargetID) return;
+      let frame2 = 0;
+      let attempts = 0;
+      const reveal = () => {
+        frame2 = requestAnimationFrame(() => {
+          const flow = flowRef.current;
+          const canvas = canvasRef.current;
+          const target = Array.from(canvas?.querySelectorAll(".react-flow__node") ?? []).find((element) => element.dataset.id === resolvedExecutionNodeID);
+          if (!flow || !canvas || !target || !flow.getNode(resolvedExecutionNodeID)?.width) {
+            if (++attempts < 4) reveal();
+            return;
+          }
+          const viewport = executionViewport(flow.getViewport(), canvas.getBoundingClientRect(), target.getBoundingClientRect());
+          if (viewport) stopExecutionPanRef.current = animateExecutionViewport(
+            flow.getViewport(),
+            viewport,
+            (value) => {
+              void flow.setViewport(value, { duration: 0 });
+            },
+            { now: () => performance.now(), requestFrame: requestAnimationFrame, cancelFrame: cancelAnimationFrame },
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          );
+        });
+      };
+      reveal();
+      return () => {
+        cancelAnimationFrame(frame2);
+        stopExecutionPanRef.current?.();
+      };
+    }, [flowReady, resolvedExecutionNodeID, executionTerminal, routeTargetID, layoutTopologyKey]);
     (0, import_react15.useEffect)(() => {
       if (!flowRef.current) return;
       const frame2 = requestAnimationFrame(() => {
@@ -39322,7 +39481,9 @@
       {
         type: "button",
         key: mode,
-        "aria-pressed": viewPreference.workflowMode === mode,
+        "aria-pressed": effectiveWorkflowMode === mode,
+        disabled: executionLayoutLocked,
+        title: executionLayoutLocked ? "All steps stay expanded for execution and result review. Reset restores your saved view." : void 0,
         onClick: () => changePreference({ workflowMode: mode })
       },
       mode === "workflow" ? "Workflow" : "All steps"
@@ -39404,16 +39565,7 @@
       ": ",
       issue.qualifiedNodeID || issue.nodeID,
       issue.occurrenceID ? ` \xB7 occurrence ${index + 1}` : ""
-    )), issueSelection && !selected ? /* @__PURE__ */ import_react15.default.createElement("span", { role: "status" }, "Historical graph unavailable \u2014 occurrence remains in the issue index.") : null) : null, /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-summary", role: "status" }, progressCounts.total, " canonical steps \xB7 ", progressCounts.completed, " done \xB7 ", progressCounts.issues, " issues \xB7 ", progressCounts.skipped, " skipped \xB7 ", progressCounts.running, " running \xB7 ", progressCounts.remaining, " ", executionTerminal ? "without final status" : "remaining", " \xB7 ", workflow.segments.size, " visual technical groups \xB7 hidden is not skipped"), /* @__PURE__ */ import_react15.default.createElement(
-      CurrentActivity,
-      {
-        activities,
-        runStatus,
-        remaining: progressCounts.remaining,
-        onLocate: locateExecutionNode,
-        locationNotice: activityLocationNotice
-      }
-    ), routeTargetID && routeProjection ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-view-strip", "aria-label": `Routes through ${routeTargetName}` }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-copy" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "Showing routes through: ", routeTargetName), /* @__PURE__ */ import_react15.default.createElement("span", null, routeProjection.predecessorCount, " steps lead to it, ", routeProjection.successorCount, " follow it, ", routeProjection.boundaryEdges.length, " hidden dependencies")), /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-scope", role: "radiogroup", "aria-label": "Visible routes" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "through", onClick: () => setRouteScope("through") }, "Through this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "to", onClick: () => setRouteScope("to") }, "To this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "from", onClick: () => setRouteScope("from") }, "From this step")), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: showFullGraph }, "Show full graph"))) : null, currentRouteTestEditor ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-test-global-safety", role: "status" }, routeTestOutcome?.passed ? "Route test completed - external actions were blocked" : routeTestRunning ? "Testing route - XTS and external actions are blocked" : "Reviewing route test - protected execution starts only when you run this route test") : null, /* @__PURE__ */ import_react15.default.createElement(
+    )), issueSelection && !selected ? /* @__PURE__ */ import_react15.default.createElement("span", { role: "status" }, "Historical graph unavailable \u2014 occurrence remains in the issue index.") : null) : null, /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-summary", role: "status" }, progressCounts.total, " canonical steps \xB7 ", progressCounts.completed, " done \xB7 ", progressCounts.issues, " issues \xB7 ", progressCounts.skipped, " skipped \xB7 ", progressCounts.running, " running \xB7 ", progressCounts.remaining, " ", executionTerminal ? "without final status" : "remaining", " \xB7 ", workflow.segments.size, " visual technical groups \xB7 hidden is not skipped"), routeTargetID && routeProjection ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-view-strip", "aria-label": `Routes through ${routeTargetName}` }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-copy" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "Showing routes through: ", routeTargetName), /* @__PURE__ */ import_react15.default.createElement("span", null, routeProjection.predecessorCount, " steps lead to it, ", routeProjection.successorCount, " follow it, ", routeProjection.boundaryEdges.length, " hidden dependencies")), /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-scope", role: "radiogroup", "aria-label": "Visible routes" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "through", onClick: () => setRouteScope("through") }, "Through this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "to", onClick: () => setRouteScope("to") }, "To this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "from", onClick: () => setRouteScope("from") }, "From this step")), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: showFullGraph }, "Show full graph"))) : null, currentRouteTestEditor ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-test-global-safety", role: "status" }, routeTestOutcome?.passed ? "Route test completed - external actions were blocked" : routeTestRunning ? "Testing route - XTS and external actions are blocked" : "Reviewing route test - protected execution starts only when you run this route test") : null, /* @__PURE__ */ import_react15.default.createElement(
       "div",
       {
         ref: workspaceRef,
@@ -39426,7 +39578,7 @@
           nodes: renderNodes,
           onNodesChange: (changes) => {
             const measurements = changes.filter((change) => change.type === "dimensions");
-            if (measurements.length) setRenderNodes((current) => applyNodeChanges(measurements, current));
+            if (measurements.length) setMeasuredNodes((current) => applyNodeChanges(measurements, preserveLayoutMeasurements(displayNodes, current)));
           },
           edges: runtimeEdges,
           nodeTypes,
@@ -39437,6 +39589,10 @@
           nodesDraggable: false,
           onInit: (instance) => {
             flowRef.current = instance;
+            setFlowReady(true);
+          },
+          onMoveStart: (event) => {
+            if (event) stopExecutionPanRef.current?.();
           },
           onNodeClick: (_, node) => {
             if (node.data.synthetic !== true) {
@@ -39494,7 +39650,16 @@
           }
         }
       ) : null,
-      /* @__PURE__ */ import_react15.default.createElement("aside", { id: "step-details-panel", className: "inspector", "aria-label": "Step details" }, pending2 ? /* @__PURE__ */ import_react15.default.createElement(
+      /* @__PURE__ */ import_react15.default.createElement("aside", { id: "step-details-panel", className: "inspector", "aria-label": "Step details" }, /* @__PURE__ */ import_react15.default.createElement(
+        CurrentActivity,
+        {
+          activities,
+          runStatus,
+          remaining: progressCounts.remaining,
+          onLocate: locateExecutionNode,
+          locationNotice: activityLocationNotice
+        }
+      ), pending2 ? /* @__PURE__ */ import_react15.default.createElement(
         InteractionPane,
         {
           key: `${pending2.turnID}:${runError ?? ""}`,

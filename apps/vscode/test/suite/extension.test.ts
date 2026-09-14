@@ -1026,6 +1026,125 @@ suite('Yawr extension smoke tests', () => {
     }
   });
 
+  test('execution transitions keep one current marker, fixed geometry and bounded offscreen pans', async function () {
+    this.timeout(45_000);
+    const ext = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(ext);
+    await ext.activate();
+    const workspace = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspace);
+    const uri = vscode.Uri.joinPath(workspace.uri, ...testStatePath, 'execution-transitions.runbook.yaml');
+    const fixtureUri = vscode.Uri.joinPath(workspace.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
+    const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
+    const template = fixture.nodes[0];
+    fixture.inputs = []; fixture.groups = []; fixture.frames = [];
+    fixture.nodes = Array.from({ length: 10 }, (_, index) => ({
+      ...template, id: `step-${index}`, type: 'step',
+      data: { ...template.data, id: `step-${index}`, step_id: `step-${index}`,
+        kind: 'assign', title: `Transition ${index}`, group_id: '', frame_id: '', order: index },
+    }));
+    fixture.edges = fixture.nodes.slice(1).map((node: { id: string }, index: number) => ({
+      id: `edge-${index}`, source: `step-${index}`, target: node.id, type: 'sequence',
+    }));
+    await vscode.workspace.fs.writeFile(uri, Buffer.from('apiVersion: yawr.runbook/v1\nid: execution-transitions\nsteps: []\n'));
+    const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.test.openDirectGraphPanel',
+      uri.fsPath, { documentLoader: async () => fixture });
+    assert.ok(panel);
+    type Viewport = { x: number; y: number; zoom: number };
+    type Visibility = {
+      currentNodeID?: string; currentMarkerCount: number; topExecutionLogCount: number; selectedID?: string;
+      viewport: Viewport; canvas: { width: number; height: number };
+      positions: Array<{ id: string; position: { x: number; y: number }; width: number; height: number }>;
+      nodes: Array<{ id: string; intersects: boolean }>;
+    };
+    type Sample = {
+      currentIDs: string[]; selectedIDs: string[]; progressing: string[]; topLogCount: number; reducedMotion: boolean;
+      viewport: Viewport; canvas: object; positions: Visibility['positions'];
+    };
+    const message = <T,>(type: string): Promise<T> => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { subscription.dispose(); reject(new Error(`Missing ${type}`)); }, 10_000);
+      const subscription = panel.webview.onDidReceiveMessage(value => {
+        if (value.type !== type) return;
+        clearTimeout(timer); subscription.dispose(); resolve(value as T);
+      });
+    });
+    const inspect = async () => {
+      const result = message<Visibility>('graph.visibility');
+      await panel.webview.postMessage({ type: 'test.action', action: 'inspect-graph-visibility' });
+      return result;
+    };
+    const settle = async (predicate: (value: Visibility) => boolean) => {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const value = await inspect();
+        if (predicate(value)) return value;
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      throw new Error('Execution view did not settle');
+    };
+    let sequence = 0;
+    const step = (id: string, kind: string) => panel.webview.postMessage({ type: 'run.frame', frame: {
+      type: 'run.event', event: { run_id: 'transition-run', kind: `step/${kind}`, sequence: ++sequence,
+        payload: { qualified_node_id: id, invocation: 1 } },
+    } });
+    const trace = async (transition: () => Promise<unknown>) => {
+      const ready = message('execution.transition-sampling');
+      const result = message<{ samples: Sample[] }>('execution.transition-samples');
+      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition' });
+      await ready;
+      await transition();
+      return (await result).samples;
+    };
+    try {
+      await message('ui.state');
+      await panel.webview.postMessage({ type: 'run.starting' });
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+      await step('step-0', 'started');
+      const started = await settle(value => value.currentNodeID === 'step-0' && value.currentMarkerCount === 1 &&
+        !!value.positions?.find(node => node.id === 'step-0' && node.width > 0));
+      const first = started.positions.find(node => node.id === 'step-0')!;
+      const viewport = { x: started.canvas.width / 2 - first.position.x - first.width / 2,
+        y: 60 - first.position.y, zoom: 1 };
+      await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport', value: JSON.stringify(viewport) });
+      await panel.webview.postMessage({ type: 'test.action', action: 'select-node', name: 'step-0' });
+      await settle(value => value.selectedID === 'step-0' && Math.abs(value.viewport.y - viewport.y) < 0.1);
+      const stable = await trace(async () => {});
+      assert.ok(stable.every(value => value.currentIDs.join() === 'step-0' && value.progressing.join() === 'step-0'));
+      const baseline = stable.at(-1)!;
+      console.log(`Execution transition sampling: reducedMotion=${baseline.reducedMotion}, 30 frames per transition`);
+      const routine = await trace(async () => {
+        await step('step-0', 'completed');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await step('step-1', 'started');
+      });
+      assert.ok(routine.every(value => value.currentIDs.length === 1), 'no frame may transiently lose its current marker');
+      assert.ok(routine.some(value => value.currentIDs[0] === 'step-1'));
+      for (const value of [...stable, ...routine]) {
+        assert.equal(value.topLogCount, 0);
+        assert.deepStrictEqual(value.selectedIDs, ['step-0']);
+        assert.deepStrictEqual(value.canvas, baseline.canvas);
+        assert.deepStrictEqual(value.positions, baseline.positions);
+        assert.deepStrictEqual(value.viewport, baseline.viewport, 'visible advances must not pan or zoom');
+      }
+      const distant = await trace(async () => {
+        await step('step-1', 'completed');
+        await step('step-9', 'started');
+      });
+      assert.ok(distant.every(value => value.currentIDs.length === 1 && value.viewport.zoom === 1));
+      assert.ok(new Set(distant.map(value => Math.round(value.viewport.y))).size > (baseline.reducedMotion ? 1 : 2),
+        `offscreen pan must ${baseline.reducedMotion ? 'reveal the target' : 'have intermediate frames'}: ${
+          JSON.stringify(distant.map(value => ({ ids: value.currentIDs, y: value.viewport.y })))}`);
+      const end = await settle(value => value.currentNodeID === 'step-9' && value.nodes.some(node => node.id === 'step-9' && node.intersects));
+      assert.equal(end.selectedID, 'step-0');
+      assert.equal(end.topExecutionLogCount, 0);
+      await step('step-9', 'completed');
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'completed' } });
+      await settle(value => value.currentMarkerCount === 0);
+    } finally {
+      panel.dispose();
+      await vscode.workspace.fs.delete(uri, { useTrash: false });
+    }
+  });
+
   test('direct XTS handoff waits for Open XTS and collector review submits once', async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);

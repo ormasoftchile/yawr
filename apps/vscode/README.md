@@ -30,6 +30,38 @@ The inspector becomes a scrollable bottom drawer on narrow editor groups. Declar
 runtime secret values are never added to graph details; sensitive authored keys
 and credential-like flags, assignments, and authorization values are redacted.
 
+## Execution navigation
+
+One green **Current** marker tracks execution independently of the yellow user
+selection. It remains on the last reached step between runtime events, without
+changing that step's completed/failed status, and becomes **Last reached** when
+the run ends. Concurrent lanes retain their individual statuses; a new lane does
+not steal the current marker from an active leaf. Input requests take priority.
+A restrained, non-resizing glow indicates work in progress and respects reduced
+motion preferences.
+
+Execution temporarily shows all technical steps, including after completion,
+so status updates cannot repeatedly collapse/expand groups and move the graph.
+Reset restores the saved workflow-view preference. Routine advances preserve
+selection and zoom; an offscreen current node receives only the minimum smooth
+pan needed to reveal it. Explicit Locate, route-view and Fit controls still work.
+
+There is no execution-log strip above the graph. **Execution activity** in the
+inspector retains runtime paths, concurrent lanes, timing and Locate controls.
+Per-step Run tabs retain output, errors, evidence and occurrence history; run
+diagnostics remain in the overview and **Yawr: Show Run Log**. A runtime child
+absent from the loaded graph remains identified by its exact path in activity
+details, never by a fabricated child node.
+
+YAWR tests cover cursor boundaries, parallel lanes, aliases, waiting/paused and
+terminal rendering, fixed technical topology, animation timing/cancellation, and
+frame-sampled VS Code webview transitions. Installed-editor review still needs
+to check perceived animation quality across themes/styles, manual pan/zoom or
+editor-group resizing during an advance, and hidden-tab reactivation during
+dynamic session graph loading. A missing runtime child graph cannot be visually
+qualified as an exact child node; its available container and activity path are
+the honest navigation surfaces.
+
 ## Host-action protocol
 
 The bundled webview may request the `xts.open-view` host capability, which requires

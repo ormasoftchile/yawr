@@ -589,66 +589,6 @@ textarea {
   font-size: 11px;
   white-space: pre-wrap;
 }
-.execution-position-strip {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--vscode-panel-border);
-  border-left: 4px solid var(--position-color);
-  background: color-mix(in srgb, var(--position-color) 9%, var(--vscode-editor-background));
-}
-.execution-position-strip.current {
-  --position-color: var(--vscode-charts-green);
-}
-.execution-position-strip.last-reached {
-  --position-color: var(--vscode-charts-blue);
-}
-.execution-position-strip > div {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.execution-position-strip span {
-  flex: none;
-  color: var(--vscode-descriptionForeground);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.execution-position-strip strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-}
-.execution-position-strip code {
-  flex: none;
-  color: var(--vscode-descriptionForeground);
-  font-size: 10px;
-}
-.execution-position-strip button {
-  min-height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 3px;
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-}
-.execution-position-strip button:hover {
-  background: var(--vscode-button-hoverBackground);
-}
-.execution-position-strip button svg {
-  width: 14px;
-  height: 14px;
-}
 .route-view-strip {
   min-height: 48px;
   display: grid;
@@ -2013,6 +1953,12 @@ textarea {
 .step-node.status-indeterminate {
   border-color: var(--vscode-charts-red);
 }
+.step-node.status-blocked,
+.step-node.status-waiting,
+.step-node.status-paused,
+.step-node.status-delaying {
+  border-color: var(--vscode-charts-yellow);
+}
 .step-node.status-skipped {
   opacity: 0.55;
 }
@@ -2094,6 +2040,23 @@ textarea {
   height: auto;
   color: inherit;
   background: transparent;
+}
+.step-node.execution-progress {
+  animation: execution-progress 2.4s ease-in-out infinite;
+}
+@keyframes execution-progress {
+  0%, 100% {
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--vscode-charts-green) 12%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--vscode-charts-green) 32%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-node.execution-progress {
+    animation: none;
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--vscode-charts-green) 22%, transparent);
+  }
 }
 .react-flow__node {
   border: 0;
@@ -2418,17 +2381,23 @@ textarea {
   color: var(--vscode-textLink-foreground);
 }
 .current-activity {
-  --position-color: var(--vscode-charts-green);
   flex-shrink: 0;
-  max-height: 220px;
-  overflow: auto;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 11px;
 }
-.current-activity > div {
+.current-activity summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.current-activity section > div {
+  display: flex;
   width: 100%;
   min-width: 0;
   flex-direction: column;
   align-items: stretch;
   gap: 3px;
+  padding-top: 8px;
 }
 .current-activity strong {
   white-space: normal;
@@ -2452,4 +2421,14 @@ textarea {
 }
 .current-activity small {
   color: var(--vscode-descriptionForeground);
+}
+.current-activity button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.current-activity button svg {
+  width: 14px;
+  height: 14px;
 }

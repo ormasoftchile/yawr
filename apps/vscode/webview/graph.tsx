@@ -1,6 +1,6 @@
 import dagre from '@dagrejs/dagre';
 import { ArrowLeft, ArrowRight, Bug, CheckCircle2, CircleDot, LocateFixed, PanelRight, Play, RotateCcw, Square, Workflow } from 'lucide-react';
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ReactFlow, {
   applyNodeChanges,
@@ -27,8 +27,9 @@ import { applyDirectRetainedDocument, applyDirectDisplaySummary, reconcileDirect
 import { decodeDisplayWithdrawals } from '../src/displayObservationStorage';
 import { projectWorkflow, workflowIssueIndex, type WorkflowIssue, type WorkflowMode } from '../src/workflowProjection';
 import { preserveLayoutMeasurements } from '../src/graphLayoutMeasurements';
-import { canonicalProgress, currentActivities, compareOccurrences, directOccurrenceID, validProgressIdentity, producerStepKind, displayRuntimeStatuses, isExecutionEnded, normalizeRuntimeStatuses, type CurrentActivity } from '../src/executionProgress';
-import { CurrentActivity as CurrentActivityStrip } from './CurrentActivity';
+import { canonicalProgress, currentActivities, graphExecutionNodeID, compareOccurrences, directOccurrenceID, validProgressIdentity, producerStepKind, displayRuntimeStatuses, isExecutionEnded, normalizeRuntimeStatuses, type CurrentActivity } from '../src/executionProgress';
+import { CurrentActivity as ActivityDetails } from './CurrentActivity';
+import { currentExecutionNode, executionViewMode, executionViewport, animateExecutionViewport } from '../src/executionView';
 import { decodeWorkflowPreference, mergeWorkflowPreference } from '../src/workflowView';
 import type { ResultsAvailability } from '../src/typedResultsTypes';
 import { ResultsViewer } from './ResultsViewer';
@@ -109,7 +110,7 @@ type HostMessage =
   | { type: 'route-test.error'; message: string }
   | {
       type: 'test.action';
-      action: 'inspect-graph-visibility' | 'inspect-results' | 'set-graph-viewport' | 'set-input' | 'run' | 'debug' | 'reset' | 'cancel' | 'answer' | 'toggle-breakpoint' | 'select-node' | 'inspect-expressions' | 'run-route-test' | 'save-route-test' | 'save-route-test-result' | 'click-button' | 'click-route-test-checkbox' | 'toggle-choice' | 'set-collector-field';
+      action: 'sample-execution-transition' | 'inspect-graph-visibility' | 'inspect-results' | 'set-graph-viewport' | 'set-input' | 'run' | 'debug' | 'reset' | 'cancel' | 'answer' | 'toggle-breakpoint' | 'select-node' | 'inspect-expressions' | 'run-route-test' | 'save-route-test' | 'save-route-test-result' | 'click-button' | 'click-route-test-checkbox' | 'toggle-choice' | 'set-collector-field';
       name?: string;
       value?: string;
       answer?: Record<string, unknown>;
@@ -313,7 +314,10 @@ const kindLabels: Record<string, string> = {
 
 const RuntimeNodesContext = createContext<Readonly<Record<string, RuntimeNodeState>>>({});
 const DebugBreakpointsContext = createContext<ReadonlySet<string>>(new Set());
-const ExecutionPositionContext = createContext<{ nodeID?: string; terminal: boolean }>({ terminal: false });
+interface ExecutionPosition {
+  nodeID?: string; terminal: boolean; progressing?: boolean; status?: 'waiting' | 'paused';
+}
+const ExecutionPositionContext = createContext<ExecutionPosition>({ terminal: false });
 
 function breakpointKey(nodeID: string, phase: DirectDebugPhase): string {
   return `${nodeID}:${phase}`;
@@ -328,13 +332,15 @@ function StepNode({ data, selected }: NodeProps<GraphNodeData>) {
   const title = typeof data.title === 'string' ? data.title : '';
   const isTerminal = kind === 'end';
   const runtime = runtimeNodes[id];
-  const observedStatus = runtime?.status ?? (typeof data.status === 'string' ? data.status : 'pending');
+  const isCurrent = executionPosition.nodeID === id;
+  const observedStatus = isCurrent && executionPosition.status ? executionPosition.status
+    : runtime?.output?.outcome_category === 'blocked' ? 'blocked'
+    : runtime?.status ?? (typeof data.status === 'string' ? data.status : 'pending');
   const status = executionPosition.terminal && ['running', 'delaying', 'waiting'].includes(observedStatus)
     ? 'no-final-status' : observedStatus;
   const error = runtime?.error ?? (typeof data.error === 'string' ? data.error : '');
   const hasBeforeBreakpoint = debugBreakpoints.has(breakpointKey(id, 'before'));
   const hasAfterBreakpoint = debugBreakpoints.has(breakpointKey(id, 'after'));
-  const isCurrent = executionPosition.nodeID === id;
   const locatorText = title || id;
   const focusedLabel = `Focused step: ${locatorText}`;
   const currentLabel = `Current step: ${locatorText}`;
@@ -357,7 +363,8 @@ function StepNode({ data, selected }: NodeProps<GraphNodeData>) {
           <code title={id}>{locatorText}</code>
         </div>
       </NodeToolbar>
-      <div className={`step-node kind-${kind} status-${status}${selected ? ' selected' : ''}${isCurrent ? executionPosition.terminal ? ' execution-last' : ' execution-current' : ''}`}>
+      <div aria-current={isCurrent && !executionPosition.terminal ? 'step' : undefined}
+        className={`step-node kind-${kind} status-${status}${selected ? ' selected' : ''}${isCurrent ? executionPosition.terminal ? ' execution-last' : ' execution-current' : ''}${isCurrent && executionPosition.progressing ? ' execution-progress' : ''}`}>
         <Handle type="target" position={Position.Top} />
         <div className="step-heading">
           <span className="kind-mark" aria-hidden="true">{kind.slice(0, 2).toUpperCase()}</span>
@@ -1688,6 +1695,8 @@ function GraphView({
   }, [testMode]);
   const [viewPreference, setViewPreference] = useState(() =>
     decodeWorkflowPreference(recordValue(vscode.getState?.())?.workflowView));
+  const effectiveWorkflowMode = executionViewMode(viewPreference.workflowMode, runStatus);
+  const executionLayoutLocked = executionViewMode('workflow', runStatus) === 'all';
   const [expandedTechnicalIDs, setExpandedTechnicalIDs] = useState<ReadonlySet<string>>(new Set());
   const [issueSelection, setIssueSelection] = useState<WorkflowIssue>();
   const [issueNotice, setIssueNotice] = useState(false);
@@ -1719,10 +1728,22 @@ function GraphView({
   const [activityLocationNotice, setActivityLocationNotice] = useState<string>();
   const activities = useMemo(() => currentActivities(document, observedRuntimeNodes, runStatus, runID, pending),
     [document, observedRuntimeNodes, runStatus, runID, pending]);
+  const previousExecutionRef = useRef<{ scope: string | GraphDocument; nodeID?: string }>();
+  const executionScope = sessionID ?? document.runbook.path ?? document.hash ?? document;
+  const currentNodeID = currentExecutionNode(activities, runStatus,
+    new Set(document.nodes.filter(node => node.data.synthetic !== true).map(node => node.id)),
+    graphExecutionNodeID(document, executionNodeID),
+    previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : undefined,
+    pending?.nodeID ?? pending?.stepID);
+  useLayoutEffect(() => {
+    previousExecutionRef.current = { scope: executionScope, nodeID: currentNodeID };
+  }, [executionScope, currentNodeID]);
   const progressCounts = useMemo(() => canonicalProgress(document, observedRuntimeNodes, runStatus), [document, observedRuntimeNodes, runStatus]);
   const [closeStatus, setCloseStatus] = useState<'resolved' | 'escalated' | 'cancelled' | 'abandoned'>('resolved');
   const [inspectionRevision, setInspectionRevision] = useState<{ nodeID: string; revision: number }>();
   const flowRef = useRef<ReactFlowInstance<GraphNodeData>>();
+  const [flowReady, setFlowReady] = useState(false);
+  const stopExecutionPanRef = useRef<() => void>();
   const canvasRef = useRef<HTMLElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const resizePointerIDRef = useRef<number>();
@@ -1756,9 +1777,10 @@ function GraphView({
   );
   const pinnedNodeIDs = useMemo(() => new Set([
     ...(selectedId ? [selectedId] : []), ...(locateNodeID ? [locateNodeID] : []),
+    ...(currentNodeID ? [currentNodeID] : []),
     ...activities.filter(value => value.inGraph).map(value => value.nodeID),
     ...(pending?.nodeID ? [pending.nodeID] : []), ...breakpoints.map(value => value.nodeID),
-  ]), [selectedId, locateNodeID, pending?.nodeID, breakpoints, activities]);
+  ]), [selectedId, locateNodeID, currentNodeID, pending?.nodeID, breakpoints, activities]);
   const issueContextDocument = useMemo(() => {
     const structuralIDs = new Set(structuralDocument.nodes.map(node => node.id));
     const canonicalIDs = new Set(document.nodes.map(node => node.id));
@@ -1766,10 +1788,10 @@ function GraphView({
       ? document : structuralDocument;
   }, [document, structuralDocument, issues]);
   const workflow = useMemo(() => projectWorkflow(issueContextDocument, runtimeNodes, {
-    mode: routeProjection ? 'all' : viewPreference.workflowMode,
+    mode: routeProjection ? 'all' : effectiveWorkflowMode,
     expandedNodeIDs: expandedTechnicalIDs, pinnedNodeIDs,
     collapsedGroupIDs: new Set(),
-  }, routeDisplayDocument), [issueContextDocument, runtimeNodes, viewPreference.workflowMode, expandedTechnicalIDs, pinnedNodeIDs, routeDisplayDocument, routeProjection]);
+  }, routeDisplayDocument), [issueContextDocument, runtimeNodes, effectiveWorkflowMode, expandedTechnicalIDs, pinnedNodeIDs, routeDisplayDocument, routeProjection]);
   const displayDocument = workflow.document;
   useEffect(() => {
     if (!routeTargetID) return;
@@ -1810,20 +1832,23 @@ function GraphView({
     } } : {}),
     selected: node.id === focusedNodeID,
   })), [focusedNodeID, layout.nodes, workflow, runtimeNodes]);
-  const [renderNodes, setRenderNodes] = useState<Node<GraphNodeData>[]>(displayNodes);
-  useEffect(() => {
-    setRenderNodes(current => preserveLayoutMeasurements(displayNodes, current));
-  }, [displayNodes]);
+  const [measuredNodes, setMeasuredNodes] = useState<Node<GraphNodeData>[]>([]);
+  const renderNodes = useMemo(() => preserveLayoutMeasurements(displayNodes, measuredNodes), [displayNodes, measuredNodes]);
   const activeNodeIDs = useMemo(() => activeGraphNodeIDs(structuralDocument, runtimeNodes), [structuralDocument, runtimeNodes]);
-  const currentNodeID = isExecutionEnded(runStatus) ? executionNodeID : activities[0]?.nodeID;
   const executionNode = currentNodeID
     ? document.nodes.find((node) => node.id === currentNodeID)
     : undefined;
   const resolvedExecutionNodeID = executionNode?.id;
   const executionTerminal = isExecutionEnded(runStatus);
-  const executionPosition = useMemo(
-    () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal }),
-    [executionTerminal, resolvedExecutionNodeID],
+  const executionStatus = executionTerminal ? undefined
+    : ['paused', 'paused_at_boundary', 'handoff_pending'].includes(runStatus) || pending?.kind === 'debug_break' ? 'paused'
+    : pending ? 'waiting' : undefined;
+  const executionProgressing = !executionTerminal && !pending &&
+    !['paused', 'paused_at_boundary', 'handoff_pending'].includes(runStatus) &&
+    activities.some(activity => activity.nodeID === resolvedExecutionNodeID && activity.status === 'running');
+  const executionPosition = useMemo<ExecutionPosition>(
+    () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal, progressing: executionProgressing, status: executionStatus }),
+    [executionTerminal, resolvedExecutionNodeID, executionProgressing, executionStatus],
   );
   const breakpointKeys = useMemo(
     () => new Set(breakpoints.map((breakpoint) => breakpointKey(breakpoint.nodeID, breakpoint.phase))),
@@ -1888,6 +1913,7 @@ function GraphView({
   };
 
   const showRoutesThrough = (nodeID: string) => {
+    stopExecutionPanRef.current?.();
     if (!routeTargetID) restoreViewportRef.current = flowRef.current?.getViewport();
     setRouteScope('through');
     setRouteTargetID(nodeID);
@@ -1903,6 +1929,7 @@ function GraphView({
     setRouteTestEditor(undefined);
   };
   const locateExecutionNode = (activity: CurrentActivity) => {
+    stopExecutionPanRef.current?.();
     setActivityLocationNotice(undefined);
     if (!activity.inGraph) {
       if (sessionID && activity.segmentID && activity.graphRevision !== undefined) {
@@ -2014,10 +2041,44 @@ function GraphView({
 
   useEffect(() => {
     if (!testMode) return;
+    let frame = 0;
+    const receive = (event: MessageEvent<HostMessage>) => {
+      if (event.data?.type !== 'test.action' || event.data.action !== 'sample-execution-transition') return;
+      cancelAnimationFrame(frame);
+      const samples: unknown[] = [];
+      const sample = () => {
+        const canvas = canvasRef.current;
+        const nodes = Array.from(canvas?.querySelectorAll<HTMLElement>('.react-flow__node-yawrStep') ?? []);
+        samples.push({
+          currentIDs: nodes.filter(node => node.querySelector('.execution-current')).map(node => node.dataset.id),
+          selectedIDs: nodes.filter(node => node.querySelector('.selected')).map(node => node.dataset.id),
+          progressing: nodes.filter(node => node.querySelector('.execution-progress')).map(node => node.dataset.id),
+          reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+          topLogCount: window.document.querySelectorAll('main > .current-activity, .execution-position-strip').length,
+          canvas: canvas?.getBoundingClientRect().toJSON(),
+          viewport: flowRef.current?.getViewport(),
+          positions: flowRef.current?.getNodes().map(node => ({ id: node.id, position: node.position, width: node.width, height: node.height })),
+        });
+        if (samples.length < 30) frame = requestAnimationFrame(sample);
+        else vscode.postMessage({ type: 'execution.transition-samples', samples });
+      };
+      frame = requestAnimationFrame(sample);
+      vscode.postMessage({ type: 'execution.transition-sampling' });
+    };
+    window.addEventListener('message', receive);
+    return () => {
+      window.removeEventListener('message', receive);
+      cancelAnimationFrame(frame);
+    };
+  }, [testMode]);
+
+  useEffect(() => {
+    if (!testMode) return;
     const receive = (event: MessageEvent<HostMessage>) => {
       const message = event.data;
       if (message?.type !== 'test.action') return;
       if (message.action === 'set-graph-viewport' && message.value) {
+        stopExecutionPanRef.current?.();
         void flowRef.current?.setViewport(JSON.parse(message.value));
       }
       if (message.action !== 'inspect-graph-visibility') return;
@@ -2039,8 +2100,11 @@ function GraphView({
           width: node.width, height: node.height })),
         edgePaths: window.document.querySelectorAll('.react-flow__edge-path').length,
         edgeClasses: Array.from(window.document.querySelectorAll('.react-flow__edge')).map(edge => edge.getAttribute('class')),
-        mode: viewPreference.workflowMode, selectedID: selectedId, routeTargetID,
+        mode: effectiveWorkflowMode, selectedID: selectedId, routeTargetID,
         runtimeStatuses: Object.fromEntries(Object.entries(runtimeNodes).map(([id, value]) => [id, value.status])),
+        currentNodeID: resolvedExecutionNodeID,
+        currentMarkerCount: window.document.querySelectorAll('.step-node.execution-current').length,
+        topExecutionLogCount: window.document.querySelectorAll('main > .current-activity, .execution-position-strip').length,
         activity: { text: window.document.querySelector('.current-activity')?.textContent,
           items: activities.map(({ nodeID, path, title, label, container, inGraph, occurrenceID }) =>
             ({ nodeID, path, title, label, container, inGraph, occurrenceID })), counts: progressCounts,
@@ -2050,8 +2114,36 @@ function GraphView({
     };
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
-  }, [testMode, document, displayDocument, viewPreference.workflowMode, selectedId, routeTargetID,
-    issues, runStatus, runStarting, sessionID, layoutTopologyKey, runtimeNodes, activities, progressCounts]);
+  }, [testMode, document, displayDocument, effectiveWorkflowMode, selectedId, routeTargetID,
+    issues, runStatus, runStarting, sessionID, layoutTopologyKey, runtimeNodes, activities, progressCounts, resolvedExecutionNodeID]);
+
+  useEffect(() => {
+    if (!flowReady || !resolvedExecutionNodeID || executionTerminal || routeTargetID) return;
+    let frame = 0;
+    let attempts = 0;
+    const reveal = () => {
+      frame = requestAnimationFrame(() => {
+        const flow = flowRef.current;
+        const canvas = canvasRef.current;
+        const target = Array.from(canvas?.querySelectorAll<HTMLElement>('.react-flow__node') ?? [])
+          .find(element => element.dataset.id === resolvedExecutionNodeID);
+        if (!flow || !canvas || !target || !flow.getNode(resolvedExecutionNodeID)?.width) {
+          if (++attempts < 4) reveal();
+          return;
+        }
+        const viewport = executionViewport(flow.getViewport(), canvas.getBoundingClientRect(), target.getBoundingClientRect());
+        if (viewport) stopExecutionPanRef.current = animateExecutionViewport(
+          flow.getViewport(), viewport, value => { void flow.setViewport(value, { duration: 0 }); },
+          { now: () => performance.now(), requestFrame: requestAnimationFrame, cancelFrame: cancelAnimationFrame },
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      });
+    };
+    reveal();
+    return () => {
+      cancelAnimationFrame(frame);
+      stopExecutionPanRef.current?.();
+    };
+  }, [flowReady, resolvedExecutionNodeID, executionTerminal, routeTargetID, layoutTopologyKey]);
 
   useEffect(() => {
     if (!flowRef.current) return;
@@ -2168,7 +2260,9 @@ function GraphView({
         <div className="run-actions">
           <div className="workflow-mode" role="group" aria-label="Graph detail">
             {(['workflow', 'all'] as WorkflowMode[]).map(mode => <button type="button" key={mode}
-              aria-pressed={viewPreference.workflowMode === mode} onClick={() => changePreference({ workflowMode: mode })}>
+              aria-pressed={effectiveWorkflowMode === mode} disabled={executionLayoutLocked}
+              title={executionLayoutLocked ? 'All steps stay expanded for execution and result review. Reset restores your saved view.' : undefined}
+              onClick={() => changePreference({ workflowMode: mode })}>
               {mode === 'workflow' ? 'Workflow' : 'All steps'}</button>)}
           </div>
           <span className={`run-status status-${runStatus}`} role="status" aria-live="polite">{runStarting ? 'starting' : runStatus}</span>
@@ -2277,8 +2371,6 @@ function GraphView({
         {progressCounts.total} canonical steps · {progressCounts.completed} done · {progressCounts.issues} issues · {progressCounts.skipped} skipped · {progressCounts.running} running · {progressCounts.remaining} {executionTerminal ? 'without final status' : 'remaining'}
         {' · '}{workflow.segments.size} visual technical groups · hidden is not skipped
       </div>
-      <CurrentActivityStrip activities={activities} runStatus={runStatus} remaining={progressCounts.remaining}
-        onLocate={locateExecutionNode} locationNotice={activityLocationNotice} />
       {routeTargetID && routeProjection ? (
         <section className="route-view-strip" aria-label={`Routes through ${routeTargetName}`}>
           <div className="route-view-copy">
@@ -2320,7 +2412,8 @@ function GraphView({
                   nodes={renderNodes}
                   onNodesChange={changes => {
                     const measurements = changes.filter(change => change.type === 'dimensions');
-                    if (measurements.length) setRenderNodes(current => applyNodeChanges(measurements, current));
+                    if (measurements.length) setMeasuredNodes(current =>
+                      applyNodeChanges(measurements, preserveLayoutMeasurements(displayNodes, current)));
                   }}
                   edges={runtimeEdges}
                   nodeTypes={nodeTypes}
@@ -2329,7 +2422,8 @@ function GraphView({
                   minZoom={0.2}
                   maxZoom={1.8}
                   nodesDraggable={false}
-                  onInit={(instance) => { flowRef.current = instance; }}
+                  onInit={(instance) => { flowRef.current = instance; setFlowReady(true); }}
+                  onMoveStart={(event) => { if (event) stopExecutionPanRef.current?.(); }}
                   onNodeClick={(_, node) => { if (node.data.synthetic !== true) { setIssueSelection(undefined); setSelectedId(node.id); } }}
                   onPaneClick={() => { setSelectedId(undefined); }}
                 >
@@ -2386,6 +2480,8 @@ function GraphView({
           />
         ) : null}
         <aside id="step-details-panel" className="inspector" aria-label="Step details">
+          <ActivityDetails activities={activities} runStatus={runStatus} remaining={progressCounts.remaining}
+            onLocate={locateExecutionNode} locationNotice={activityLocationNotice} />
           {pending ? (
             <InteractionPane
               key={`${pending.turnID}:${runError ?? ''}`}
