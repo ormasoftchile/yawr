@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.10
+
+- Adds `yawr.preview.minimumStepDisplayMs` (integer, default 200, minimum 0)
+  for editor-only live-step pacing; 0 disables it. Changes apply next run/session.
+- Preserves ordered current-step transitions with commit-timed dwell intervals,
+  while failures, blocked outcomes, prompts, cancellation and completion bypass
+  the queue. Runtime execution and Results persistence remain immediate.
+- Converges directly during reconnect and cancels pending pacing on hide/disposal.
+  Reduced motion changes animation only, not the minimum display interval.
+
 ## 0.2.9
 
 - Keeps one current execution marker across step boundaries, with a stable

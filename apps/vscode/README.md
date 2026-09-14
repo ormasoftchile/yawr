@@ -32,6 +32,25 @@ and credential-like flags, assignments, and authorization values are redacted.
 
 ## Execution navigation
 
+`yawr.preview.minimumStepDisplayMs` defaults to **200** milliseconds and accepts
+nonnegative integers; **0** disables pacing. It affects editor visualization
+only, never runtime execution, event persistence, tools, or headless clients.
+Each run/session snapshots the setting at start (including reattachment);
+mid-run changes apply to the next run/session.
+
+Ordinary live steps are displayed in event order for at least that interval.
+Failure, cancellation, blocked outcomes, input/debug prompts and completion
+discard queued visual steps immediately. Results are processed and persisted
+without waiting for the visual queue. Reconnect applies historical snapshots
+directly until the attachment handshake; only later live starts are paced.
+Hiding cancels timers and showing converges to the latest cursor; disposing or
+replacing the graph invalidates pending callbacks.
+
+Reduced motion changes the glow/pan animation, **not** the visibility interval.
+Fake-clock tests enforce exact deadlines. Frame-sampled webview tests allow
+35 ms of observation tolerance for frame/IPC scheduling at 200 and 500 ms;
+this is a measurement tolerance, not time subtracted from the configured delay.
+
 One green **Current** marker tracks execution independently of the yellow user
 selection. It remains on the last reached step between runtime events, without
 changing that step's completed/failed status, and becomes **Last reached** when

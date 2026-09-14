@@ -35555,11 +35555,15 @@
   // src/runStatus.ts
   var TERMINAL_RUN_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "cancelled", "indeterminate", "blocked", "denied"]);
   var SETTLED_STEP_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "skipped", "denied", "indeterminate", "cancelled", "blocked"]);
+  var ISSUE_STEP_STATUSES = /* @__PURE__ */ new Set(["failed", "denied", "indeterminate", "cancelled", "blocked"]);
   function isTerminalRunStatus(status) {
     return TERMINAL_RUN_STATUSES.has(status);
   }
   function isSettledStepStatus(status) {
     return SETTLED_STEP_STATUSES.has(status);
+  }
+  function isIssueStepStatus(status) {
+    return ISSUE_STEP_STATUSES.has(status);
   }
 
   // src/executionProgress.ts
@@ -35799,6 +35803,98 @@
     const y = shift(node.top, node.bottom, canvas.top, canvas.bottom);
     return x || y ? { x: viewport.x + x, y: viewport.y + y, zoom: viewport.zoom } : void 0;
   }
+
+  // src/visualStepPacer.ts
+  var DEFAULT_MINIMUM_STEP_DISPLAY_MS = 200;
+  function minimumStepDisplayMs(value) {
+    return typeof value === "number" && Number.isFinite(value) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(value))) : DEFAULT_MINIMUM_STEP_DISPLAY_MS;
+  }
+  var VisualStepPacer = class {
+    constructor(publish, clock2, requireCommit = false) {
+      this.publish = publish;
+      this.clock = clock2;
+      this.requireCommit = requireCommit;
+    }
+    publish;
+    clock;
+    requireCommit;
+    queue = [];
+    displayed;
+    latest;
+    displayedAt = 0;
+    timer;
+    generation = 0;
+    visible = true;
+    disposed = false;
+    interval = DEFAULT_MINIMUM_STEP_DISPLAY_MS;
+    awaitingCommit = false;
+    acknowledge(step) {
+      if (this.disposed || !this.visible || !this.awaitingCommit || step !== this.displayed) return;
+      this.awaitingCommit = false;
+      this.displayedAt = this.clock.now();
+      this.schedule();
+    }
+    start(interval2) {
+      if (this.disposed) return;
+      this.interval = minimumStepDisplayMs(interval2);
+      this.bypass();
+    }
+    ordinary(nodeID) {
+      if (this.disposed) return;
+      const next = { nodeID, progressing: true };
+      this.latest = next;
+      if (!this.visible) return;
+      if (!this.interval || !this.displayed?.progressing) {
+        this.bypass(next);
+        return;
+      }
+      const tail = this.queue.at(-1) ?? this.displayed;
+      if (tail.nodeID === nodeID) return;
+      this.queue.push(next);
+      this.schedule();
+    }
+    bypass(step) {
+      if (this.disposed) return;
+      this.cancelTimer();
+      this.queue = [];
+      this.latest = step;
+      if (this.visible) this.show(step);
+    }
+    setVisible(visible) {
+      if (this.disposed || visible === this.visible) return;
+      this.visible = visible;
+      this.cancelTimer();
+      this.queue = [];
+      if (visible) this.show(this.latest ? { ...this.latest } : void 0);
+    }
+    dispose() {
+      this.cancelTimer();
+      this.queue = [];
+      this.disposed = true;
+    }
+    show(step) {
+      this.displayed = step;
+      this.displayedAt = this.clock.now();
+      this.awaitingCommit = this.requireCommit && step !== void 0;
+      this.publish(step);
+    }
+    cancelTimer() {
+      this.generation++;
+      if (this.timer !== void 0) this.clock.clearTimeout(this.timer);
+      this.timer = void 0;
+    }
+    schedule() {
+      if (this.awaitingCommit || this.timer !== void 0 || !this.queue.length) return;
+      const remaining = Math.max(0, this.interval - (this.clock.now() - this.displayedAt));
+      const generation = this.generation;
+      this.timer = this.clock.setTimeout(() => {
+        if (this.disposed || !this.visible || generation !== this.generation) return;
+        this.timer = void 0;
+        if (this.clock.now() - this.displayedAt >= this.interval) this.show(this.queue.shift());
+        this.schedule();
+      }, Math.min(remaining, 2147483647));
+    }
+  };
 
   // src/workflowView.ts
   function decodeWorkflowPreference(value) {
@@ -38842,6 +38938,7 @@
     style: style2,
     runtimeNodes: observedRuntimeNodes,
     executionNodeID,
+    visualStep,
     breakpoints,
     watches,
     pending: pending2,
@@ -38930,7 +39027,7 @@
     );
     const previousExecutionRef = (0, import_react15.useRef)();
     const executionScope = sessionID ?? document2.runbook.path ?? document2.hash ?? document2;
-    const currentNodeID = currentExecutionNode(
+    const liveCurrentNodeID = currentExecutionNode(
       activities,
       runStatus,
       new Set(document2.nodes.filter((node) => node.data.synthetic !== true).map((node) => node.id)),
@@ -38938,9 +39035,10 @@
       previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : void 0,
       pending2?.nodeID ?? pending2?.stepID
     );
+    const currentNodeID = !isExecutionEnded(runStatus) && !pending2 && visualStep ? graphExecutionNodeID(document2, visualStep.nodeID) ?? liveCurrentNodeID : liveCurrentNodeID;
     (0, import_react15.useLayoutEffect)(() => {
-      previousExecutionRef.current = { scope: executionScope, nodeID: currentNodeID };
-    }, [executionScope, currentNodeID]);
+      previousExecutionRef.current = { scope: executionScope, nodeID: liveCurrentNodeID };
+    }, [executionScope, liveCurrentNodeID]);
     const progressCounts = (0, import_react15.useMemo)(() => canonicalProgress(document2, observedRuntimeNodes, runStatus), [document2, observedRuntimeNodes, runStatus]);
     const [closeStatus, setCloseStatus] = (0, import_react15.useState)("resolved");
     const [inspectionRevision, setInspectionRevision] = (0, import_react15.useState)();
@@ -39036,7 +39134,7 @@
     const resolvedExecutionNodeID = executionNode?.id;
     const executionTerminal = isExecutionEnded(runStatus);
     const executionStatus = executionTerminal ? void 0 : ["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) || pending2?.kind === "debug_break" ? "paused" : pending2 ? "waiting" : void 0;
-    const executionProgressing = !executionTerminal && !pending2 && !["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) && activities.some((activity) => activity.nodeID === resolvedExecutionNodeID && activity.status === "running");
+    const executionProgressing = !executionTerminal && !pending2 && !["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) && (visualStep ? visualStep.progressing : activities.some((activity) => activity.nodeID === resolvedExecutionNodeID && activity.status === "running"));
     const executionPosition = (0, import_react15.useMemo)(
       () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal, progressing: executionProgressing, status: executionStatus }),
       [executionTerminal, resolvedExecutionNodeID, executionProgressing, executionStatus]
@@ -39237,10 +39335,12 @@
         if (event.data?.type !== "test.action" || event.data.action !== "sample-execution-transition") return;
         cancelAnimationFrame(frame2);
         const samples = [];
+        const frameCount = event.data.value === "pacing" ? 180 : 30;
         const sample = () => {
           const canvas = canvasRef.current;
           const nodes = Array.from(canvas?.querySelectorAll(".react-flow__node-yawrStep") ?? []);
           samples.push({
+            at: performance.now(),
             currentIDs: nodes.filter((node) => node.querySelector(".execution-current")).map((node) => node.dataset.id),
             selectedIDs: nodes.filter((node) => node.querySelector(".selected")).map((node) => node.dataset.id),
             progressing: nodes.filter((node) => node.querySelector(".execution-progress")).map((node) => node.dataset.id),
@@ -39250,7 +39350,7 @@
             viewport: flowRef.current?.getViewport(),
             positions: flowRef.current?.getNodes().map((node) => ({ id: node.id, position: node.position, width: node.width, height: node.height }))
           });
-          if (samples.length < 30) frame2 = requestAnimationFrame(sample);
+          if (samples.length < frameCount) frame2 = requestAnimationFrame(sample);
           else vscode.postMessage({ type: "execution.transition-samples", samples });
         };
         frame2 = requestAnimationFrame(sample);
@@ -39799,6 +39899,13 @@
     const [reloading, setReloading] = (0, import_react15.useState)(false);
     const [runtimeNodes, setRuntimeNodes] = (0, import_react15.useState)({});
     const [executionNodeID, setExecutionNodeID] = (0, import_react15.useState)();
+    const [visualStep, setVisualStep] = (0, import_react15.useState)();
+    const visualPacerRef = (0, import_react15.useRef)();
+    (0, import_react15.useLayoutEffect)(() => {
+      if (visualStep) visualPacerRef.current?.acknowledge(visualStep);
+    }, [visualStep]);
+    const sessionRuntimeRef = (0, import_react15.useRef)({});
+    const settledVisualOccurrencesRef = (0, import_react15.useRef)(/* @__PURE__ */ new Set());
     const [breakpoints, setBreakpoints] = (0, import_react15.useState)([]);
     const [watches, setWatches] = (0, import_react15.useState)("");
     const [pending2, setPending] = (0, import_react15.useState)();
@@ -39839,6 +39946,7 @@
       vscode.setState?.({ ...recordValue(vscode.getState?.()), displayWithdrawals: displayWithdrawalsRef.current });
     }, [runtimeNodes]);
     const clearActiveRun = () => {
+      visualPacerRef.current?.bypass();
       hostRequestRef.current = void 0;
       pendingRef.current = void 0;
       runIDRef.current = void 0;
@@ -39847,12 +39955,27 @@
       setRunID(void 0);
     };
     (0, import_react15.useEffect)(() => {
+      const pacer = new VisualStepPacer(setVisualStep, {
+        now: () => performance.now(),
+        setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+        clearTimeout: (timer2) => window.clearTimeout(timer2)
+      }, true);
+      visualPacerRef.current = pacer;
+      let hostVisible = true;
+      const visibility = () => pacer.setVisible(hostVisible && !window.document.hidden);
+      visibility();
+      window.document.addEventListener("visibilitychange", visibility);
       const receive = (event) => {
         const message = event.data;
         if (!message || typeof message !== "object") return;
         if (message.type === "loading") {
+          pacer.bypass();
           setError(void 0);
+        } else if (message.type === "preview.visibility") {
+          hostVisible = message.visible;
+          visibility();
         } else if (message.type === "graph") {
+          pacer.bypass();
           setResults(void 0);
           directDocumentRef.current = message.document;
           setDocument(message.document);
@@ -39882,6 +40005,8 @@
         } else if (message.type === "session.starting" || message.type === "session.reconnecting") {
           directDocumentRef.current = void 0;
           clearActiveRun();
+          pacer.start(message.minimumStepDisplayMs);
+          sessionRuntimeRef.current = {};
           setSegmentGraphRevisions({});
           setUnloadedSegmentIDs([]);
           setRevisionNodes({});
@@ -39898,6 +40023,18 @@
           setExecutionNodeID(void 0);
         } else if (message.type === "session.update") {
           const state = message.state;
+          if (message.minimumStepDisplayMs !== void 0) pacer.start(message.minimumStepDisplayMs);
+          const urgentNode = Object.entries(state.runtimeNodes).find(([id2, value]) => isIssueStepStatus(value.status) && value.status !== sessionRuntimeRef.current[id2]?.status || value.output?.outcome_category === "blocked" && sessionRuntimeRef.current[id2]?.output?.outcome_category !== "blocked")?.[0];
+          sessionRuntimeRef.current = state.runtimeNodes;
+          const position = state.pending?.nodeID ?? urgentNode ?? state.executionNodeID;
+          if (!message.live || state.pending || urgentNode || isExecutionEnded(state.runStatus) || ["paused", "paused_at_boundary", "handoff_pending"].includes(state.runStatus)) {
+            pacer.bypass(!isExecutionEnded(state.runStatus) && position ? {
+              nodeID: position,
+              progressing: !state.pending && !urgentNode && state.runStatus === "running"
+            } : void 0);
+          } else {
+            for (const nodeID of message.liveSteps ?? []) pacer.ordinary(nodeID);
+          }
           sessionIDRef.current = state.sessionID;
           sessionStatusRef.current = state.sessionStatus;
           runIDRef.current = state.activeRunID;
@@ -39931,11 +40068,13 @@
             setRunError(message.error);
           }
         } else if (message.type === "session.error") {
+          pacer.bypass();
           setRunStarting(false);
           setRunError(message.message);
         } else if (message.type === "session.stderr") {
           setRunDiagnostics((current) => `${current}${message.text}`.slice(-16 * 1024));
         } else if (message.type === "session.exit") {
+          pacer.bypass();
           setSessionAttached(false);
           setRunStarting(false);
           if (!runFinishedRef.current && !["paused", "indeterminate", "failed"].includes(sessionStatusRef.current ?? "")) {
@@ -39946,12 +40085,15 @@
         } else if (message.type === "style") {
           setStyle(message.style);
         } else if (message.type === "error") {
+          pacer.bypass();
           setLoading(false);
           setError(message.message);
         } else if (message.type === "run.starting") {
           setResults(void 0);
           directRunScopeRef.current = void 0;
           clearActiveRun();
+          pacer.start(message.minimumStepDisplayMs);
+          settledVisualOccurrencesRef.current.clear();
           resolvedTurnsRef.current.clear();
           runFinishedRef.current = false;
           setRunStarting(true);
@@ -39983,9 +40125,21 @@
               frame2.event,
               binding
             ));
-            if (frame2.event.kind === "step/started" || frame2.event.kind === "step/resumed") {
+            const visualNodeID = eventNodeID(frame2.event);
+            const visualOccurrence = visualNodeID && validProgressIdentity(frame2.event.payload ?? {}) ? directOccurrenceID(frame2.event.run_id, visualNodeID, frame2.event.payload ?? {}) : void 0;
+            if (visualOccurrence && frame2.event.kind.startsWith("step/") && isSettledStepStatus(frame2.event.kind.slice(5))) {
+              settledVisualOccurrencesRef.current.add(visualOccurrence);
+            }
+            if ((frame2.event.kind === "step/started" || frame2.event.kind === "step/resumed") && (!visualOccurrence || !settledVisualOccurrencesRef.current.has(visualOccurrence))) {
               const reachedNodeID = eventNodeID(frame2.event);
-              if (reachedNodeID) setExecutionNodeID(reachedNodeID);
+              if (reachedNodeID && !runFinishedRef.current) {
+                if (!pendingRef.current) pacer.ordinary(reachedNodeID);
+                setExecutionNodeID(reachedNodeID);
+              }
+            }
+            if (["step/failed", "step/cancelled", "step/blocked", "step/denied", "step/indeterminate"].includes(frame2.event.kind) || recordValue(frame2.event.payload?.output)?.outcome_category === "blocked") {
+              const nodeID = eventNodeID(frame2.event);
+              pacer.bypass(nodeID ? { nodeID, progressing: false } : void 0);
             }
             if (frame2.event.kind === "run/started" && !pendingRef.current && !runFinishedRef.current) setRunStatus((current) => isTerminalRunStatus(current) ? current : "running");
             else if (frame2.event.kind === "run/completed") {
@@ -40008,17 +40162,20 @@
           } else if (frame2.type === "interaction.pending" && frame2.interaction) {
             if (runFinishedRef.current || !runIDRef.current || frame2.interaction.runID !== runIDRef.current || typeof frame2.interaction.turnID !== "string" || !frame2.interaction.turnID.trim() || resolvedTurnsRef.current.has(frame2.interaction.turnID) || pendingRef.current && pendingRef.current.turnID !== frame2.interaction.turnID) return;
             pendingRef.current = frame2.interaction;
+            const nodeID = frame2.interaction.nodeID ?? frame2.interaction.stepID;
+            pacer.bypass(nodeID ? { nodeID, progressing: false } : void 0);
             setPending(frame2.interaction);
             setExecutionNodeID(frame2.interaction.nodeID ?? frame2.interaction.stepID);
             setRunStatus("waiting");
           } else if (frame2.type === "interaction.resolved") {
             if (pendingRef.current?.turnID !== frame2.turnID) return;
             if (runFinishedRef.current || frame2.runID && frame2.runID !== runIDRef.current) return;
+            pacer.bypass();
             resolvedTurnsRef.current.add(frame2.turnID);
             if (hostRequestRef.current?.turnID === frame2.turnID) hostRequestRef.current = void 0;
+            pendingRef.current = void 0;
             setPending((current) => {
               if (current?.turnID !== frame2.turnID) return current;
-              pendingRef.current = void 0;
               return void 0;
             });
             setRunStatus((current) => isTerminalRunStatus(current) ? current : "running");
@@ -40109,7 +40266,12 @@
       };
       window.addEventListener("message", receive);
       vscode.postMessage({ type: "ready" });
-      return () => window.removeEventListener("message", receive);
+      return () => {
+        window.removeEventListener("message", receive);
+        window.document.removeEventListener("visibilitychange", visibility);
+        pacer.dispose();
+        visualPacerRef.current = void 0;
+      };
     }, []);
     (0, import_react15.useEffect)(() => {
       if (!document2) return;
@@ -40213,6 +40375,7 @@
       });
     };
     const cancelRun = () => {
+      visualPacerRef.current?.bypass();
       if (sessionID && sessionAttached) {
         vscode.postMessage({
           type: "session.command",
@@ -40244,6 +40407,7 @@
       });
     };
     const resetRun = () => {
+      visualPacerRef.current?.bypass();
       if (sessionID) {
         vscode.postMessage({ type: "session.reset" });
         clearActiveRun();
@@ -40447,6 +40611,7 @@
         style: style2,
         runtimeNodes,
         executionNodeID,
+        visualStep,
         breakpoints,
         watches,
         pending: pending2,

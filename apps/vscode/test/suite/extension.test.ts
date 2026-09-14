@@ -1059,7 +1059,7 @@ suite('Yawr extension smoke tests', () => {
     };
     type Sample = {
       currentIDs: string[]; selectedIDs: string[]; progressing: string[]; topLogCount: number; reducedMotion: boolean;
-      viewport: Viewport; canvas: object; positions: Visibility['positions'];
+      viewport: Viewport; canvas: object; positions: Visibility['positions']; at: number;
     };
     const message = <T,>(type: string): Promise<T> => new Promise((resolve, reject) => {
       const timer = setTimeout(() => { subscription.dispose(); reject(new Error(`Missing ${type}`)); }, 10_000);
@@ -1086,10 +1086,10 @@ suite('Yawr extension smoke tests', () => {
       type: 'run.event', event: { run_id: 'transition-run', kind: `step/${kind}`, sequence: ++sequence,
         payload: { qualified_node_id: id, invocation: 1 } },
     } });
-    const trace = async (transition: () => Promise<unknown>) => {
+    const trace = async (transition: () => Promise<unknown>, pacing = false) => {
       const ready = message('execution.transition-sampling');
       const result = message<{ samples: Sample[] }>('execution.transition-samples');
-      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition' });
+      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition', value: pacing ? 'pacing' : undefined });
       await ready;
       await transition();
       return (await result).samples;
@@ -1139,6 +1139,51 @@ suite('Yawr extension smoke tests', () => {
       await step('step-9', 'completed');
       await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'completed' } });
       await settle(value => value.currentMarkerCount === 0);
+      for (const interval of [undefined, 500, 0]) {
+        await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: interval });
+        await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+        await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport',
+          value: JSON.stringify({ x: 100, y: 30, zoom: 0.2 }) });
+        const samples = await trace(async () => {
+          await step('step-0', 'started'); await step('step-0', 'completed');
+          await step('step-1', 'started'); await step('step-1', 'completed');
+          await step('step-2', 'started');
+        }, true);
+        const active = samples.slice(samples.findIndex(value => value.currentIDs.length));
+        assert.ok(active.every(value => value.currentIDs.length === 1 && value.topLogCount === 0));
+        const changes = active.filter((value, index) => index === 0 || value.currentIDs[0] !== active[index - 1].currentIDs[0]);
+        if (interval === 0) {
+          assert.equal(changes.at(-1)?.currentIDs[0], 'step-2');
+          assert.ok(changes.at(-1)!.at - samples[0].at < 150, 'disabled pacing must converge without a timer backlog');
+        } else {
+          assert.deepStrictEqual(changes.map(value => value.currentIDs[0]), ['step-0', 'step-1', 'step-2']);
+          for (let index = 1; index < changes.length; index++) {
+            const duration = changes[index].at - changes[index - 1].at;
+            assert.ok(duration >= (interval ?? 200) - 35, `pacing ${interval ?? 200}ms: observed ${duration}ms (35ms frame/IPC tolerance)`);
+          }
+        }
+        console.log(`Visual pacing ${interval ?? 200}ms: ${changes.map(value => `${value.currentIDs[0]}@${value.at.toFixed(1)}`).join(', ')}`);
+        await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'completed' } });
+        await settle(value => value.currentMarkerCount === 0);
+      }
+      await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: 5000 });
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+      await step('step-0', 'started'); await step('step-1', 'started');
+      const failureAt = Date.now();
+      await step('step-9', 'failed');
+      await settle(value => value.currentNodeID === 'step-9');
+      assert.ok(Date.now() - failureAt < 500, 'failure must bypass the five-second visual queue');
+      const promptAt = Date.now();
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'interaction.pending', interaction: {
+        runID: 'transition-run', turnID: 'pacing-input', nodeID: 'step-8', stepID: 'step-8', kind: 'choice',
+        prompt: 'Immediate pacing control', options: [{ value: 'continue', label: 'Continue' }],
+      } } });
+      await settle(value => value.currentNodeID === 'step-8');
+      assert.ok(Date.now() - promptAt < 500, 'interaction must bypass the visual queue');
+      const completedAt = Date.now();
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'cancelled' } });
+      await settle(value => value.currentMarkerCount === 0);
+      assert.ok(Date.now() - completedAt < 500, 'runtime completion must not drain the visual queue');
     } finally {
       panel.dispose();
       await vscode.workspace.fs.delete(uri, { useTrash: false });

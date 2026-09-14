@@ -2,7 +2,7 @@
   "name": "yawr-preview",
   "displayName": "Yawr Runbook Preview",
   "description": "Preview Yawr runbooks (.runbook.yaml) as a structural graph in VS Code.",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "publisher": "ormasoftchile",
   "license": "MIT",
   "repository": {
@@ -146,6 +146,13 @@
           ],
           "default": "smooth-curves",
           "description": "Visual stereotype style for the React Flow runbook graph preview: smooth-curves (default), minimalist, or header-badges."
+        },
+        "yawr.preview.minimumStepDisplayMs": {
+          "type": "integer",
+          "default": 200,
+          "minimum": 0,
+          "scope": "resource",
+          "description": "Minimum time in milliseconds to display ordinary live current steps in the editor visualization only; runtime execution and persistence are never delayed. 0 disables pacing. Changes apply to the next run or session."
         },
         "yawr.preview.openLocation": {
           "type": "string",
