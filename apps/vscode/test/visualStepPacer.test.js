@@ -257,6 +257,7 @@ for (const mode of ['success', 'reconnect', 'failure', 'blocked', 'interaction']
       pacer: h.pacer, sessionRuntimeRef: { current: {} }, sessionIDRef: {}, sessionStatusRef: {},
       runIDRef: {}, pendingRef: {}, runFinishedRef: {},
       ...require('../out/executionProgress'), ...require('../out/runStatus'),
+      ...require('../out/executionView'),
     };
     for (const name of ['SessionID', 'SessionStatus', 'SessionAttached', 'SegmentGraphRevisions',
       'UnloadedSegmentIDs', 'Document', 'Style', 'RouteTestContext', 'RouteTests', 'RouteTestOutcome',
@@ -268,8 +269,9 @@ for (const mode of ['success', 'reconnect', 'failure', 'blocked', 'interaction']
       `${closed}\nfunction receive(message) {${source.slice(start, end)}}\nreceive`,
       { loader: 'ts', target: 'es2022' }).code, context);
     const state = { sessionID: 'session', sessionStatus: 'active', runStatus: 'running',
+      document: { nodes: ['a', 'b', 'Results'].map(id => ({ id, data: {} })), groups: [] },
       runtimeNodes: {}, executionNodeID: 'b' };
-    receive({ live: true, liveSteps: ['a', 'b'], state });
+    receive({ live: true, liveSteps: ['runtime-only-wrapper', 'a', 'b'], state });
     const final = { ...state, runStatus: 'resolved', sessionStatus: 'resolved' };
     if (mode === 'failure') final.runStatus = 'failed';
     if (mode === 'blocked') Object.assign(final, { runStatus: 'running', runtimeNodes: { blocked: { status: 'blocked' } } });

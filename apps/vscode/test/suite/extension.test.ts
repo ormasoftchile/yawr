@@ -1178,16 +1178,19 @@ suite('Yawr extension smoke tests', () => {
         await settle(value => value.currentMarkerCount === 0);
       }
       for (const interval of [200, 500]) {
-        await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: interval });
-        await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
         await panel.webview.postMessage({ type: 'test.action', action: 'select-node', name: 'step-0' });
         await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport',
           value: JSON.stringify({ x: 100, y: 30, zoom: 0.2 }) });
         const samples = await trace(async () => {
+          await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: interval });
+          await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+          await step('runtime-only-wrapper', 'started');
           for (const nodeID of ['step-0', 'step-1', 'step-2', 'step-3']) {
+            await new Promise(resolve => setTimeout(resolve, 45));
             await step(nodeID, 'started');
             await step(nodeID, 'completed');
           }
+          await step('runtime-only-wrapper', 'completed');
           await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.event',
             event: { kind: 'run/completed', run_id: 'transition-run', sequence: ++sequence } } });
           await panel.webview.postMessage({ type: 'run.frame', frame: {

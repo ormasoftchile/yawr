@@ -29,7 +29,7 @@ import { projectWorkflow, workflowIssueIndex, type WorkflowIssue, type WorkflowM
 import { preserveLayoutMeasurements } from '../src/graphLayoutMeasurements';
 import { canonicalProgress, currentActivities, graphExecutionNodeID, compareOccurrences, directOccurrenceID, validProgressIdentity, producerStepKind, displayRuntimeStatuses, isExecutionEnded, normalizeRuntimeStatuses, type CurrentActivity } from '../src/executionProgress';
 import { CurrentActivity as ActivityDetails } from './CurrentActivity';
-import { currentExecutionNode, executionViewMode, executionViewport, animateExecutionViewport } from '../src/executionView';
+import { currentExecutionNode, ordinaryVisualNodeID, executionViewMode, executionViewport, animateExecutionViewport } from '../src/executionView';
 import { VisualStepPacer, type VisualStep } from '../src/visualStepPacer';
 import { decodeWorkflowPreference, mergeWorkflowPreference } from '../src/workflowView';
 import type { ResultsAvailability } from '../src/typedResultsTypes';
@@ -1740,8 +1740,9 @@ function GraphView({
     graphExecutionNodeID(document, executionNodeID),
     previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : undefined,
     pending?.nodeID ?? pending?.stepID);
-  const currentNodeID = visualPlayback && !pending && visualStep
-    ? graphExecutionNodeID(document, visualStep.nodeID) ?? liveCurrentNodeID : liveCurrentNodeID;
+  const currentNodeID = visualPlayback && visualStep
+    ? graphExecutionNodeID(document, visualStep.nodeID)
+    : isExecutionEnded(runStatus) ? liveCurrentNodeID : undefined;
   useLayoutEffect(() => {
     previousExecutionRef.current = { scope: executionScope, nodeID: liveCurrentNodeID };
   }, [executionScope, liveCurrentNodeID]);
@@ -1852,8 +1853,7 @@ function GraphView({
     : pending ? 'waiting' : undefined;
   const executionProgressing = !executionTerminal && !pending &&
     !['paused', 'paused_at_boundary', 'handoff_pending'].includes(runStatus) &&
-    (visualStep ? visualStep.progressing
-      : activities.some(activity => activity.nodeID === resolvedExecutionNodeID && activity.status === 'running'));
+    visualStep?.progressing === true;
   const executionPosition = useMemo<ExecutionPosition>(
     () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal, progressing: executionProgressing, status: executionStatus }),
     [executionTerminal, resolvedExecutionNodeID, executionProgressing, executionStatus],
@@ -2791,7 +2791,10 @@ function App() {
             nodeID: position, progressing: !state.pending && !urgentNode && state.runStatus === 'running',
           } : undefined);
         } else {
-          for (const nodeID of message.liveSteps ?? []) pacer.ordinary(nodeID);
+          for (const nodeID of message.liveSteps ?? []) {
+            const canonicalID = ordinaryVisualNodeID(state.document, nodeID);
+            if (canonicalID) pacer.ordinary(canonicalID);
+          }
           if (successful) pacer.complete();
         }
         sessionIDRef.current = state.sessionID;
@@ -2895,7 +2898,8 @@ function App() {
               (!visualOccurrence || !settledVisualOccurrencesRef.current.has(visualOccurrence))) {
             const reachedNodeID = eventNodeID(frame.event);
             if (reachedNodeID && !runFinishedRef.current) {
-              if (!pendingRef.current) pacer.ordinary(reachedNodeID);
+              const canonicalID = ordinaryVisualNodeID(graph, reachedNodeID);
+              if (!pendingRef.current && canonicalID) pacer.ordinary(canonicalID);
               setExecutionNodeID(reachedNodeID);
             }
           }
@@ -2921,9 +2925,10 @@ function App() {
           setExecutionNodeID(frame.interaction.nodeID ?? frame.interaction.stepID);
           setRunStatus('waiting');
         } else if (frame.type === 'interaction.resolved') {
-          if (pendingRef.current?.turnID !== frame.turnID) return;
+          if (!pendingRef.current || pendingRef.current.turnID !== frame.turnID) return;
           if (runFinishedRef.current || (frame.runID && frame.runID !== runIDRef.current)) return;
-          pacer.bypass();
+          const nodeID = pendingRef.current.nodeID ?? pendingRef.current.stepID;
+          pacer.bypass(nodeID ? { nodeID, progressing: false } : undefined);
           resolvedTurnsRef.current.add(frame.turnID!);
           if (hostRequestRef.current?.turnID === frame.turnID) hostRequestRef.current = undefined;
           pendingRef.current = undefined;

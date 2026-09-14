@@ -1,9 +1,17 @@
-import { isExecutionEnded, type CurrentActivity } from './executionProgress';
+import { graphExecutionNodeID, isExecutionEnded, type CurrentActivity } from './executionProgress';
+import type { GraphDocument } from './directGraphPreview';
 import type { WorkflowMode } from './workflowProjection';
 
 export function executionViewMode(preference: WorkflowMode, runStatus: string): WorkflowMode {
   // Keep technical steps expanded through the terminal result, not just while active.
   return ['idle', 'not-started'].includes(runStatus) ? preference : 'all';
+}
+
+export function ordinaryVisualNodeID(document: GraphDocument | undefined, nodeID: string): string | undefined {
+  if (!document) return undefined;
+  const id = graphExecutionNodeID(document, nodeID);
+  const node = document.nodes.find(node => node.id === id);
+  return node && node.data.synthetic !== true && node.data.kind !== 'session-entry' ? node.id : undefined;
 }
 
 export function currentExecutionNode(

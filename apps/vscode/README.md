@@ -39,6 +39,10 @@ Each run/session snapshots the setting at start (including reattachment);
 mid-run changes apply to the next run/session.
 
 Ordinary live steps are displayed in event order for at least that interval.
+Only the visual queue head owns the graph's Current marker and progress glow.
+Runtime-only wrappers and dynamic identities absent from the graph remain in
+runtime/inspector evidence, but do not consume graph dwell intervals or redirect
+the marker to live activity. Known graph aliases are canonicalized before queueing.
 Successful runtime completion does not discard queued visuals: playback continues
 through every ordinary step, including Results, and the final step's full interval.
 Runtime status and Results processing/persistence update immediately; automatic
@@ -54,6 +58,10 @@ Reduced motion changes the glow/pan animation, **not** the visibility interval.
 Fake-clock tests enforce exact deadlines. Frame-sampled webview tests allow
 35 ms of observation tolerance for frame/IPC scheduling at 200 and 500 ms;
 this is a measurement tolerance, not time subtracted from the configured delay.
+Installed-VSIX validation also samples the actual graph every 10 ms for an
+entire real-runtime run at 500 ms. It uses production commands and a read-only
+CDP observer in an isolated editor profile, with no keyboard/mouse input, and
+checks uniqueness, canonical order, every dwell and immediate Results availability.
 
 One green **Current** marker tracks execution independently of the yellow user
 selection. It remains on the last reached step between runtime events, without

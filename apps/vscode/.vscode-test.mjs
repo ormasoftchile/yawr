@@ -100,6 +100,7 @@ export default defineConfig([
     launchArgs: [
       ...hermeticLaunchArgs(vsixUserDataDir),
       `--extensions-dir=${vsixExtensionsDir}`,
+      ...(environmentValue('TEST_CDP_PORT') ? [`--remote-debugging-port=${environmentValue('TEST_CDP_PORT')}`, '--remote-debugging-address=127.0.0.1'] : []),
     ],
     mocha: {
       timeout: 120000,

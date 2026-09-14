@@ -180,16 +180,17 @@ test('actual App pending handler rejects stale lifecycle and turn identities', (
   const pendingRef = {}, runFinishedRef = { current: false }, runIDRef = { current: 'run' };
   let pending, runStatus = 'running';
   const pacedStarts = [];
+  const bypasses = [];
   let deferPending = false;
   const pendingUpdates = [];
   const noop = () => {};
   const receive = vm.runInNewContext(transformSync(`function receive(message) {${source.slice(start, end)}}\nreceive`, { loader: 'ts' }).code, {
     pendingRef, runFinishedRef, runIDRef, directRunScopeRef: { current: 'run' },
-    pacer: { bypass() {}, complete() {}, ordinary(nodeID) { pacedStarts.push(nodeID); } },
-    settledVisualOccurrencesRef: { current: new Set() }, ...progress,
+    pacer: { bypass(step) { bypasses.push(step); }, complete() {}, ordinary(nodeID) { pacedStarts.push(nodeID); } },
+    settledVisualOccurrencesRef: { current: new Set() }, ...progress, ...require('../out/executionView'),
     eventNodeID: event => event.payload?.qualified_node_id,
     recordValue: value => value && typeof value === 'object' ? value : undefined,
-    directDocumentRef: {}, resolvedTurnsRef: { current: new Set() }, hostRequestRef: {},
+    directDocumentRef: { current: graph([id]) }, resolvedTurnsRef: { current: new Set() }, hostRequestRef: {},
     clearActiveRun() { pending = pendingRef.current = undefined; runIDRef.current = undefined; },
     setPending(value) {
       if (deferPending && typeof value === 'function') pendingUpdates.push(value);
@@ -212,6 +213,8 @@ test('actual App pending handler rejects stale lifecycle and turn identities', (
   assert.equal(pending.turnID, 'valid');
   deferPending = true;
   receive({ frame: { type: 'interaction.resolved', runID: 'run', turnID: 'valid' } });
+  assert.equal(bypasses.at(-1).nodeID, id, 'resolved prompts retain their marker until the next paced step');
+  assert.equal(bypasses.at(-1).progressing, false, 'prompt resolution must not manufacture ordinary progress');
   receive({ frame: { type: 'run.event', event: event('started', 2, { invocation: 20 }) } });
   assert.deepEqual(pacedStarts, [id], 'the next live start must be queued even before React commits prompt resolution');
   pacedStarts.length = 0;

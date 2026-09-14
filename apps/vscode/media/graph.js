@@ -35755,6 +35755,12 @@
   function executionViewMode(preference, runStatus) {
     return ["idle", "not-started"].includes(runStatus) ? preference : "all";
   }
+  function ordinaryVisualNodeID(document2, nodeID) {
+    if (!document2) return void 0;
+    const id2 = graphExecutionNodeID(document2, nodeID);
+    const node = document2.nodes.find((node2) => node2.id === id2);
+    return node && node.data.synthetic !== true && node.data.kind !== "session-entry" ? node.id : void 0;
+  }
   function currentExecutionNode(activities, runStatus, graphIDs, reachedID, previousID, pendingID) {
     if (["idle", "not-started", "starting"].includes(runStatus)) return void 0;
     const known = (id2) => id2 && graphIDs.has(id2) ? id2 : void 0;
@@ -39060,7 +39066,7 @@
       previousExecutionRef.current?.scope === executionScope ? previousExecutionRef.current?.nodeID : void 0,
       pending2?.nodeID ?? pending2?.stepID
     );
-    const currentNodeID = visualPlayback && !pending2 && visualStep ? graphExecutionNodeID(document2, visualStep.nodeID) ?? liveCurrentNodeID : liveCurrentNodeID;
+    const currentNodeID = visualPlayback && visualStep ? graphExecutionNodeID(document2, visualStep.nodeID) : isExecutionEnded(runStatus) ? liveCurrentNodeID : void 0;
     (0, import_react15.useLayoutEffect)(() => {
       previousExecutionRef.current = { scope: executionScope, nodeID: liveCurrentNodeID };
     }, [executionScope, liveCurrentNodeID]);
@@ -39159,7 +39165,7 @@
     const resolvedExecutionNodeID = executionNode?.id;
     const executionTerminal = isExecutionEnded(runStatus) && !visualPlayback;
     const executionStatus = executionTerminal ? void 0 : ["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) || pending2?.kind === "debug_break" ? "paused" : pending2 ? "waiting" : void 0;
-    const executionProgressing = !executionTerminal && !pending2 && !["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) && (visualStep ? visualStep.progressing : activities.some((activity) => activity.nodeID === resolvedExecutionNodeID && activity.status === "running"));
+    const executionProgressing = !executionTerminal && !pending2 && !["paused", "paused_at_boundary", "handoff_pending"].includes(runStatus) && visualStep?.progressing === true;
     const executionPosition = (0, import_react15.useMemo)(
       () => ({ nodeID: resolvedExecutionNodeID, terminal: executionTerminal, progressing: executionProgressing, status: executionStatus }),
       [executionTerminal, resolvedExecutionNodeID, executionProgressing, executionStatus]
@@ -40088,7 +40094,10 @@
               progressing: !state.pending && !urgentNode && state.runStatus === "running"
             } : void 0);
           } else {
-            for (const nodeID of message.liveSteps ?? []) pacer.ordinary(nodeID);
+            for (const nodeID of message.liveSteps ?? []) {
+              const canonicalID = ordinaryVisualNodeID(state.document, nodeID);
+              if (canonicalID) pacer.ordinary(canonicalID);
+            }
             if (successful) pacer.complete();
           }
           sessionIDRef.current = state.sessionID;
@@ -40189,7 +40198,8 @@
             if ((frame2.event.kind === "step/started" || frame2.event.kind === "step/resumed") && (!visualOccurrence || !settledVisualOccurrencesRef.current.has(visualOccurrence))) {
               const reachedNodeID = eventNodeID(frame2.event);
               if (reachedNodeID && !runFinishedRef.current) {
-                if (!pendingRef.current) pacer.ordinary(reachedNodeID);
+                const canonicalID = ordinaryVisualNodeID(graph, reachedNodeID);
+                if (!pendingRef.current && canonicalID) pacer.ordinary(canonicalID);
                 setExecutionNodeID(reachedNodeID);
               }
             }
@@ -40225,9 +40235,10 @@
             setExecutionNodeID(frame2.interaction.nodeID ?? frame2.interaction.stepID);
             setRunStatus("waiting");
           } else if (frame2.type === "interaction.resolved") {
-            if (pendingRef.current?.turnID !== frame2.turnID) return;
+            if (!pendingRef.current || pendingRef.current.turnID !== frame2.turnID) return;
             if (runFinishedRef.current || frame2.runID && frame2.runID !== runIDRef.current) return;
-            pacer.bypass();
+            const nodeID = pendingRef.current.nodeID ?? pendingRef.current.stepID;
+            pacer.bypass(nodeID ? { nodeID, progressing: false } : void 0);
             resolvedTurnsRef.current.add(frame2.turnID);
             if (hostRequestRef.current?.turnID === frame2.turnID) hostRequestRef.current = void 0;
             pendingRef.current = void 0;

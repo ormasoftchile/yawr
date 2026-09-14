@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 const { transformSync } = require('esbuild');
-const { currentExecutionNode, executionViewMode, executionViewport, animateExecutionViewport, EXECUTION_PAN_DURATION } = require('../out/executionView');
+const { currentExecutionNode, ordinaryVisualNodeID, executionViewMode, executionViewport, animateExecutionViewport, EXECUTION_PAN_DURATION } = require('../out/executionView');
 const { currentActivities, graphExecutionNodeID } = require('../out/executionProgress');
 const { projectWorkflow } = require('../out/workflowProjection');
 const { sessionGraphTopologyKey } = require('../out/sessionCompositeGraph');
@@ -13,6 +13,39 @@ const ids = new Set(['parent', 'first', 'second', 'third']);
 const active = (nodeID, extra = {}) => ({ nodeID, inGraph: true, container: false, status: 'running', ...extra });
 const cursor = (activities, status = 'running', reached, previous, pending) =>
   currentExecutionNode(activities, status, ids, reached, previous, pending);
+
+test('ordinary playback admits only real canonical graph identities and resolves aliases before queueing', () => {
+  const document = {
+    nodes: [{ id: 'parent', data: { kind: 'parallel' } },
+      { id: 'child', data: { step_id: 'child', group_id: 'lane' } },
+      { id: 'synthetic', data: { synthetic: true } },
+      { id: 'entry', data: { kind: 'session-entry' } }],
+    groups: [{ id: 'lane', kind: 'parallel-branch', parent_node_id: 'parent' }],
+  };
+  for (const identity of ['child', 'parent/child']) assert.equal(ordinaryVisualNodeID(document, identity), 'child');
+  for (const identity of ['runtime-only-wrapper', 'parent/dynamic', 'synthetic', 'entry']) {
+    assert.equal(ordinaryVisualNodeID(document, identity), undefined);
+  }
+  assert.equal(ordinaryVisualNodeID(undefined, 'child'), undefined);
+});
+
+test('actual renderer never falls back to runtime activity for a live current or progress marker', () => {
+  const source = fs.readFileSync(require.resolve('../webview/graph.tsx'), 'utf8');
+  const start = source.indexOf('  const currentNodeID = visualPlayback');
+  const end = source.indexOf('  useLayoutEffect(', start);
+  const resolve = vm.runInNewContext(
+    transformSync(`function resolve(visualPlayback, visualStep, runStatus) {${source.slice(start, end)}return currentNodeID;}\nresolve`, { loader: 'ts' }).code,
+    { document: {}, graphExecutionNodeID: (_document, id) => id === 'known' ? id : undefined,
+      liveCurrentNodeID: 'immediate-runtime', isExecutionEnded: value => value === 'completed' },
+  );
+  assert.equal(resolve(true, { nodeID: 'known' }, 'running'), 'known');
+  assert.equal(resolve(true, { nodeID: 'unknown' }, 'running'), undefined);
+  assert.equal(resolve(false, undefined, 'running'), undefined);
+  assert.equal(resolve(true, { nodeID: 'known' }, 'completed'), 'known');
+  assert.equal(resolve(false, undefined, 'completed'), 'immediate-runtime', 'terminal Last reached remains available');
+  const progress = source.slice(source.indexOf('  const executionProgressing ='), source.indexOf('  const executionPosition ='));
+  assert.doesNotMatch(progress, /activities|runtimeNodes/);
+});
 
 test('current cursor survives completion/start gaps without modifying runtime evidence', () => {
   let previous;

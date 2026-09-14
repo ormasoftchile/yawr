@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.12
+
+- Makes the pacing queue head the sole owner of the graph's Current/progress
+  marker; immediate runtime activity cannot create an early stream and later replay.
+- Resolves graph aliases before queueing and excludes runtime-only wrappers from
+  visual dwell. Inspector evidence and Results processing remain immediate.
+- Adds whole-run source-webview coverage for unmapped wrappers and staggered
+  events, plus installed-VSIX, real-runtime sampling of the actual graph through
+  read-only CDP at 10 ms intervals, including Results and completion backlog.
+
 ## 0.2.11
 
 - Preserves ordered visual playback after successful runtime completion, including

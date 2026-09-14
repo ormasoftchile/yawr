@@ -2,7 +2,7 @@
   "name": "yawr-preview",
   "displayName": "Yawr Runbook Preview",
   "description": "Preview Yawr runbooks (.runbook.yaml) as a structural graph in VS Code.",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "publisher": "ormasoftchile",
   "license": "MIT",
   "repository": {
