@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -34,6 +35,7 @@ const JSZip = require('jszip');
 const vsixPath = process.env.YAWR_VSIX_PATH || join(root, 'yawr-preview.vsix');
 let archiveIdentities = {};
 if (label === 'production-surface' && process.platform === 'win32' && process.arch === 'x64') {
+  console.log(`Installed VSIX SHA256: ${await hashFile(vsixPath)}`);
   const archive = await JSZip.loadAsync(await readFile(vsixPath));
   const helperEntry = archive.file('extension/bin/win32-x64/yawr.exe');
   const fixtureEntry = archive.file('extension/fixtures/file-only-subprocess/win32-x64/fixture.exe');
@@ -61,6 +63,15 @@ const environment = {
   YAWR_EXPECTED_EXTENSION_VERSION: expectedExtensionVersion,
   ...archiveIdentities,
 };
+if (label === 'production-surface') {
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  environment.YAWR_TEST_CDP_PORT = String(server.address().port);
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+}
 
 const transient = (error) => error instanceof BoundedProcessError && (
   error.kind === 'timeout'
@@ -103,7 +114,7 @@ try {
   await writeDiagnosticState({ label });
   if (label === 'download') {
     const vscodeExecutable = await downloadAndUnzipVSCode({
-      version: '1.137.0',
+      version: '1.136.2',
       cachePath: join(root, '.vscode-test'),
     });
     await writeFile(process.env.YAWR_VSCODE_PATH_FILE || vscodePathFile, vscodeExecutable);

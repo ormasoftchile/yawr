@@ -929,7 +929,8 @@ suite('Yawr extension smoke tests', () => {
       assert.strictEqual(resumedState.executionPositionTitle, 'Resume workflow');
 
       const completed = waitForUI(
-        (state) => state.runStatus === 'completed' && state.nodeStatuses['parent-container'] === 'completed',
+        (state) => state.runStatus === 'completed' && state.nodeStatuses['parent-container'] === 'completed' &&
+          state.currentExecutionMarkerCount === 0,
         'direct webview did not complete after the host interaction',
       );
       writeFrame({
@@ -1023,6 +1024,234 @@ suite('Yawr extension smoke tests', () => {
     } finally {
       panel.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
+    }
+  });
+
+  test('execution transitions keep one current marker, fixed geometry and bounded offscreen pans', async function () {
+    this.timeout(60_000);
+    const ext = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(ext);
+    await ext.activate();
+    const workspace = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspace);
+    const uri = vscode.Uri.joinPath(workspace.uri, ...testStatePath, 'execution-transitions.runbook.yaml');
+    const fixtureUri = vscode.Uri.joinPath(workspace.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
+    const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
+    const template = fixture.nodes[0];
+    fixture.inputs = []; fixture.groups = []; fixture.frames = [];
+    fixture.nodes = Array.from({ length: 10 }, (_, index) => ({
+      ...template, id: `step-${index}`, type: 'step',
+      data: { ...template.data, id: `step-${index}`, step_id: `step-${index}`,
+        kind: index === 2 ? 'results' : 'assign', title: `Transition ${index}`, group_id: '', frame_id: '', order: index },
+    }));
+    fixture.edges = fixture.nodes.slice(1).map((node: { id: string }, index: number) => ({
+      id: `edge-${index}`, source: `step-${index}`, target: node.id, type: 'sequence',
+    }));
+    await vscode.workspace.fs.writeFile(uri, Buffer.from('apiVersion: yawr.runbook/v1\nid: execution-transitions\nsteps: []\n'));
+    const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.test.openDirectGraphPanel',
+      uri.fsPath, { documentLoader: async () => fixture });
+    assert.ok(panel);
+    type Viewport = { x: number; y: number; zoom: number };
+    type Visibility = {
+      currentNodeID?: string; currentMarkerCount: number; topExecutionLogCount: number; selectedID?: string;
+      viewport: Viewport; canvas: { width: number; height: number };
+      positions: Array<{ id: string; position: { x: number; y: number }; width: number; height: number }>;
+      nodes: Array<{ id: string; intersects: boolean }>;
+    };
+    type Sample = {
+      currentIDs: string[]; selectedIDs: string[]; progressing: string[]; topLogCount: number; reducedMotion: boolean;
+      viewport: Viewport; canvas: object; positions: Visibility['positions']; at: number;
+      runStatus?: string; resultsState?: string;
+    };
+    const message = <T,>(type: string): Promise<T> => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { subscription.dispose(); reject(new Error(`Missing ${type}`)); }, 10_000);
+      const subscription = panel.webview.onDidReceiveMessage(value => {
+        if (value.type !== type) return;
+        clearTimeout(timer); subscription.dispose(); resolve(value as T);
+      });
+    });
+    const inspect = async () => {
+      const result = message<Visibility>('graph.visibility');
+      await panel.webview.postMessage({ type: 'test.action', action: 'inspect-graph-visibility' });
+      return result;
+    };
+    const settle = async (predicate: (value: Visibility) => boolean) => {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const value = await inspect();
+        if (predicate(value)) return value;
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      throw new Error('Execution view did not settle');
+    };
+    let sequence = 0;
+    const step = (id: string, kind: string) => panel.webview.postMessage({ type: 'run.frame', frame: {
+      type: 'run.event', event: { run_id: 'transition-run', kind: `step/${kind}`, sequence: ++sequence,
+        payload: { qualified_node_id: id, invocation: 1 } },
+    } });
+    const trace = async (transition: () => Promise<unknown>, pacing = false) => {
+      const ready = message('execution.transition-sampling');
+      const result = message<{ samples: Sample[] }>('execution.transition-samples');
+      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition', value: pacing ? 'pacing' : undefined });
+      await ready;
+      await transition();
+      return (await result).samples;
+    };
+    const { publicationDigest }: { publicationDigest(value: unknown): string } =
+      require(path.join(ext.extensionPath, 'out', 'typedResults'));
+    const resultBody = {
+      schema_version: 'yawr.run-results/v1', publication_id: 'transition-run/root/results/1',
+      plan_snapshot_digest: `sha256:${'a'.repeat(64)}`, checkpoint_sequence: 42,
+      origin: { node_id: 'step-2', invocation: 1 },
+      outputs: { retained: { type: 'boolean', value: true } },
+    };
+    const resultsAvailability = { state: 'available', publication: { ...resultBody, digest: publicationDigest(resultBody) } };
+    try {
+      await message('ui.state');
+      await panel.webview.postMessage({ type: 'run.starting' });
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+      await step('step-0', 'started');
+      const started = await settle(value => value.currentNodeID === 'step-0' && value.currentMarkerCount === 1 &&
+        !!value.positions?.find(node => node.id === 'step-0' && node.width > 0));
+      const first = started.positions.find(node => node.id === 'step-0')!;
+      const viewport = { x: started.canvas.width / 2 - first.position.x - first.width / 2,
+        y: 60 - first.position.y, zoom: 1 };
+      await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport', value: JSON.stringify(viewport) });
+      await panel.webview.postMessage({ type: 'test.action', action: 'select-node', name: 'step-0' });
+      await settle(value => value.selectedID === 'step-0' && Math.abs(value.viewport.y - viewport.y) < 0.1);
+      const stable = await trace(async () => {});
+      assert.ok(stable.every(value => value.currentIDs.join() === 'step-0' && value.progressing.join() === 'step-0'));
+      const baseline = stable.at(-1)!;
+      console.log(`Execution transition sampling: reducedMotion=${baseline.reducedMotion}, 30 frames per transition`);
+      const routine = await trace(async () => {
+        await step('step-0', 'completed');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await step('step-1', 'started');
+      });
+      assert.ok(routine.every(value => value.currentIDs.length === 1), 'no frame may transiently lose its current marker');
+      assert.ok(routine.some(value => value.currentIDs[0] === 'step-1'));
+      for (const value of [...stable, ...routine]) {
+        assert.equal(value.topLogCount, 0);
+        assert.deepStrictEqual(value.selectedIDs, ['step-0']);
+        assert.deepStrictEqual(value.canvas, baseline.canvas);
+        assert.deepStrictEqual(value.positions, baseline.positions);
+        assert.deepStrictEqual(value.viewport, baseline.viewport, 'visible advances must not pan or zoom');
+      }
+      const distant = await trace(async () => {
+        await step('step-1', 'completed');
+        await step('step-9', 'started');
+      });
+      assert.ok(distant.every(value => value.currentIDs.length === 1 && value.viewport.zoom === 1));
+      assert.ok(new Set(distant.map(value => Math.round(value.viewport.y))).size > (baseline.reducedMotion ? 1 : 2),
+        `offscreen pan must ${baseline.reducedMotion ? 'reveal the target' : 'have intermediate frames'}: ${
+          JSON.stringify(distant.map(value => ({ ids: value.currentIDs, y: value.viewport.y })))}`);
+      const end = await settle(value => value.currentNodeID === 'step-9' && value.nodes.some(node => node.id === 'step-9' && node.intersects));
+      assert.equal(end.selectedID, 'step-0');
+      assert.equal(end.topExecutionLogCount, 0);
+      await step('step-9', 'completed');
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'completed' } });
+      await settle(value => value.currentMarkerCount === 0);
+      for (const interval of [undefined, 500, 0]) {
+        await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: interval });
+        await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+        await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport',
+          value: JSON.stringify({ x: 100, y: 30, zoom: 0.2 }) });
+        const samples = await trace(async () => {
+          await step('step-0', 'started'); await step('step-0', 'completed');
+          await step('step-1', 'started'); await step('step-1', 'completed');
+          await step('step-2', 'started');
+        }, true);
+        const active = samples.slice(samples.findIndex(value => value.currentIDs.length));
+        assert.ok(active.every(value => value.currentIDs.length === 1 && value.topLogCount === 0));
+        const changes = active.filter((value, index) => index === 0 || value.currentIDs[0] !== active[index - 1].currentIDs[0]);
+        if (interval === 0) {
+          assert.equal(changes.at(-1)?.currentIDs[0], 'step-2');
+          assert.ok(changes.at(-1)!.at - samples[0].at < 150, 'disabled pacing must converge without a timer backlog');
+        } else {
+          assert.deepStrictEqual(changes.map(value => value.currentIDs[0]), ['step-0', 'step-1', 'step-2']);
+          for (let index = 1; index < changes.length; index++) {
+            const duration = changes[index].at - changes[index - 1].at;
+            assert.ok(duration >= (interval ?? 200) - 35, `pacing ${interval ?? 200}ms: observed ${duration}ms (35ms frame/IPC tolerance)`);
+          }
+        }
+        console.log(`Visual pacing ${interval ?? 200}ms: ${changes.map(value => `${value.currentIDs[0]}@${value.at.toFixed(1)}`).join(', ')}`);
+        await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'completed' } });
+        await settle(value => value.currentMarkerCount === 0);
+      }
+      for (const interval of [200, 500]) {
+        await panel.webview.postMessage({ type: 'test.action', action: 'select-node', name: 'step-0' });
+        await panel.webview.postMessage({ type: 'test.action', action: 'set-graph-viewport',
+          value: JSON.stringify({ x: 100, y: 30, zoom: 0.2 }) });
+        const samples = await trace(async () => {
+          await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: interval });
+          await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+          await step('runtime-only-wrapper', 'started');
+          for (const nodeID of ['step-0', 'step-1', 'step-2', 'step-3']) {
+            await new Promise(resolve => setTimeout(resolve, 45));
+            await step(nodeID, 'started');
+            await step(nodeID, 'completed');
+          }
+          await step('runtime-only-wrapper', 'completed');
+          await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.event',
+            event: { kind: 'run/completed', run_id: 'transition-run', sequence: ++sequence } } });
+          await panel.webview.postMessage({ type: 'run.frame', frame: {
+            type: 'run.finished', status: 'completed', resultsAvailability,
+          } });
+          await panel.webview.postMessage({ type: 'run.exit', code: 0, signal: null });
+          await panel.webview.postMessage({ type: 'loading' });
+          await panel.webview.postMessage({ type: 'graph', document: fixture, style: 'smooth-curves', testMode: true });
+        }, true);
+        const first = samples.findIndex(value => value.currentIDs.length > 0);
+        assert.ok(first >= 0, 'completion must not erase the initial current step before paint');
+        const playback = samples.slice(first);
+        const finished = playback.findIndex(value => value.currentIDs.length === 0);
+        assert.ok(finished > 0, 'visual playback must finish after its final dwell');
+        const active = playback.slice(0, finished);
+        assert.ok(active.every(value => value.currentIDs.length === 1), 'no no-current frames inside completed-run playback');
+        const transitions = playback.slice(0, finished + 1).filter((value, index) =>
+          index === 0 || value.currentIDs[0] !== playback[index - 1].currentIDs[0]);
+        assert.deepStrictEqual(transitions.map(value => value.currentIDs[0]),
+          ['step-0', 'step-1', 'step-2', 'step-3', undefined]);
+        for (let index = 1; index < transitions.length; index++) {
+          const elapsed = transitions[index].at - transitions[index - 1].at;
+          assert.ok(elapsed >= interval - 35,
+            `${transitions[index - 1].currentIDs[0]} held ${elapsed}ms after runtime completion, minimum ${interval - 35}ms`);
+        }
+        const internalCompletion = active.find(value => value.runStatus === 'completed' && value.resultsState === 'available');
+        assert.equal(internalCompletion?.currentIDs[0], 'step-0', 'runtime completion and Results must be available while later visuals remain queued');
+        for (const value of active) {
+          assert.deepStrictEqual(value.selectedIDs, ['step-0'], 'automatic Results selection must wait for playback');
+          assert.deepStrictEqual(value.progressing, value.currentIDs, 'the paced current step keeps its progress treatment');
+          assert.deepStrictEqual(value.positions, active[0].positions);
+          assert.deepStrictEqual(value.canvas, active[0].canvas);
+          assert.equal(value.viewport.zoom, 0.2);
+          assert.deepStrictEqual(value.viewport, active[0].viewport, 'on-screen playback must not pan the viewport');
+          assert.equal(value.topLogCount, 0);
+        }
+        assert.ok(playback.slice(finished).every(value => value.currentIDs.length === 0), 'duplicate completion and exit must not replay');
+        await settle(value => value.currentMarkerCount === 0 && value.selectedID === 'step-2');
+        console.log(`Completed-run pacing ${interval}ms: ${transitions.map(value => `${value.currentIDs[0] ?? 'drained'}@${value.at.toFixed(1)}`).join(', ')}`);
+      }
+      await panel.webview.postMessage({ type: 'run.starting', minimumStepDisplayMs: 5000 });
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.started', runID: 'transition-run' } });
+      await step('step-0', 'started'); await step('step-1', 'started');
+      const failureAt = Date.now();
+      await step('step-9', 'failed');
+      await settle(value => value.currentNodeID === 'step-9');
+      assert.ok(Date.now() - failureAt < 500, 'failure must bypass the five-second visual queue');
+      const promptAt = Date.now();
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'interaction.pending', interaction: {
+        runID: 'transition-run', turnID: 'pacing-input', nodeID: 'step-8', stepID: 'step-8', kind: 'choice',
+        prompt: 'Immediate pacing control', options: [{ value: 'continue', label: 'Continue' }],
+      } } });
+      await settle(value => value.currentNodeID === 'step-8');
+      assert.ok(Date.now() - promptAt < 500, 'interaction must bypass the visual queue');
+      const completedAt = Date.now();
+      await panel.webview.postMessage({ type: 'run.frame', frame: { type: 'run.finished', status: 'cancelled' } });
+      await settle(value => value.currentMarkerCount === 0);
+      assert.ok(Date.now() - completedAt < 500, 'runtime completion must not drain the visual queue');
+    } finally {
+      panel.dispose();
+      await vscode.workspace.fs.delete(uri, { useTrash: false });
     }
   });
 

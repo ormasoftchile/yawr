@@ -179,12 +179,23 @@ test('actual App pending handler rejects stale lifecycle and turn identities', (
   const end = source.indexOf("      } else if (message.type === 'run.error')", start);
   const pendingRef = {}, runFinishedRef = { current: false }, runIDRef = { current: 'run' };
   let pending, runStatus = 'running';
+  const pacedStarts = [];
+  const bypasses = [];
+  let deferPending = false;
+  const pendingUpdates = [];
   const noop = () => {};
   const receive = vm.runInNewContext(transformSync(`function receive(message) {${source.slice(start, end)}}\nreceive`, { loader: 'ts' }).code, {
     pendingRef, runFinishedRef, runIDRef, directRunScopeRef: { current: 'run' },
-    directDocumentRef: {}, resolvedTurnsRef: { current: new Set() }, hostRequestRef: {},
+    pacer: { bypass(step) { bypasses.push(step); }, complete() {}, ordinary(nodeID) { pacedStarts.push(nodeID); } },
+    settledVisualOccurrencesRef: { current: new Set() }, ...progress, ...require('../out/executionView'),
+    eventNodeID: event => event.payload?.qualified_node_id,
+    recordValue: value => value && typeof value === 'object' ? value : undefined,
+    directDocumentRef: { current: graph([id]) }, resolvedTurnsRef: { current: new Set() }, hostRequestRef: {},
     clearActiveRun() { pending = pendingRef.current = undefined; runIDRef.current = undefined; },
-    setPending(value) { pending = typeof value === 'function' ? value(pending) : value; },
+    setPending(value) {
+      if (deferPending && typeof value === 'function') pendingUpdates.push(value);
+      else pending = typeof value === 'function' ? value(pending) : value;
+    },
     setRunStatus(value) { runStatus = typeof value === 'function' ? value(runStatus) : value; },
     setExecutionNodeID: noop, setRunID: noop, setRunStarting: noop, setRouteTestRunning: noop,
     setRuntimeNodes: noop, setRouteTestOutcome: noop, setRunError: noop, setResults: noop, ...status,
@@ -194,13 +205,28 @@ test('actual App pending handler rejects stale lifecycle and turn identities', (
   assert.equal(pending, undefined); assert.equal(runStatus, 'running');
   send('run', 'valid');
   assert.equal(pending.turnID, 'valid'); assert.equal(runStatus, 'waiting');
+  receive({ frame: { type: 'run.event', event: event('started', 1, { invocation: 10 }) } });
+  assert.deepEqual(pacedStarts, [], 'concurrent starts cannot displace an actionable prompt');
   send('run', 'different');
   assert.equal(pending.turnID, 'valid');
   receive({ frame: { type: 'interaction.resolved', runID: 'old', turnID: 'valid' } });
   assert.equal(pending.turnID, 'valid');
+  deferPending = true;
   receive({ frame: { type: 'interaction.resolved', runID: 'run', turnID: 'valid' } });
+  assert.equal(bypasses.at(-1).nodeID, id, 'resolved prompts retain their marker until the next paced step');
+  assert.equal(bypasses.at(-1).progressing, false, 'prompt resolution must not manufacture ordinary progress');
+  receive({ frame: { type: 'run.event', event: event('started', 2, { invocation: 20 }) } });
+  assert.deepEqual(pacedStarts, [id], 'the next live start must be queued even before React commits prompt resolution');
+  pacedStarts.length = 0;
+  deferPending = false;
+  for (const update of pendingUpdates) pending = update(pending);
   send('run', 'valid');
   assert.equal(pending, undefined); assert.equal(runStatus, 'running');
+  receive({ frame: { type: 'run.event', event: event('completed', 1) } });
+  receive({ frame: { type: 'run.event', event: event('started', 2) } });
+  assert.deepEqual(pacedStarts, [], 'a late start must not enter the visual pacing queue');
+  receive({ frame: { type: 'run.event', event: event('started', 3, { invocation: 2 }) } });
+  assert.deepEqual(pacedStarts, [id], 'a new invocation remains eligible for pacing');
   receive({ frame: { type: 'run.finished', status: 'indeterminate' } });
   send('run', 'new'); send('old', 'old');
   assert.equal(pending, undefined); assert.equal(runStatus, 'indeterminate');

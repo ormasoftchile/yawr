@@ -75,6 +75,8 @@ type Config struct {
 	// not visible via RunHandle.Events() because the sub-engine has its own
 	// event channel. Callers that need to observe sub-step output (e.g. for
 	// TUI pre-population) should set this.
+	// Like OnEvent, delivery completes before the emitting sub-step returns.
+	// Parallel sub-steps may invoke the callback concurrently.
 	OnSubEvent func(engine.Event)
 }
 
@@ -326,6 +328,7 @@ func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internal
 			ToolRuntime:         toolRuntime,
 			ApprovalGate:        approvalGate,
 			GovernanceEvaluator: internalgovernance.BuildEvaluator(approvalGate),
+			OnEvent:             cfg.OnSubEvent,
 		})
 		handle, err := subEng.Start(ctx, plan, engine.RunOptions{
 			Mode: engine.RunModeReal,
@@ -333,16 +336,6 @@ func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internal
 		})
 		if err != nil {
 			return nil, err
-		}
-		// Forward sub-engine events to the parent's OnSubEvent callback so
-		// callers (e.g. the TUI) can observe step/output events from branch
-		// arm steps that never appear in the parent RunHandle.Events() channel.
-		if cfg.OnSubEvent != nil {
-			go func() {
-				for evt := range handle.Events() {
-					cfg.OnSubEvent(evt)
-				}
-			}()
 		}
 		var results []*engine.StepResult
 		for {

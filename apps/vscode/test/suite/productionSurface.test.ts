@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { copyFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
+import { connectGraphObserver } from './graphPlaybackObserver';
 
 const EXTENSION_ID = 'ormasoftchile.yawr-preview';
 const canonicalWebviewViewType = (viewType: string) => viewType.replace(/^mainThreadWebview-/, '');
@@ -37,7 +38,109 @@ async function directoryEntries(path: string): Promise<string[]> {
 }
 
 suite('Installed VSIX production surface', () => {
+  for (const configuredInterval of [undefined, 500]) test(`one canonical CURRENT stream covers the entire installed runtime run and completion backlog at ${configuredInterval ?? 'default 200'}ms`, async function () {
+    this.timeout(60_000);
+    assert.strictEqual(vscode.version, '1.136.2', 'compatibility requires the actual minimum supported host');
+    const interval = configuredInterval ?? 200;
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    assert.ok(extension.extensionPath.includes(join('extensions', 'ormasoftchile.yawr-preview-')));
+    await extension.activate();
+    const root = process.env.YAWR_TEST_STATE_ROOT;
+    const port = process.env.YAWR_TEST_CDP_PORT;
+    assert.ok(root && port);
+    const runbook = vscode.Uri.file(join(root, 'workspace', 'single-current.runbook.yaml'));
+    await vscode.workspace.fs.writeFile(runbook, Buffer.from(`apiVersion: yawr.runbook/v1
+id: single-current
+name: Single current stream
+bindings:
+  - {name: phase, type: string, mutable: true, value: pending}
+outputs:
+  status: {type: string, value_expr: phase}
+flow:
+  - step:
+      id: get_database_info
+      type: assign
+      assign:
+        - {name: phase, value: observed}
+  - step: {id: container_transition, type: noop}
+  - step: {id: configurations, type: noop}
+  - step:
+      id: final_assertion
+      type: assert
+      assert:
+        - {type: eq, subject: '\${phase}', expected: observed}
+  - step: {id: results, type: results, title: Results}
+`));
+    const config = vscode.workspace.getConfiguration('yawr', runbook);
+    const previous = config.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue;
+    const observer = await connectGraphObserver(port);
+    let panel: vscode.WebviewPanel | undefined;
+    try {
+      await config.update('preview.minimumStepDisplayMs', configuredInterval, vscode.ConfigurationTarget.Workspace);
+      const effectiveConfig = vscode.workspace.getConfiguration('yawr', runbook);
+      assert.equal(effectiveConfig.get<number>('preview.minimumStepDisplayMs'), interval);
+      if (configuredInterval === undefined) {
+        assert.equal(effectiveConfig.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue, undefined);
+        assert.equal(effectiveConfig.inspect<number>('preview.minimumStepDisplayMs')?.defaultValue, 200);
+      }
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(runbook));
+      panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.previewGraph');
+      assert.ok(panel);
+      await observer.waitForGraph();
+      const observation = observer.observe();
+      const execution = (async () => {
+        const result = await vscode.commands.executeCommand<{
+          finished: { status: string; resultsAvailability: { state: string } }; stderr: string;
+        }>('yawr.runCurrentRunbook');
+        const returnedAt = Date.now();
+        return { result, returnedAt };
+      })();
+      const [samples, { result, returnedAt }] = await Promise.all([observation, execution]);
+      const evidenceFile = `single-current-${interval}ms-frames.json`;
+      await writeFile(join(root, evidenceFile), JSON.stringify({
+        vscodeVersion: vscode.version, extensionVersion: extension.packageJSON.version,
+        configuredInterval: configuredInterval ?? null, effectiveInterval: interval, samples, returnedAt,
+      }, null, 2));
+      if (process.env.YAWR_TEST_EVIDENCE_DIR) {
+        await mkdir(process.env.YAWR_TEST_EVIDENCE_DIR, { recursive: true });
+        await copyFile(join(root, evidenceFile), join(process.env.YAWR_TEST_EVIDENCE_DIR, evidenceFile));
+      }
+      assert.equal(result?.finished.status, 'completed', result?.stderr);
+      assert.equal(result?.finished.resultsAvailability.state, 'available');
+      const first = samples.findIndex(sample => sample.ids.length);
+      assert.ok(first >= 0, `the entire run must display ordinary current steps; observed ${JSON.stringify(
+        [...new Set(samples.map(sample => `${sample.documentID}: ${sample.graphTitle}, ${sample.status}, ${sample.visibility}`))],
+      )}`);
+      const playback = samples.slice(first);
+      const final = playback.findIndex(sample => sample.ids.length === 0);
+      assert.ok(final > 0, 'the final dwell must finish');
+      assert.ok(playback.slice(0, final).every(sample => sample.ids.length === 1), 'exactly one current throughout playback');
+      assert.ok(playback.slice(final).every(sample => sample.ids.length === 0), 'no transient deselection followed by replay');
+      const changes = playback.slice(0, final + 1).filter((sample, index) =>
+        index === 0 || sample.ids[0] !== playback[index - 1].ids[0]);
+      assert.deepStrictEqual(changes.map(sample => sample.ids[0]),
+        ['get_database_info', 'container_transition', 'configurations', 'final_assertion', 'results', undefined],
+        'each canonical identity, including Results, must appear once and only in order');
+      for (let index = 1; index < changes.length; index++) {
+        assert.ok(changes[index].at - changes[index - 1].at >= interval - 35,
+          `${changes[index - 1].ids[0]} dwell: ${changes[index].at - changes[index - 1].at}ms`);
+      }
+      for (const sample of playback.slice(0, final)) assert.deepStrictEqual(sample.progress, sample.ids);
+      assert.ok(returnedAt < changes[2].at, 'runtime completion must return while ordinary visuals remain queued');
+      assert.ok(playback.some(sample => sample.ids[0] === 'get_database_info' && sample.status === 'completed' && sample.results === 'available'),
+        'Results availability must not wait for its visual position');
+      console.log(`Installed VS Code ${vscode.version} whole-run CURRENT ${interval}ms: ${changes.map(sample => `${sample.ids[0] ?? 'drained'}@${sample.at.toFixed(1)}`).join(', ')}`);
+    } finally {
+      try { await observer.close(); } finally {
+        panel?.dispose();
+        await config.update('preview.minimumStepDisplayMs', previous, vscode.ConfigurationTarget.Workspace);
+      }
+    }
+  });
+
   test('loads the deployed extension and opens the graph preview fixture', async () => {
+    assert.strictEqual(vscode.version, '1.136.2');
     const stateRoot = process.env.YAWR_TEST_STATE_ROOT;
     assert.ok(stateRoot, 'installed VSIX validation requires YAWR_TEST_STATE_ROOT');
     const stateFile = join(stateRoot, 'diagnostic-state.json');
@@ -72,7 +175,14 @@ suite('Installed VSIX production surface', () => {
     }
 
     const commands = await vscode.commands.getCommands(true);
+    const expectedCommands = ['yawr.insertRequiredArguments', 'yawr.showHighlightingDiagnostics', 'yawr.preview',
+      'yawr.previewGraph', 'yawr.runCurrentRunbook', 'yawr.showServerLog', 'yawr.validateInputs'];
+    for (const command of expectedCommands) assert.ok(commands.includes(command), `Missing registered command: ${command}`);
+    assert.deepStrictEqual(extension.packageJSON.contributes.commands.map((entry: { command: string }) => entry.command).sort(),
+      [...expectedCommands].sort());
+    console.log(`Installed VS Code ${vscode.version}: activation succeeded; all ${expectedCommands.length} YAWR commands registered`);
     await record({
+      vscodeVersion: vscode.version,
       previewGraphCommandPresent: commands.includes('yawr.previewGraph'),
       yawrCommands: commands.filter((command) => command.startsWith('yawr.')).sort(),
     });

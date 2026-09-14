@@ -52,6 +52,13 @@ function graphProgressAliases(document: GraphDocument): Map<string, string> {
   return aliases;
 }
 
+export function graphExecutionNodeID(document: GraphDocument, nodeID: string | undefined): string | undefined {
+  if (!nodeID) return undefined;
+  if (document.nodes.some(node => node.id === nodeID)) return nodeID;
+  for (const [id, alias] of graphProgressAliases(document)) if (alias === nodeID) return id;
+  return undefined;
+}
+
 export function directOccurrenceID(runID: string, nodeID: string, payload: Record<string, unknown>): string {
   const evidence = (value: unknown) => value === undefined ? ['absent'] : ['supplied', value];
   return JSON.stringify([runID, nodeID, ...[

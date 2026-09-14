@@ -11,6 +11,7 @@ import type {
   GraphNode,
 } from './directGraphPreview';
 import type { SessionFrameGroup, SessionProtocolFrame } from './sessionStdioClient';
+import { isSettledStepStatus } from './runStatus';
 
 export interface SessionRecord {
   session_id: string;
@@ -1705,6 +1706,21 @@ function parseRecord<T>(
     result[key] = parsed;
   }
   return result;
+}
+
+export function sessionVisualSteps(group: SessionFrameGroup, runtimeNodes?: Readonly<Record<string, SessionRuntimeNodeState>>): string[] {
+  return group.frames.flatMap(frame => {
+    if (frame.type !== 'run.event' || !frame.segmentID) return [];
+    const event = plainRecord(frame.payload);
+    if (event?.kind !== 'step/started' && event?.kind !== 'step/resumed') return [];
+    const nodeID = runtimeEventNodeID(plainRecord(event.payload) ?? {});
+    if (!nodeID) return [];
+    const id = sessionGraphNodeID(frame.sessionID, frame.segmentID, nodeID);
+    const observed = runtimeNodes?.[id];
+    if (observed && isSettledStepStatus(observed.status) &&
+        !observed.occurrences?.some(occurrence => occurrence.startedEventSequence === event.sequence)) return [];
+    return [id];
+  });
 }
 
 function runtimeEventNodeID(payload: Record<string, unknown>): string | undefined {

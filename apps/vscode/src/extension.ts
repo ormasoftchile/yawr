@@ -43,7 +43,7 @@ import {
   withSessionPackageMap,
   type SessionCommandRequest,
 } from './sessionStdioClient';
-import { SessionGraphModel, type SessionGraphViewState } from './sessionCompositeGraph';
+import { SessionGraphModel, sessionVisualSteps, type SessionGraphViewState } from './sessionCompositeGraph';
 import {
   SESSION_GRAPH_CACHE_SCHEMA,
   SESSION_WORKSPACE_STATE_KEY,
@@ -78,6 +78,7 @@ import {
 import { graphSourceChanged } from './graphSourceChanged';
 import { WORKSPACE_RUNBOOK_KEY, resolveRunbookPath } from './panelRecovery';
 import { affectsSetting, runtimeEnvironment, getSetting } from './identity';
+import { minimumStepDisplayMs } from './visualStepPacer';
 import { resolvePreviewPanelTarget } from './previewPlacement';
 import {
   loadRouteTestArtifacts,
@@ -923,6 +924,12 @@ async function openDirectGraphPanelForRunbook(
   let loadRevision = 0;
   let loadController: AbortController | undefined;
   let currentStyle = getSetting('preview.nodeStyle', resource, 'smooth-curves');
+  const pacingInterval = () => {
+    const configured = getSetting<unknown>('preview.minimumStepDisplayMs', resource, 200);
+    const interval = minimumStepDisplayMs(configured);
+    if (configured !== interval) output?.appendLine(`[yawr preview] Invalid minimumStepDisplayMs; using ${interval}.`);
+    return interval;
+  };
   let currentDocument: GraphDocument | undefined;
   let currentProjectRoot: string | undefined;
   let currentRunbookRelative: string | undefined;
@@ -1007,7 +1014,7 @@ async function openDirectGraphPanelForRunbook(
     };
     checkpointWriter.enqueue({ cache, descriptor });
   };
-  const publishInvestigationState = (state: SessionGraphViewState) => {
+  const publishInvestigationState = (state: SessionGraphViewState, live = false, liveSteps: string[] = []) => {
     const previousDocument = investigationState?.document;
     investigationState = state;
     if (state.document) currentDocument = state.document;
@@ -1016,7 +1023,7 @@ async function openDirectGraphPanelForRunbook(
       const publishedState = state.document && state.document === previousDocument
         ? { ...state, document: undefined }
         : state;
-      void panel.webview.postMessage({ type: 'session.update', state: publishedState, style: currentStyle });
+      void panel.webview.postMessage({ type: 'session.update', state: publishedState, style: currentStyle, live, liveSteps });
     }
   };
   const ensureInvestigationGraph = (
@@ -1103,6 +1110,7 @@ async function openDirectGraphPanelForRunbook(
     investigationModel = model;
     let client: SessionStdioClient;
     let startupConfigurationSent = false;
+    let liveAttachment = false;
     client = new SessionStdioClient(child as RunChildProcess, {
       sessionID: descriptor.sessionID,
       afterSequence,
@@ -1128,7 +1136,8 @@ async function openDirectGraphPanelForRunbook(
             [String(graph.revision)]: investigationGraphs[graph.segmentID],
           };
         }
-        publishInvestigationState(state);
+        publishInvestigationState(state, liveAttachment && !group.handshake, sessionVisualSteps(group, state.runtimeNodes));
+        if (group.handshake) liveAttachment = true;
     if (group.handshake && startupConfiguration && !startupConfigurationSent) {
       startupConfigurationSent = true;
       client.send({
@@ -1269,7 +1278,7 @@ async function openDirectGraphPanelForRunbook(
     investigationState = undefined;
     investigationGraphs = {};
     investigationGraphHistory = {};
-    if (ready && !disposed) void panel.webview.postMessage({ type: 'session.starting', sessionID: descriptor.sessionID });
+    if (ready && !disposed) void panel.webview.postMessage({ type: 'session.starting', sessionID: descriptor.sessionID, minimumStepDisplayMs: pacingInterval() });
     try {
       await spawnInvestigation(
         descriptor,
@@ -1325,7 +1334,7 @@ async function openDirectGraphPanelForRunbook(
       ));
       return;
     }
-    if (ready && !disposed) void panel.webview.postMessage({ type: 'session.reconnecting', sessionID: descriptor.sessionID });
+    if (ready && !disposed) void panel.webview.postMessage({ type: 'session.reconnecting', sessionID: descriptor.sessionID, minimumStepDisplayMs: pacingInterval() });
     try {
       await spawnInvestigation(
         descriptor,
@@ -1450,12 +1459,15 @@ async function openDirectGraphPanelForRunbook(
       if (loadController === controller) {
         loadController = undefined;
         publishReloadState(false);
-        if (productionRun && currentDocument && !productionRunStarted && !productionRunSettled) {
-          productionRunStarted = true;
-          void startRun(productionRun.inputs, undefined);
-        }
+        tryStartProductionRun();
       }
     }
+  };
+  const tryStartProductionRun = () => {
+    if (!productionRun || !ready || !panel.visible || !currentDocument || loadController ||
+        disposed || productionRunStarted || productionRunSettled) return;
+    productionRunStarted = true;
+    void startRun(productionRun.inputs, undefined);
   };
   const requestReload = () => {
     if (runStarting || runSession || investigationClient || investigationDescriptor) {
@@ -1544,7 +1556,7 @@ async function openDirectGraphPanelForRunbook(
     if (reservedRevision === undefined) runStarting = true;
     const startRevision = reservedRevision ?? ++runStartRevision;
     const startupIsActive = () => !disposed && startRevision === runStartRevision;
-    void panel.webview.postMessage({ type: 'run.starting', routeTest: routeTestPath !== undefined });
+    void panel.webview.postMessage({ type: 'run.starting', routeTest: routeTestPath !== undefined, minimumStepDisplayMs: pacingInterval() });
     try {
       await testHooks?.beforeSpawn?.();
       if (!startupIsActive()) return;
@@ -1790,11 +1802,13 @@ async function openDirectGraphPanelForRunbook(
     const candidate = message as Record<string, unknown>;
     if (candidate.type === 'ready') {
       ready = true;
+      void panel.webview.postMessage({ type: 'preview.visibility', visible: panel.visible });
       void panel.webview.postMessage(latestMessage);
       if (investigationState) {
-        void panel.webview.postMessage({ type: 'session.update', state: investigationState, style: currentStyle });
+        void panel.webview.postMessage({ type: 'session.update', state: investigationState, style: currentStyle, minimumStepDisplayMs: pacingInterval() });
       }
       void panel.webview.postMessage({ type: 'graph.reload-state', active: loadController !== undefined });
+      tryStartProductionRun();
       return;
     }
     if (candidate.type === 'session.start') {
@@ -1952,6 +1966,10 @@ async function openDirectGraphPanelForRunbook(
     const packageMap = resolveRunPackageMapPath(projectRoot, configuredMap);
     if (graphSourceChanged(document.fileName, runbookPath, projectRoot, currentDocument, packageMap.path)) requestReload();
   });
+  const visibilitySub = panel.onDidChangeViewState(() => {
+    if (ready && !disposed) void panel.webview.postMessage({ type: 'preview.visibility', visible: panel.visible });
+    tryStartProductionRun();
+  });
   const configSub = vscode.workspace.onDidChangeConfiguration((event) => {
     if (affectsSetting(event, 'packageMap', resource)) requestReload();
     if (affectsSetting(event, 'highlighting.enabled', resource)) {
@@ -1990,6 +2008,7 @@ async function openDirectGraphPanelForRunbook(
     messageSub.dispose();
     saveSub.dispose();
     configSub.dispose();
+    visibilitySub.dispose();
     if (directGraphPanel === panel) {
       directGraphPanel = undefined;
     }

@@ -30,6 +30,72 @@ The inspector becomes a scrollable bottom drawer on narrow editor groups. Declar
 runtime secret values are never added to graph details; sensitive authored keys
 and credential-like flags, assignments, and authorization values are redacted.
 
+## Execution navigation
+
+`yawr.preview.minimumStepDisplayMs` defaults to **200** milliseconds and accepts
+nonnegative integers; **0** disables pacing. It affects editor visualization
+only, never runtime execution, event persistence, tools, or headless clients.
+Each run/session snapshots the setting at start (including reattachment);
+mid-run changes apply to the next run/session.
+
+Ordinary live steps are displayed in event order for at least that interval.
+Only the visual queue head owns the graph's Current marker and progress glow.
+Runtime-only wrappers and dynamic identities absent from the graph remain in
+runtime/inspector evidence, but do not consume graph dwell intervals or redirect
+the marker to live activity. Known graph aliases are canonicalized before queueing.
+Successful runtime completion does not discard queued visuals: playback continues
+through every ordinary step, including Results, and the final step's full interval.
+Runtime status and Results processing/persistence update immediately; automatic
+Results selection waits for playback to finish so it does not move selection mid-step.
+Failure, cancellation (including user cancellation), blocked outcomes and input/debug
+prompts discard queued visual steps immediately. Reconnect applies historical snapshots
+directly until the attachment handshake; only later live starts are paced.
+Hiding cancels timers and showing converges to the latest cursor (or completed
+state); disposing or replacing the graph invalidates pending callbacks. Refreshing
+the same graph and normal process exit do not interrupt successful playback.
+
+Reduced motion changes the glow/pan animation, **not** the visibility interval.
+Fake-clock tests enforce exact deadlines. Frame-sampled webview tests allow
+35 ms of observation tolerance for frame/IPC scheduling at 200 and 500 ms;
+this is a measurement tolerance, not time subtracted from the configured delay.
+Installed-VSIX validation also observes the actual graph with a 10 ms sampler
+and direct DOM-change records, avoiding misleading dwell measurements when the
+browser throttles timers. It covers entire real-runtime runs at the default
+200 ms and configured 500 ms, using production commands and a read-only
+CDP observer in an isolated editor profile, with no keyboard/mouse input, and
+checks uniqueness, canonical order, every dwell and immediate Results availability.
+
+One green **Current** marker tracks execution independently of the yellow user
+selection. It remains on the last reached step between runtime events, without
+changing that step's completed/failed status, and becomes **Last reached** when
+successful playback finishes (or immediately on unsuccessful termination).
+Concurrent lanes retain their individual statuses; a new lane does
+not steal the current marker from an active leaf. Input requests take priority.
+A restrained, non-resizing glow indicates work in progress and respects reduced
+motion preferences.
+
+Execution temporarily shows all technical steps, including after completion,
+so status updates cannot repeatedly collapse/expand groups and move the graph.
+Reset restores the saved workflow-view preference. Routine advances preserve
+selection and zoom; an offscreen current node receives only the minimum smooth
+pan needed to reveal it. Explicit Locate, route-view and Fit controls still work.
+
+There is no execution-log strip above the graph. **Execution activity** in the
+inspector retains runtime paths, concurrent lanes, timing and Locate controls.
+Per-step Run tabs retain output, errors, evidence and occurrence history; run
+diagnostics remain in the overview and **Yawr: Show Run Log**. A runtime child
+absent from the loaded graph remains identified by its exact path in activity
+details, never by a fabricated child node.
+
+YAWR tests cover cursor boundaries, parallel lanes, aliases, waiting/paused and
+terminal rendering, fixed technical topology, animation timing/cancellation, and
+frame-sampled VS Code webview transitions. Installed-editor review still needs
+to check perceived animation quality across themes/styles, manual pan/zoom or
+editor-group resizing during an advance, and hidden-tab reactivation during
+dynamic session graph loading. A missing runtime child graph cannot be visually
+qualified as an exact child node; its available container and activity path are
+the honest navigation surfaces.
+
 ## Host-action protocol
 
 The bundled webview may request the `xts.open-view` host capability, which requires
@@ -158,7 +224,9 @@ Native authoring remains exactly **EXTERNALLY GATED — NOT RUN — NOT PASSED**
 
 ## Prerequisites
 
-- VS Code 1.137 or newer. CI exercises the minimum with VS Code 1.137.0.
+- VS Code 1.136.2 or newer. Source-host and installed-VSIX tests run on
+  VS Code 1.136.2, including activation, all seven commands, graph rendering,
+  zero-input execution, the bundled helper, Results, and 200/500 ms pacing.
 - Node.js 20 or newer, including `npm`.
 - Go 1.25 or newer to build the monorepo Yawr CLI.
 

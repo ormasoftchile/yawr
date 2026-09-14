@@ -20,7 +20,9 @@ export function CurrentActivity({ activities, runStatus, remaining, onLocate, lo
     : ['paused', 'paused_at_boundary', 'handoff_pending'].includes(runStatus) ? 'Paused — waiting for a resume command.'
     : runStatus === 'starting' ? 'Starting — waiting for the first step event.'
     : 'Waiting for runtime activity — no active step reported.';
-  return <section className="execution-position-strip current-activity" aria-label="Current activity">
+  return <details className="current-activity">
+    <summary>Execution activity ({activities.length})</summary>
+    <section aria-label="Current activity">
     <div>
       <span>Current activity</span>
       <strong role="status">{activities.length
@@ -48,5 +50,6 @@ export function CurrentActivity({ activities, runStatus, remaining, onLocate, lo
       {activities.length > 4 ? <small>+{activities.length - 4} other active runtime locations</small> : null}
       {locationNotice ? <p role="status">{locationNotice}</p> : null}
     </div>
-  </section>;
+    </section>
+  </details>;
 }

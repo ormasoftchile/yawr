@@ -24,8 +24,10 @@ test('VS Code test configuration exposes source and production-surface labels', 
 
   assert.match(config, /label:\s*['"]source['"]/);
   assert.match(config, /label:\s*['"]production-surface['"]/);
-  assert.equal((config.match(/version:\s*['"]1\.137\.0['"]/g) || []).length, 2);
-  assert.equal(manifest.engines.vscode, '^1.137.0');
+  assert.equal((config.match(/version:\s*['"]1\.136\.2['"]/g) || []).length, 2);
+  assert.equal(manifest.engines.vscode, '^1.136.2');
+  const harness = JSON.parse(fs.readFileSync(path.join(root, 'test', 'vsix-harness', 'package.json'), 'utf8'));
+  assert.equal(harness.engines.vscode, manifest.engines.vscode);
   assert.match(manifest.scripts.test, /extension-lifecycle\.mjs unit test\/\*\.test\.js/);
   assert.match(manifest.scripts['test:e2e'], /extension-lifecycle\.mjs source/);
   assert.match(manifest.scripts['test:e2e:vsix'], /extension-lifecycle\.mjs installed/);
@@ -52,6 +54,7 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(bounded, /taskkill\.exe/);
   assert.match(bounded, /process\.kill\(-pid, 'SIGKILL'\)/);
   const runner = fs.readFileSync(path.join(root, 'scripts', 'run-vscode-test.mjs'), 'utf8');
+  assert.match(runner, /version:\s*['"]1\.136\.2['"]/);
   assert.match(runner, /preserveFailureEvidence\(runRoot,\s*\{\s*failure,\s*repositoryRoot\s*\}\)/);
   assert.match(runner, /failure evidence artifact: \$\{evidence\.artifactId\}/);
   assert.match(runner, /installedExtensionDirectory/);
