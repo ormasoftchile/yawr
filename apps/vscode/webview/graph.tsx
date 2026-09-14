@@ -2146,7 +2146,8 @@ function GraphView({
         const viewport = executionViewport(flow.getViewport(), canvas.getBoundingClientRect(), target.getBoundingClientRect());
         if (viewport) stopExecutionPanRef.current = animateExecutionViewport(
           flow.getViewport(), viewport, value => { void flow.setViewport(value, { duration: 0 }); },
-          { now: () => performance.now(), requestFrame: requestAnimationFrame, cancelFrame: cancelAnimationFrame },
+          { now: () => performance.now(), requestFrame: callback => window.requestAnimationFrame(callback),
+            cancelFrame: frame => window.cancelAnimationFrame(frame) },
           window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       });
     };

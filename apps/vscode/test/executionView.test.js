@@ -174,6 +174,32 @@ function animationClock() {
   };
 }
 
+test('the actual webview animation adapter preserves the browser Window receiver', () => {
+  const source = fs.readFileSync(require.resolve('../webview/graph.tsx'), 'utf8');
+  const start = source.indexOf('{ now: () => performance.now(), requestFrame:');
+  const end = source.indexOf('},', start) + 1;
+  assert.ok(start >= 0 && end > start);
+  const browser = {
+    requestAnimationFrame(callback) {
+      if (this !== browser) throw new TypeError('Illegal invocation');
+      callback(20);
+      return 7;
+    },
+    cancelAnimationFrame(frame) {
+      if (this !== browser) throw new TypeError('Illegal invocation');
+      assert.equal(frame, 7);
+    },
+  };
+  const clock = vm.runInNewContext(`(${source.slice(start, end)})`, {
+    window: browser, requestAnimationFrame: browser.requestAnimationFrame,
+    cancelAnimationFrame: browser.cancelAnimationFrame, performance: { now: () => 0 },
+  });
+  let sampled;
+  const frame = clock.requestFrame(time => { sampled = time; });
+  assert.equal(sampled, 20);
+  clock.cancelFrame(frame);
+});
+
 test('animated pan has smooth monotonic intermediate frames, constant zoom and an exact bounded endpoint', () => {
   const clock = animationClock(), frames = [];
   const to = { x: 80, y: -1600, zoom: viewport.zoom };

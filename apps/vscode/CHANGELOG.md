@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.14
+
+- Fixes animated viewport callbacks losing their browser `Window` receiver;
+  non-reduced-motion offscreen pans now schedule and cancel correctly.
+- Makes installed-graph observation follow nested out-of-process webview frames,
+  with regression coverage for missing CURRENT samples after a prior run.
+- Preserves the accepted pacing queue, urgent bypasses, runtime, and VS Code
+  1.136.2 compatibility. Pacing acceptance assertions remain unchanged.
+
 ## 0.2.13
 
 - Corrects the VS Code packaging floor to `^1.136.2`; no 1.137-only API dependency

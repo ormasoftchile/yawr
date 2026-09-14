@@ -109,7 +109,9 @@ flow:
       assert.equal(result?.finished.status, 'completed', result?.stderr);
       assert.equal(result?.finished.resultsAvailability.state, 'available');
       const first = samples.findIndex(sample => sample.ids.length);
-      assert.ok(first >= 0, 'the entire run must display ordinary current steps');
+      assert.ok(first >= 0, `the entire run must display ordinary current steps; observed ${JSON.stringify(
+        [...new Set(samples.map(sample => `${sample.documentID}: ${sample.graphTitle}, ${sample.status}, ${sample.visibility}`))],
+      )}`);
       const playback = samples.slice(first);
       const final = playback.findIndex(sample => sample.ids.length === 0);
       assert.ok(final > 0, 'the final dwell must finish');

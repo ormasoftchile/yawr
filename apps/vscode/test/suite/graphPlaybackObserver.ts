@@ -4,6 +4,9 @@ export interface GraphPlaybackSample {
   progress: string[];
   status?: string;
   results?: string;
+  documentID?: string;
+  graphTitle?: string;
+  visibility?: string;
 }
 
 export async function connectGraphObserver(port: string) {
@@ -46,6 +49,7 @@ export async function connectGraphObserver(port: string) {
       const sessionId = message.params.sessionId;
       void send('Runtime.addBinding', { name: binding }, sessionId)
         .then(() => send('Runtime.enable', {}, sessionId))
+        .then(() => send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId))
         .catch(error => { if (!retiredContext(error)) errors.push(error); });
     } else if (message.method === 'Runtime.executionContextCreated' && message.params.context.auxData?.isDefault) {
       const context: { id: number; sessionId?: string; observation?: string } =
@@ -61,7 +65,10 @@ export async function connectGraphObserver(port: string) {
               at: performance.timeOrigin + performance.now(),
               ids: Array.from(document.querySelectorAll('.step-node.execution-current')).map(node => node.closest('[data-id]').dataset.id),
               progress: Array.from(document.querySelectorAll('.step-node.execution-progress')).map(node => node.closest('[data-id]').dataset.id),
-              status: app.dataset.runStatus, results: app.dataset.resultsState
+              status: app.dataset.runStatus, results: app.dataset.resultsState,
+              documentID: ${JSON.stringify(`${context.sessionId ?? 'root'}:${context.id}`)},
+              graphTitle: document.querySelector('.identity strong')?.textContent,
+              visibility: document.visibilityState
             }));
           };
           sample();

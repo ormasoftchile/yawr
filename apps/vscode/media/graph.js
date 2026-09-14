@@ -39501,7 +39501,11 @@
             (value) => {
               void flow.setViewport(value, { duration: 0 });
             },
-            { now: () => performance.now(), requestFrame: requestAnimationFrame, cancelFrame: cancelAnimationFrame },
+            {
+              now: () => performance.now(),
+              requestFrame: (callback) => window.requestAnimationFrame(callback),
+              cancelFrame: (frame3) => window.cancelAnimationFrame(frame3)
+            },
             window.matchMedia("(prefers-reduced-motion: reduce)").matches
           );
         });
