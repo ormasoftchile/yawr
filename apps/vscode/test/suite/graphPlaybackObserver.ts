@@ -19,7 +19,7 @@ export async function connectGraphObserver(port: string) {
   });
   let sequence = 0;
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: NodeJS.Timeout }>();
-  const contexts = new Map<string, { id: number; sessionId?: string; timer?: number }>();
+  const contexts = new Map<string, { id: number; sessionId?: string; observation?: string }>();
   const samples: GraphPlaybackSample[] = [];
   const errors: Error[] = [];
   const binding = '__yawrReadOnlyGraphPlaybackSample';
@@ -48,11 +48,11 @@ export async function connectGraphObserver(port: string) {
         .then(() => send('Runtime.enable', {}, sessionId))
         .catch(error => { if (!retiredContext(error)) errors.push(error); });
     } else if (message.method === 'Runtime.executionContextCreated' && message.params.context.auxData?.isDefault) {
-      const context: { id: number; sessionId?: string; timer?: number } =
+      const context: { id: number; sessionId?: string; observation?: string } =
         { id: message.params.context.id, sessionId: message.sessionId };
       contexts.set(`${context.sessionId ?? ''}:${context.id}`, context);
-      void send<{ result: { value?: number }; exceptionDetails?: unknown }>('Runtime.evaluate', {
-        contextId: context.id, returnByValue: true,
+      void send<{ result: { objectId?: string }; exceptionDetails?: unknown }>('Runtime.evaluate', {
+        contextId: context.id, returnByValue: false,
         expression: `(() => {
           const sample = () => {
             const app = document.querySelector('.app[data-run-status]');
@@ -65,11 +65,16 @@ export async function connectGraphObserver(port: string) {
             }));
           };
           sample();
-          return setInterval(sample, 10);
+          const observer = new MutationObserver(sample);
+          observer.observe(document, {
+            subtree: true, childList: true, attributes: true,
+            attributeFilter: ['class', 'data-run-status', 'data-results-state']
+          });
+          return { timer: setInterval(sample, 10), observer };
         })()`,
       }, context.sessionId).then(result => {
         if (result.exceptionDetails) errors.push(new Error(`Graph observer script failed: ${JSON.stringify(result.exceptionDetails)}`));
-        context.timer = result.result.value;
+        context.observation = result.result.objectId;
       }).catch(error => { if (!retiredContext(error)) errors.push(error); });
     } else if (message.method === 'Runtime.bindingCalled' && message.params.name === binding) {
       samples.push(JSON.parse(message.params.payload));
@@ -98,9 +103,13 @@ export async function connectGraphObserver(port: string) {
     async close() {
       try {
         for (const context of contexts.values()) {
-          if (context.timer === undefined) continue;
+          if (!context.observation) continue;
           try {
-            await send('Runtime.evaluate', { contextId: context.id, expression: `clearInterval(${context.timer})` }, context.sessionId);
+            await send('Runtime.callFunctionOn', {
+              objectId: context.observation,
+              functionDeclaration: 'function() { clearInterval(this.timer); this.observer.disconnect(); }',
+            }, context.sessionId);
+            await send('Runtime.releaseObject', { objectId: context.observation }, context.sessionId);
           } catch (error) {
             if (!(error instanceof Error) || !retiredContext(error)) throw error;
           }

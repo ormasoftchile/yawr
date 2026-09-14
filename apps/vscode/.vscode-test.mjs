@@ -58,7 +58,7 @@ export default defineConfig([
     // extensionDevelopmentPath (the package root). Used by HAB-E2E-02 and all
     // other suite tests that do not require an installed VSIX.
     label: 'source',
-    version: '1.137.0',
+    version: '1.136.2',
     files: [
       'out/test/suite/extension.test.js',
       'out/test/suite/hostActionBridge.test.js',
@@ -92,7 +92,7 @@ export default defineConfig([
     //
     // Run via: vscode-test --label production-surface
     label: 'production-surface',
-    version: '1.137.0',
+    version: '1.136.2',
     files: 'out/test/suite/productionSurface.test.js',
     extensionDevelopmentPath: [vsixHarnessPath],
     workspaceFolder: productionWorkspace,

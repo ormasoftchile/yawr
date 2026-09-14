@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.13
+
+- Corrects the VS Code packaging floor to `^1.136.2`; no 1.137-only API dependency
+  is required. The accepted 0.2.12 pacing implementation and runtime are unchanged.
+- Pins source-host and installed-VSIX validation to the actual VS Code 1.136.2
+  host, verifying activation, all seven commands, graph opening, zero-input runs,
+  the bundled helper, ordered Results, and default 200/configured 500 ms pacing.
+
 ## 0.2.12
 
 - Makes the pacing queue head the sole owner of the graph's Current/progress

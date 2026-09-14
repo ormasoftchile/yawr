@@ -58,8 +58,10 @@ Reduced motion changes the glow/pan animation, **not** the visibility interval.
 Fake-clock tests enforce exact deadlines. Frame-sampled webview tests allow
 35 ms of observation tolerance for frame/IPC scheduling at 200 and 500 ms;
 this is a measurement tolerance, not time subtracted from the configured delay.
-Installed-VSIX validation also samples the actual graph every 10 ms for an
-entire real-runtime run at 500 ms. It uses production commands and a read-only
+Installed-VSIX validation also observes the actual graph with a 10 ms sampler
+and direct DOM-change records, avoiding misleading dwell measurements when the
+browser throttles timers. It covers entire real-runtime runs at the default
+200 ms and configured 500 ms, using production commands and a read-only
 CDP observer in an isolated editor profile, with no keyboard/mouse input, and
 checks uniqueness, canonical order, every dwell and immediate Results availability.
 
@@ -222,7 +224,9 @@ Native authoring remains exactly **EXTERNALLY GATED — NOT RUN — NOT PASSED**
 
 ## Prerequisites
 
-- VS Code 1.137 or newer. CI exercises the minimum with VS Code 1.137.0.
+- VS Code 1.136.2 or newer. Source-host and installed-VSIX tests run on
+  VS Code 1.136.2, including activation, all seven commands, graph rendering,
+  zero-input execution, the bundled helper, Results, and 200/500 ms pacing.
 - Node.js 20 or newer, including `npm`.
 - Go 1.25 or newer to build the monorepo Yawr CLI.
 
