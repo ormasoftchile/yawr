@@ -99,6 +99,14 @@ func (store *typedCheckpointFailure) SaveState(ctx context.Context, state engine
 }
 
 func TestTypedResultsEngineRestartNoDuplicate(t *testing.T) {
+	testTypedResultsEngineRestart(t, false)
+}
+
+func TestTerminalResultsEngineRestartNoDuplicate(t *testing.T) {
+	testTypedResultsEngineRestart(t, true)
+}
+
+func testTypedResultsEngineRestart(t *testing.T, terminal bool) {
 	for _, nested := range []bool{false, true} {
 		for _, point := range []string{"before-results", "after-results", "after-entry", "after-producer"} {
 			t.Run(fmt.Sprintf("nested-%v/%s", nested, point), func(t *testing.T) {
@@ -125,6 +133,19 @@ func TestTypedResultsEngineRestartNoDuplicate(t *testing.T) {
 					plan.Steps = []engine.ResolvedStep{{ID: "child", Kind: "include", Spec: &schema.IncludeSpec{Include: schema.IncludeConfig{Runbook: "child.yaml"},
 						ResolvedRunbookPath: filepath.Join(dir, "child.yaml"), ResolvedSteps: flow, ResolvedBindings: bindings, ResolvedOutputs: outputs}, Capture: map[string]string{"child_result": "outputs.result"}},
 						{ID: "results", Kind: "results", Spec: &schema.ResultsSpec{}}}
+				}
+				if terminal {
+					end := &schema.EndSpec{PublishResults: true, Outcome: &schema.OutcomeDeclaration{Category: "no_action", Code: "unchanged-code"}}
+					if nested {
+						include := plan.Steps[0].Spec.(*schema.IncludeSpec)
+						include.ResolvedSteps[1].Step = &schema.Step{ID: "results", Type: schema.StepTypeEnd, EndSpec: end}
+						tail := schema.FlowNode{Step: &schema.Step{ID: "child_tail", Type: schema.StepTypeCLI, CLI: producer.CLI}}
+						include.ResolvedSteps = []schema.FlowNode{{Step: &schema.Step{ID: "child_branch", Type: schema.StepTypeBranch,
+							BranchSpec: &schema.BranchSpec{Branches: []schema.BranchArm{{Else: true, Steps: append(include.ResolvedSteps, tail)}}},
+						}}, tail}
+					}
+					plan.Steps[1].Kind, plan.Steps[1].Spec = "end", end
+					plan.Steps = append(plan.Steps, engine.ResolvedStep{ID: "tail", Kind: "cli", Spec: producer.CLI})
 				}
 				if err := internalplanner.ValidateExecutionPlan(plan); err != nil {
 					t.Fatal(err)
@@ -363,6 +384,14 @@ func TestTypedResultsEnginePendingCollector(t *testing.T) {
 }
 
 func TestTypedResultsEngineFailureBoundaries(t *testing.T) {
+	testTypedResultsEngineFailureBoundaries(t, false)
+}
+
+func TestTerminalResultsEngineFailureBoundaries(t *testing.T) {
+	testTypedResultsEngineFailureBoundaries(t, true)
+}
+
+func testTypedResultsEngineFailureBoundaries(t *testing.T, terminal bool) {
 	for _, mode := range []string{"immutable-capture", "atomic-assign", "tolerated-assert", "tolerated-child", "optional-type", "protected-result"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx := context.Background()
@@ -376,6 +405,13 @@ func TestTypedResultsEngineFailureBoundaries(t *testing.T) {
 				Bindings: []schema.Binding{{Name: "count", Type: "integer", Mutable: true, Value: 0, ValuePresent: true}},
 				Outputs:  map[string]*schema.Output{"count": {Type: "integer", ValueExpr: "count"}},
 				Steps:    []engine.ResolvedStep{{ID: "results", Kind: "results", Spec: &schema.ResultsSpec{}}},
+			}
+			if terminal {
+				plan.Steps = []engine.ResolvedStep{
+					{ID: "terminal_branch", Kind: "branch", OnError: "continue",
+						Spec: &schema.BranchSpec{Branches: []schema.BranchArm{{Else: true, Steps: terminalResultsFlow("resolved", true)}}}},
+					{ID: "tail_after_failed_publication", Kind: "noop", Spec: &schema.NoopSpec{}},
+				}
 			}
 			switch mode {
 			case "immutable-capture":
@@ -414,6 +450,9 @@ func TestTypedResultsEngineFailureBoundaries(t *testing.T) {
 			state := handle.State()
 			if state.Status != engine.RunStatusFailed || state.Results != nil {
 				t.Fatalf("failure published Results: %s", state.Status)
+			}
+			if terminal && state.StepResults["tail_after_failed_publication"] != nil {
+				t.Fatal("failed terminal publication followed container on_error: continue")
 			}
 			if fmt.Sprint(state.Vars["count"]) != "0" {
 				t.Fatal("failed write mutated binding")

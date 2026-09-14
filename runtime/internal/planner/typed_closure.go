@@ -182,10 +182,16 @@ func ValidateTypedBoundClosure(plan *engine.ExecutionPlan) error {
 					return fmt.Errorf("typed concurrency: iteration %s writes mutable bindings", spec.ID)
 				}
 			}
+			if spec.Concurrency > 1 && schema.HasResults(spec.Steps) {
+				return fmt.Errorf("typed concurrency: iteration %s cannot publish terminal results", spec.ID)
+			}
 			return walkNodes(spec.Steps, names)
 		case *schema.ParallelNode:
 			all := make(map[string]bool)
 			for _, branch := range spec.Branches {
+				if schema.HasResults(branch.Steps) {
+					return fmt.Errorf("typed concurrency: parallel %s cannot publish terminal results", spec.ID)
+				}
 				if len(names) > 0 {
 					set, err := collect(branch.Steps, names)
 					if err != nil {

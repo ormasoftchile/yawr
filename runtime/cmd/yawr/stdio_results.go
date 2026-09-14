@@ -22,6 +22,18 @@ func stdioExecutionError(message string) map[string]any {
 
 func (p *stdioProtocol) sendFinished(frame map[string]any, state engine.RunState) error {
 	frame["version"] = stdioProtocolVersion
+	result := state.StepResults[state.CurrentStep]
+	if state.Results != nil && state.Results.Origin.FrameID == "" {
+		result = state.StepResults[state.Results.Origin.NodeID]
+	}
+	if state.Status == engine.RunStatusCompleted &&
+		result != nil && result.Status == engine.StepStatusCompleted && result.Output["terminal"] == true {
+		for _, name := range []string{"outcome_category", "outcome_code"} {
+			if value, exists := result.Output[name]; exists {
+				frame[name] = value
+			}
+		}
+	}
 	safe, err := p.sanitizeFrame(frame)
 	if err != nil {
 		return err

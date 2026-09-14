@@ -82,6 +82,7 @@ func (e *BranchExecutor) Execute(ctx context.Context, step engine.ResolvedStep, 
 	}
 	mergedVars := map[string]any{}
 	terminal := false
+	terminalResults := false
 	var terminalOutcomeCat, terminalOutcomeCode any
 	for _, res := range results {
 		if res == nil {
@@ -97,6 +98,7 @@ func (e *BranchExecutor) Execute(ctx context.Context, step engine.ResolvedStep, 
 		if res.Output != nil {
 			if t, ok := res.Output["terminal"].(bool); ok && t {
 				terminal = true
+				terminalResults = terminalResults || res.TerminalResults
 				if v, ok := res.Output["outcome_category"]; ok {
 					terminalOutcomeCat = v
 				}
@@ -111,12 +113,21 @@ func (e *BranchExecutor) Execute(ctx context.Context, step engine.ResolvedStep, 
 	status := engine.StepStatusCompleted
 
 	result := newResult(step, status)
+	for _, child := range results {
+		if child != nil {
+			result.RequiredFailure = result.RequiredFailure || child.RequiredFailure ||
+				child.Status == engine.StepStatusFailed || child.Status == engine.StepStatusDenied ||
+				child.Status == engine.StepStatusIndeterminate || child.Status == engine.StepStatusWaiting ||
+				child.Status == engine.StepStatusRunning || child.Status == engine.StepStatusPending
+		}
+	}
 	result.Vars = mergedVars
 	if matched.Label != "" {
 		result.Output["matched_arm"] = matched.Label
 	}
 	result.Output["matched_arm_index"] = matchedArmIndex
 	if terminal {
+		result.TerminalResults = terminalResults
 		result.Output["terminal"] = true
 		if terminalOutcomeCat != nil {
 			result.Output["outcome_category"] = terminalOutcomeCat

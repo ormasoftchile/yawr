@@ -460,7 +460,8 @@ const (
 
 // EndSpec holds the fields for a step of type "end".
 type EndSpec struct {
-	Outcome *OutcomeDeclaration `yaml:"outcome,omitempty" json:"outcome,omitempty"`
+	Outcome        *OutcomeDeclaration `yaml:"outcome,omitempty" json:"outcome,omitempty"`
+	PublishResults bool                `yaml:"publish_results,omitempty" json:"publish_results,omitempty"`
 }
 
 // OutcomeDeclaration declares the terminal outcome of a runbook.

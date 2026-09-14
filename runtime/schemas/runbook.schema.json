@@ -566,6 +566,10 @@
         },
         "outcome": {
           "$ref": "#/$defs/OutcomeDeclaration"
+        },
+        "publish_results": {
+          "type": "boolean",
+          "description": "Opt-in end publication of the declaring runbook's outputs. Outcome category/code support pure GIS string expressions when enabled; nonpublishing end outcomes remain literal."
         }
       }
     },

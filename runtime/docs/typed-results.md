@@ -127,6 +127,116 @@ committed publication, not a later re-evaluation of its variables. There is no
 implicit promotion of child results and no synthetic `probe_results[0]` wrapper.
 Includes pass their defined variable scope; full isolation is deferred.
 
+### Terminal outcomes with Results
+
+An `end` can opt in to publication without replacing or reclassifying its
+outcome:
+
+```yaml
+outputs:
+  result:
+    type: object
+    value_tree: {status: resolved, code: geodr-healthy}
+flow:
+  - step:
+      id: diagnose
+      type: branch
+      branches:
+        - else: true
+          steps:
+            - step:
+                id: healthy
+                type: end
+                publish_results: true
+                outcome: {category: resolved, code: geodr-healthy}
+```
+
+`publish_results` is a Boolean accepted only on `end`; omitted or false retains
+the existing unpublished terminal behavior. All existing domain categories and
+codes are preserved verbatim, including `resolved`, `escalated`, `no_action`,
+and custom categories. Execution failure is separate from the domain category.
+Require `yawr.terminal-results/v1` before using this authoring form:
+
+```powershell
+yawr run --stdio --require-capabilities yawr.terminal-results/v1 `
+  --run-dir <isolated-run-store> <runbook>
+```
+
+The terminal path evaluates the **declaring runbook's** outputs using its final
+variables and publishes one `yawr.run-results/v1` record in the same checkpoint
+as its terminal settlement. Nested branches and sequential iterations carry a
+publication request, never an intermediate record. The record origin identifies
+the declaring invocation's settling operation (the containing branch/iteration
+for a nested end). Neither nested nor top-level workflow tails are dispatched.
+Publication evaluation or validation failure stops that invocation even when
+the containing branch has `on_error: continue`.
+
+Includes still own their declarations: eager, lazy, dynamic and resumed children
+publish only their own outputs. A parent may capture those committed outputs and
+use its own publishing `end`, producing one record per declaring invocation.
+An include gate does not implicitly publish parent outputs or bypass its existing
+capture-suppression behavior. Top-level `results` remains supported, remains
+last, and is unreachable after any `end`; branch-local `results` remains invalid.
+
+#### Forwarding a child's terminal outcome and committed Results
+
+For a publishing `end`, `outcome.category` and `outcome.code` accept bounded,
+pure GIS expressions whose resolved values must be strings. Literal fields
+without interpolation remain exact, including backslashes. Nonpublishing ends
+retain their existing literal-only outcome semantics. An outcome-less end does
+not implicitly inherit an earlier child's outcome.
+
+This parent forwards any child category/code without a list of possible values:
+
+```yaml
+outputs:
+  result: {type: object, value_expr: child_result}
+flow:
+  - step:
+      id: invoke
+      type: include
+      capture: {child_result: outputs.result}
+      include: {runbook: child.runbook.yaml, expand: eager}
+  - step:
+      id: forward
+      type: end
+      publish_results: true
+      outcome:
+        category: '${__run_outcome_category}'
+        code: '${__run_outcome_code}'
+```
+
+The child declares and publishes `outputs.result`, including its status/code.
+The include capture reads that committed value; the parent publishes its own
+declared output and evaluates the forwarded terminal outcome atomically.
+Expressions such as `${child_result.status}` and `${child_result.code}` are also
+supported when those fields are part of the child's declared public contract.
+No recursive interpolation is applied to the returned strings.
+
+Require both `yawr.terminal-results/v1` and `yawr.terminal-outcome-gis/v1`
+from presentation capabilities (or `--require-capabilities`) for this pattern.
+A matching `stop_if` remains an **unpublished parent early return**, before
+captures or this forwarding end. Omit that gate for unconditional forwarding;
+a nonmatching gate permits the normal capture-and-forward path. This deliberately
+does not reinterpret an existing stopping gate as a parent publication request.
+
+`run.finished` includes authoritative `outcome_category` / `outcome_code` when
+present on the completed root terminal step, alongside `results`. These fields
+come from durable step state and survive completed-run resume. They are not
+reconstructed from the bounded `steps[].output` preview, which can omit them.
+Protection still applies; an oversized terminal frame fails transport rather
+than silently truncating an outcome or changing the durable Results record.
+
+As with `results`, publication requires successfully settled required work and
+no pending interactions. Failed, cancelled, denied, indeterminate or incomplete
+execution cannot publish. A pending stdio choice publishes nothing; answering
+and resuming settles the terminal publication once. Recovery reuses the original
+publication ID, digest and checkpoint sequence, including after an ambiguous
+checkpoint write or repeated resume of a completed run. No trace or variable
+preview is reconstructed into a result. The opt-in end forbids retry, delay and
+failure routing; parallel/concurrent terminal publication in a shared invocation
+is rejected at admission.
+
 ### Forwarding with an early-stop gate
 
 An include's `gate.stop_if` tests the child's existing declared outcome after
@@ -178,7 +288,7 @@ the execution failure remains distinct from the domain outcome.
 Failed, denied, indeterminate, unfinished, pending-interaction or tolerated
 required descendant work cannot become a successful complete root publication.
 Domain `no-data` and `boundary` results are valid successful outcomes; an early
-blocked end has no publication. Execution status and Results availability are
+blocked end without `publish_results: true` has no publication. Execution status and Results availability are
 different facts.
 
 Publication shares the engine's existing checkpoint/lease/trace transaction.

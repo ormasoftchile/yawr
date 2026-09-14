@@ -79,9 +79,46 @@ func TypedTreeReferences(value any) ([]string, error) {
 
 func HasResults(nodes []FlowNode) bool {
 	for _, node := range nodes {
-		if node.Step != nil && node.Step.Type == StepTypeResults {
+		if step := node.Step; step != nil {
+			if step.Type == StepTypeResults || PublishesResults(step.EndSpec) ||
+				PublishesResults(step.BranchSpec) || PublishesResults(step.CompensateSpec) {
+				return true
+			}
+		}
+		if PublishesResults(node.Iterate) || PublishesResults(node.Parallel) {
 			return true
 		}
+	}
+	return false
+}
+
+// PublishesResults stays inside the declaring invocation; includes own their outputs.
+func PublishesResults(spec any) bool {
+	switch spec := spec.(type) {
+	case *ResultsSpec:
+		return spec != nil
+	case *EndSpec:
+		return spec != nil && spec.PublishResults
+	case *BranchSpec:
+		if spec != nil {
+			for _, arm := range spec.Branches {
+				if HasResults(arm.Steps) {
+					return true
+				}
+			}
+		}
+	case *IterateNode:
+		return spec != nil && HasResults(spec.Steps)
+	case *ParallelNode:
+		if spec != nil {
+			for _, arm := range spec.Branches {
+				if HasResults(arm.Steps) {
+					return true
+				}
+			}
+		}
+	case *CompensateSpec:
+		return spec != nil && HasResults(spec.Compensate.Steps)
 	}
 	return false
 }
@@ -141,7 +178,7 @@ func ValidateTypedRunbook(rb *Runbook) error {
 		for index, node := range nodes {
 			if node.Step != nil {
 				step := node.Step
-				if step.Type == StepTypeAssign || step.Type == StepTypeResults {
+				if step.Type == StepTypeAssign || step.Type == StepTypeResults || PublishesResults(step.EndSpec) {
 					if step.Retry != nil || step.Delay != "" || step.OnError != "" ||
 						(rb.Defaults != nil && rb.Defaults.RetryMax != 0) {
 						return nil, fmt.Errorf("%s: typed atomic steps forbid retry, delay and failure routing", step.ID)
@@ -149,6 +186,13 @@ func ValidateTypedRunbook(rb *Runbook) error {
 				}
 				if step.Type == StepTypeResults && (nested || index != len(nodes)-1) {
 					return nil, fmt.Errorf("%s: results must be last at runbook top level", step.ID)
+				}
+				if PublishesResults(step.EndSpec) && step.EndSpec.Outcome != nil {
+					for name, value := range map[string]string{"category": step.EndSpec.Outcome.Category, "code": step.EndSpec.Outcome.Code} {
+						if _, err := TypedTreeReferences(value); err != nil {
+							return nil, fmt.Errorf("%s.outcome.%s: %w", step.ID, name, err)
+						}
+					}
 				}
 				for name := range step.Capture {
 					if ReservedBindingName(name) && (len(bindings) > 0 || HasResults(rb.Flow)) {
@@ -197,6 +241,9 @@ func ValidateTypedRunbook(rb *Runbook) error {
 				}
 			}
 			if node.Iterate != nil {
+				if node.Iterate.Concurrency > 1 && HasResults(node.Iterate.Steps) {
+					return nil, fmt.Errorf("%s: concurrent iterations cannot publish terminal results", node.Iterate.ID)
+				}
 				child, err := walk(node.Iterate.Steps, true)
 				if err != nil {
 					return nil, err
@@ -209,6 +256,9 @@ func ValidateTypedRunbook(rb *Runbook) error {
 			if node.Parallel != nil {
 				parallel := make(map[string]bool)
 				for _, branch := range node.Parallel.Branches {
+					if HasResults(branch.Steps) {
+						return nil, fmt.Errorf("%s: parallel branches cannot publish terminal results", node.Parallel.ID)
+					}
 					child, err := walk(branch.Steps, true)
 					if err != nil {
 						return nil, err

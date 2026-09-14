@@ -438,6 +438,9 @@ type IndeterminateRecord struct {
 
 // StepResult is returned by RunHandle.Next after a step completes.
 type StepResult struct {
+	// TerminalResults is a publication request, not a record. Structural frames
+	// carry it to the declaring invocation's atomic terminal checkpoint.
+	TerminalResults bool           `json:"terminal_results,omitempty"`
 	PublicOutputs   map[string]any `json:"public_outputs,omitempty"`
 	Results         *RunResults    `json:"results,omitempty"`
 	RequiredFailure bool           `json:"required_failure,omitempty"`

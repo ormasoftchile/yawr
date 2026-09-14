@@ -3,7 +3,7 @@ package presentation
 import toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 
 func TypedResultsCapabilities() any {
-	capabilities := []string{"yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1"}
+	capabilities := []string{"yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1"}
 	if toolpkg.FileOnlySubprocessAvailable() {
 		capabilities = append(capabilities, "yawr.file-only-subprocess/v1")
 	}

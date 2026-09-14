@@ -97,7 +97,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 	if *requiredCapabilities != "" {
 		for _, capability := range strings.Split(*requiredCapabilities, ",") {
 			switch capability {
-			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1":
+			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1":
 			case "yawr.file-only-subprocess/v1":
 				if !toolpkg.FileOnlySubprocessAvailable() {
 					fmt.Fprintln(os.Stderr, "run: unsupported-capability:", capability)

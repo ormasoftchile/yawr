@@ -1735,8 +1735,15 @@ func (h *runHandle) settleStep(ctx context.Context, step enginepkg.ResolvedStep,
 		}
 	}
 	_, childFrame := enginepkg.ExecutionFrameBindingFromContext(ctx)
+	if !childFrame {
+		if err := materializeTerminalResults(result, h.run.BindingScope, "", h.run.Vars); err != nil {
+			result.Status, result.Outcome, result.Error = enginepkg.StepStatusFailed, enginepkg.StepOutcomeFailed, err
+			result.Results = nil
+		}
+	}
 	if result.Results != nil && !childFrame {
-		if step.Kind != "results" || h.run.CurrentStepIndex != lastTopLevelStep(h.run.Plan) {
+		terminalPublication := result.TerminalResults && isTerminalOutput(result) && schema.PublishesResults(step.Spec)
+		if !terminalPublication && (step.Kind != "results" || h.run.CurrentStepIndex != lastTopLevelStep(h.run.Plan)) {
 			result.Status, result.Outcome, result.Error = enginepkg.StepStatusFailed, enginepkg.StepOutcomeFailed, errors.New("results: publication must be the last top-level operation")
 			result.Results = nil
 		}
@@ -1803,7 +1810,11 @@ func (h *runHandle) settleStep(ctx context.Context, step enginepkg.ResolvedStep,
 			}
 			return h.haltCheckpointCommit(ctx, step.ID, result, err)
 		}
-		switch onError := resolveOnError(step); {
+		onError := resolveOnError(step)
+		if result.TerminalResults {
+			onError = "stop"
+		}
+		switch {
 		case onError == "continue":
 			h.run.Vars["__error_message"] = errStr
 			h.run.Vars["__error_step_id"] = step.ID
@@ -1839,7 +1850,7 @@ func (h *runHandle) settleStep(ctx context.Context, step enginepkg.ResolvedStep,
 	}
 	terminalRun := settledStatus == enginepkg.StepStatusCompleted && (isTerminalOutput(result) || step.Kind == "results" && result.Results != nil)
 	if terminalRun {
-		if validator := h.engine.cfg.TransitionValidator; validator != nil && !(step.Kind == "results" && result.Results != nil) {
+		if validator := h.engine.cfg.TransitionValidator; validator != nil && result.Results == nil {
 			if err := validator.ValidateCompletion(ctx); err != nil {
 				return h.failRun(ctx, step.ID, err)
 			}
@@ -2660,6 +2671,10 @@ func (h *runHandle) CommitExecutionFrameStep(
 	nextFrames := cloneExecutionFrameStateMap(previousFrames)
 	frame := nextFrames[commit.FrameID]
 	committedResult, dispatchIndeterminate := h.frameDispatchResult(ctx, commit.FrameID, commit.StepIndex, commit.Result)
+	if err := materializeTerminalResults(committedResult, frame.BindingScope, frame.FrameID, commit.WorkingVars); err != nil {
+		committedResult.Status, committedResult.Outcome, committedResult.Error = enginepkg.StepStatusFailed, enginepkg.StepOutcomeFailed, err
+		committedResult.Results = nil
+	}
 	if committedResult.Results != nil {
 		if err := h.preparePublication(ctx, committedResult, frame); err != nil {
 			committedResult.Status, committedResult.Outcome, committedResult.Error = enginepkg.StepStatusFailed, enginepkg.StepOutcomeFailed, err

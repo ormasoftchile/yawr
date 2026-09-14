@@ -75,6 +75,7 @@ type runStateSnapshotV1 struct {
 }
 
 type stepResultSnapshotV2 struct {
+	TerminalResults bool                         `json:"TerminalResults,omitempty"`
 	PublicOutputs   map[string]storedJSONValueV1 `json:"PublicOutputs,omitempty"`
 	ResultsID       string                       `json:"ResultsID,omitempty"`
 	RequiredFailure bool                         `json:"RequiredFailure,omitempty"`
@@ -1417,7 +1418,8 @@ func (s *DirRunStore) snapshotStepResultsV2(runID string, results map[string]*en
 		}
 		snapshots[stepID] = &stepResultSnapshotV2{
 			PublicOutputs: public, ResultsID: publicationID(result.Results), RequiredFailure: result.RequiredFailure,
-			StepID: result.StepID, Status: result.Status, Outcome: result.Outcome,
+			TerminalResults: result.TerminalResults,
+			StepID:          result.StepID, Status: result.Status, Outcome: result.Outcome,
 			Output: output, Vars: vars, StartedAt: result.StartedAt,
 			CompletedAt: result.CompletedAt, DurationMs: result.DurationMs, Error: errorText,
 			Evidence: result.Evidence, Indeterminate: result.Indeterminate,
@@ -1603,6 +1605,7 @@ func (loader *stateValueLoader) restoreStepResults(snapshots map[string]*stepRes
 		}
 		result := &engine.StepResult{
 			RequiredFailure: snapshot.RequiredFailure,
+			TerminalResults: snapshot.TerminalResults,
 			StepID:          snapshot.StepID, Status: snapshot.Status, Outcome: snapshot.Outcome,
 			Output: output, Vars: vars, StartedAt: snapshot.StartedAt,
 			CompletedAt: snapshot.CompletedAt, DurationMs: snapshot.DurationMs,

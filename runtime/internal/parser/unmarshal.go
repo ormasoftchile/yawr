@@ -164,6 +164,13 @@ func parseStep(node *yaml.Node) (*schema.Step, error) {
 	if err := node.Decode(&raw); err != nil {
 		return nil, fmt.Errorf("step common fields: %w", err)
 	}
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		if node.Content[index].Value == "publish_results" {
+			if raw.Type != schema.StepTypeEnd || node.Content[index+1].Tag != "!!bool" {
+				return nil, fmt.Errorf("step %q: publish_results requires an end step and a boolean", raw.ID)
+			}
+		}
+	}
 	if raw.Type == schema.StepTypeAssign || raw.Type == schema.StepTypeResults {
 		for index := 0; index+1 < len(node.Content); index += 2 {
 			name := node.Content[index].Value

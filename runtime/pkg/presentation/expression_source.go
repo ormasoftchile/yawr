@@ -213,6 +213,10 @@ func (v *expressionSourceVisitor) step(n *yaml.Node, path string) {
 	v.field(n, path, "when", ExpressionGXL, true)
 	kind := stringValue(mapValue(n, "type"))
 	switch kind {
+	case "end":
+		if publish := mapValue(n, "publish_results"); v.typed && publish != nil && publish.Tag == "!!bool" && publish.Value == "true" {
+			v.gis(mapValue(n, "outcome"), path+"/outcome", "category", "code")
+		}
 	case "assign":
 		if v.typed {
 			eachSource(mapValue(n, "assign"), path+"/assign", func(write *yaml.Node, p string) {

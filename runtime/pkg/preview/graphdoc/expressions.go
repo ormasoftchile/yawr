@@ -115,6 +115,11 @@ func (d *StepDetails) ProjectExpressions() {
 		}
 	}
 	switch d.Kind {
+	case "end":
+		if d.PublishResults {
+			gis("/category", d.Category)
+			gis("/code", d.Code)
+		}
 	case "assign":
 		for i, write := range d.Assign {
 			leaves(fmt.Sprintf("/assign/%d/value", i), write.Value, 0)

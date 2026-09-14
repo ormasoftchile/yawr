@@ -84,6 +84,7 @@ func (e *IterateExecutor) executeSequential(ctx context.Context, step engine.Res
 	iterations := 0
 	status := engine.StepStatusCompleted
 	terminal := false
+	terminalResults := false
 	var terminalOutcomeCat, terminalOutcomeCode any
 	emit := EmitterFromContext(ctx)
 	total := len(items)
@@ -139,6 +140,7 @@ func (e *IterateExecutor) executeSequential(ctx context.Context, step engine.Res
 			}
 			if res.Output != nil {
 				if t, ok := res.Output["terminal"].(bool); ok && t {
+					terminalResults = terminalResults || res.TerminalResults
 					iterTerminal = true
 					if v, ok := res.Output["outcome_category"]; ok {
 						iterOutcomeCat = v
@@ -218,6 +220,7 @@ func (e *IterateExecutor) executeSequential(ctx context.Context, step engine.Res
 		result.Vars[k] = v
 	}
 	if terminal {
+		result.TerminalResults = terminalResults
 		result.Output["terminal"] = true
 		if terminalOutcomeCat != nil {
 			result.Output["outcome_category"] = terminalOutcomeCat

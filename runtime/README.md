@@ -44,6 +44,11 @@ network-denied, single-process, environment-scrubbed, and fail-closed. See
 
 ## CLI
 
+Terminal `end` steps can opt in to durable named Results with
+`publish_results: true`, preserving the exact outcome category/code through
+nested branches and includes. See [typed Results](docs/typed-results.md#terminal-outcomes-with-results)
+for declaration scope, recovery, and the `yawr.terminal-results/v1` capability.
+
 ```
 yawr run <runbook.yaml>         Execute a runbook
 yawr run --stdio <runbook.yaml> Execute with JSON-lines events and interactions

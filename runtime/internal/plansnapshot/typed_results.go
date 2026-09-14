@@ -40,6 +40,9 @@ func typedJSONMetadata(value any) bool {
 	switch current := value.(type) {
 	case map[string]any:
 		for name, value := range current {
+			if name == "publish_results" && value == true {
+				return true
+			}
 			switch name {
 			case "value", "args", "default", "collect_values", "request", "with", "vars", "Vars", "enum", "metadata":
 				continue

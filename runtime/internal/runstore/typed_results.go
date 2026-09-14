@@ -7,7 +7,6 @@ import (
 
 	"github.com/ormasoftchile/yawr/runtime/internal/executor"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
-	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 )
 
 const runStateSchemaV3 = "run-state/v3"
@@ -175,7 +174,7 @@ func validateTypedPublications(state engine.RunState) error {
 			}
 		} else if record.Origin.FrameID != frame.FrameID || record.Origin.Invocation != frame.Invocation ||
 			frame.Status != engine.ExecutionFrameStatusCompleted || frame.StepCount < 1 || len(frame.StepIDs) != frame.StepCount ||
-			frame.NextStepIndex != frame.StepCount || record.Origin.NodeID != engine.DebugNodeID(frame.CallPath, frame.StepIDs[frame.StepCount-1]) {
+			frame.NextStepIndex != frame.StepCount || !validFramePublicationOrigin(frame, record) {
 			return fmt.Errorf("runstore: frame publication origin/cursor mismatch")
 		}
 		for name, output := range record.Outputs {
@@ -224,7 +223,7 @@ func hasTypedReferences(snapshot runStateSnapshotV1) bool {
 		return true
 	}
 	for _, result := range snapshot.DurableStepResults {
-		if result != nil && (result.ResultsID != "" || result.PublicOutputs != nil || result.RequiredFailure) {
+		if result != nil && (result.ResultsID != "" || result.PublicOutputs != nil || result.RequiredFailure || result.TerminalResults) {
 			return true
 		}
 	}
@@ -236,7 +235,7 @@ func hasTypedReferences(snapshot runStateSnapshotV1) bool {
 			return true
 		}
 		for _, result := range frame.DurableResults {
-			if result != nil && (result.ResultsID != "" || result.PublicOutputs != nil || result.RequiredFailure) {
+			if result != nil && (result.ResultsID != "" || result.PublicOutputs != nil || result.RequiredFailure || result.TerminalResults) {
 				return true
 			}
 		}
@@ -258,21 +257,27 @@ func hasTypedReferences(snapshot runStateSnapshotV1) bool {
 }
 
 func validateTypedPlanOrigin(state engine.RunState, plan *engine.ExecutionPlan) error {
-	invocation := &schema.RunbookInvocation{Bindings: plan.Bindings, Outputs: plan.Outputs}
-	last := -1
-	for index, step := range plan.Steps {
-		if step.Depth == 0 {
-			last = index
-			invocation.Results = invocation.Results || step.Kind == "results"
-		}
-	}
+	invocation := engine.ResultsInvocation(plan)
 	if state.BindingScope != nil && (state.BindingScope.FrameID != "" ||
 		state.BindingScope.DeclarationDigest != engine.InvocationDigest(invocation)) {
 		return fmt.Errorf("runstore: root initialized declaration differs from frozen plan")
 	}
-	if state.Results != nil && (last < 0 || plan.Steps[last].Kind != "results" ||
-		state.Results.Origin.NodeID != engine.DebugNodeID(nil, plan.Steps[last].ID)) {
+	if !engine.ValidRootPublicationOrigin(plan, state) {
 		return fmt.Errorf("runstore: root result origin differs from frozen plan")
 	}
+
 	return validateFrameDeclarations(state, plan)
+}
+
+func validFramePublicationOrigin(frame *engine.ExecutionFrameState, record *engine.RunResults) bool {
+	for _, result := range frame.Results {
+		if result == nil || result.Results == nil || result.Results.Digest != record.Digest ||
+			result.Status != engine.StepStatusCompleted ||
+			record.Origin.NodeID != engine.DebugNodeID(frame.CallPath, result.StepID) {
+			continue
+		}
+		terminal, _ := result.Output["terminal"].(bool)
+		return result.StepID == frame.StepIDs[frame.StepCount-1] || terminal && result.TerminalResults
+	}
+	return false
 }

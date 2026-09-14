@@ -66,6 +66,7 @@ type StepDetails struct {
 	Content                string                               `json:"content,omitempty"`
 	Format                 string                               `json:"format,omitempty"`
 	Category               string                               `json:"category,omitempty"`
+	PublishResults         bool                                 `json:"publish_results,omitempty"`
 	Code                   string                               `json:"code,omitempty"`
 	On                     string                               `json:"on,omitempty"`
 	Steps                  int                                  `json:"steps,omitempty"`
@@ -357,9 +358,12 @@ func detailsForStep(step *schema.Step) *StepDetails {
 			details.Format = spec.Display.Format
 		}
 	case schema.StepTypeEnd:
-		if spec := step.EndSpec; spec != nil && spec.Outcome != nil {
-			details.Category = spec.Outcome.Category
-			details.Code = spec.Outcome.Code
+		if spec := step.EndSpec; spec != nil {
+			details.PublishResults = spec.PublishResults
+			if spec.Outcome != nil {
+				details.Category = spec.Outcome.Category
+				details.Code = spec.Outcome.Code
+			}
 		}
 	case schema.StepTypeCompensate:
 		if spec := step.CompensateSpec; spec != nil {

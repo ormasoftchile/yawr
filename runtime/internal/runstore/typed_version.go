@@ -24,7 +24,7 @@ func validateOldTypedEnvelope(data []byte) error {
 			return err
 		}
 		for _, step := range steps {
-			for _, key := range []string{"ResultsID", "PublicOutputs", "RequiredFailure"} {
+			for _, key := range []string{"ResultsID", "PublicOutputs", "RequiredFailure", "TerminalResults"} {
 				if _, exists := step[key]; exists {
 					return fmt.Errorf("runstore: typed step fields require run-state/v3")
 				}

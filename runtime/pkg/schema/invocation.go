@@ -10,13 +10,7 @@ type RunbookInvocation struct {
 }
 
 func InvocationForRunbook(bindings []Binding, outputs map[string]*Output, flow []FlowNode) *RunbookInvocation {
-	publishes := false
-	for _, node := range flow {
-		if node.Step != nil && node.Step.Type == StepTypeResults {
-			publishes = true
-		}
-	}
-	return &RunbookInvocation{Bindings: bindings, Outputs: outputs, Results: publishes}
+	return &RunbookInvocation{Bindings: bindings, Outputs: outputs, Results: HasResults(flow)}
 }
 
 func CloneInvocation(invocation *RunbookInvocation) *RunbookInvocation {

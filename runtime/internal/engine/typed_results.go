@@ -14,13 +14,7 @@ import (
 )
 
 func planInvocation(plan *enginepkg.ExecutionPlan) *schema.RunbookInvocation {
-	invocation := &schema.RunbookInvocation{Bindings: plan.Bindings, Outputs: plan.Outputs}
-	for _, step := range plan.Steps {
-		if step.Depth == 0 && step.Kind == "results" {
-			invocation.Results = true
-		}
-
-	}
+	invocation := enginepkg.ResultsInvocation(plan)
 	if len(invocation.Bindings) == 0 && !invocation.Results {
 		return nil
 	}
@@ -82,9 +76,37 @@ func requiredResultFailed(result *enginepkg.StepResult) bool {
 		result.Status == enginepkg.StepStatusPending
 }
 
+func materializeTerminalResults(result *enginepkg.StepResult, scope *enginepkg.BindingScopeState, frameID string, vars map[string]any) error {
+	if !result.TerminalResults || result.Status != enginepkg.StepStatusCompleted || !isTerminalOutput(result) {
+		return nil
+	}
+	if scope == nil || !scope.Initialized || scope.Invocation == nil || !scope.Invocation.Results {
+		return errors.New("results: terminal publication has no initialized declaring invocation")
+	}
+	// A branch/iteration is not an invocation. Its request travels with the
+	// terminal return until the declaring runbook can settle all required work.
+	if scope.FrameID != frameID {
+		return nil
+	}
+	values := cloneAnyMap(vars)
+	for name, value := range result.Vars {
+		values[name] = value
+	}
+	outputs, err := executor.EvaluateNamedOutputs(scope.Invocation.Outputs, values)
+	if err != nil {
+		return err
+	}
+	result.Results = &enginepkg.RunResults{SchemaVersion: enginepkg.RunResultsSchemaV1, Outputs: outputs}
+	return nil
+}
+
 func (h *runHandle) preparePublication(ctx context.Context, result *enginepkg.StepResult, frame *enginepkg.ExecutionFrameState) error {
 	if result.Results == nil {
 		return nil
+	}
+	if requiredResultFailed(result) || h.run.Status == enginepkg.RunStatusCancelled ||
+		h.run.Status == enginepkg.RunStatusFailed || h.run.Status == enginepkg.RunStatusIndeterminate {
+		return errors.New("results: execution is not successfully settled")
 	}
 	if frame == nil && h.engine.cfg.TransitionValidator != nil {
 		if err := h.engine.cfg.TransitionValidator.ValidateCompletion(ctx); err != nil {
@@ -102,7 +124,8 @@ func (h *runHandle) preparePublication(ctx context.Context, result *enginepkg.St
 	if scope == nil || !scope.Initialized || !scope.Invocation.Results {
 		return errors.New("results: declaring invocation is not initialized")
 	}
-	if frame != nil && (scope.FrameID != frame.FrameID || frame.NextStepIndex != frame.StepCount-1) {
+	if frame != nil && (scope.FrameID != frame.FrameID ||
+		(frame.NextStepIndex != frame.StepCount-1 && !(result.TerminalResults && isTerminalOutput(result)))) {
 		return errors.New("results: publication must be the last operation of its own invocation")
 	}
 	for _, settled := range prior {
@@ -111,11 +134,20 @@ func (h *runHandle) preparePublication(ctx context.Context, result *enginepkg.St
 		}
 	}
 	// Descendant failures cannot disappear behind a tolerated container result.
+	parentFrameID := ""
+	if frame != nil {
+		parentFrameID = frame.FrameID
+	}
 	for _, child := range h.run.ExecutionFrames {
 		if frame != nil && !descendsFrom(h.run.ExecutionFrames, child, frame.FrameID) {
 			continue
 		}
-		if child.Status != enginepkg.ExecutionFrameStatusCompleted {
+		// The returning structural frame is closed by this same checkpoint,
+		// after its terminal result and skipped tail have already committed.
+		returning := result.TerminalResults && isTerminalOutput(result) &&
+			child.ParentFrameID == parentFrameID && child.ParentStepID == result.StepID &&
+			child.Status == enginepkg.ExecutionFrameStatusActive && child.NextStepIndex == child.StepCount
+		if child.Status != enginepkg.ExecutionFrameStatusCompleted && !returning {
 			return errors.New("results: required descendant scope is not successfully settled")
 		}
 		for _, settled := range child.Results {
@@ -267,9 +299,7 @@ func validateRestoredTypedState(plan *enginepkg.ExecutionPlan, state enginepkg.R
 		if err := validatePublicationDeclarations(state.Results, state.BindingScope); err != nil {
 			return err
 		}
-		last := lastTopLevelStep(plan)
-		if last < 0 || plan.Steps[last].Kind != "results" ||
-			state.Results.Origin.NodeID != enginepkg.DebugNodeID(nil, plan.Steps[last].ID) ||
+		if !enginepkg.ValidRootPublicationOrigin(plan, state) ||
 			state.Results.Origin.FrameID != "" || state.Results.Origin.Invocation != 1 {
 			return errors.New("root publication origin differs from frozen Results step")
 		}
