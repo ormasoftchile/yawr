@@ -58,12 +58,15 @@ const (
 	// KindExportsTools — an exported runbook is package-internal content
 	// published under a stable identity, never an arbitrary path.
 	KindExportsRunbooks
+	// KindRequiresPackageInternal anchors a package-owned runbook's dependency
+	// path at its declaring file without allowing escape from its owner.
+	KindRequiresPackageInternal
 )
 
 // Class reports the containment class for k.
 func (k Kind) Class() Class {
 	switch k {
-	case KindExportsTools, KindExecutePath, KindToolRefsPathPackageInternal, KindPackageInternalInclude, KindExportsRunbooks:
+	case KindExportsTools, KindExecutePath, KindToolRefsPathPackageInternal, KindPackageInternalInclude, KindExportsRunbooks, KindRequiresPackageInternal:
 		return PackageInternal
 	default:
 		return WorkspaceLevel

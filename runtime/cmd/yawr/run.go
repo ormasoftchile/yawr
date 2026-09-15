@@ -21,16 +21,13 @@ import (
 	internalengine "github.com/ormasoftchile/yawr/runtime/internal/engine"
 	internalexecutor "github.com/ormasoftchile/yawr/runtime/internal/executor"
 	internalparser "github.com/ormasoftchile/yawr/runtime/internal/parser"
-	internalplanner "github.com/ormasoftchile/yawr/runtime/internal/planner"
 	"github.com/ormasoftchile/yawr/runtime/internal/resultsdelivery"
 	internalroutetest "github.com/ormasoftchile/yawr/runtime/internal/routetest"
 	internalserve "github.com/ormasoftchile/yawr/runtime/internal/serve"
 	internaltool "github.com/ormasoftchile/yawr/runtime/internal/tool"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
-	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/expand"
 	"github.com/ormasoftchile/yawr/runtime/pkg/parser"
-	"github.com/ormasoftchile/yawr/runtime/pkg/pkgcatalog"
 	plannerpkg "github.com/ormasoftchile/yawr/runtime/pkg/planner"
 	"github.com/ormasoftchile/yawr/runtime/pkg/platform"
 	"github.com/ormasoftchile/yawr/runtime/pkg/preview/graphdoc"
@@ -98,7 +95,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 	if *requiredCapabilities != "" {
 		for _, capability := range strings.Split(*requiredCapabilities, ",") {
 			switch capability {
-			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1", "yawr.run-graph/v1":
+			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1", "yawr.run-graph/v1", "yawr.lexical-tool-scopes/v1":
 			case "yawr.file-only-subprocess/v1":
 				if !toolpkg.FileOnlySubprocessAvailable() {
 					fmt.Fprintln(os.Stderr, "run: unsupported-capability:", capability)
@@ -216,18 +213,6 @@ func runWithMode(args []string, mode engine.RunMode) int {
 		return exitRuntime
 	}
 
-	registry, err := newToolRegistry(".")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return exitRuntime
-	}
-	plannerImpl := internalplanner.New(plannerpkg.Config{
-		Loader:       &fileRunbookLoader{parser: parserImpl},
-		Tools:        registry,
-		ExpandPolicy: expand.Policy{Default: expandDefault},
-		Profile:      runtimeProfile, // Tier 0 preflight checks (PLAN-010/011/012) read from this.
-	})
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	var interactionBroker *internalserve.PromptBroker
@@ -245,10 +230,14 @@ func runWithMode(args []string, mode engine.RunMode) int {
 	var plan *engine.ExecutionPlan
 	resolverProxy := adapter.NewResolverProxy()
 	pinRecorder := internalexecutor.PinRecorder(func(pin internalexecutor.DynamicIncludePin) {
-		if plan == nil {
+		if plan == nil || plan.ToolScopes != nil {
+			// Scoped pins are committed in RunState.DynamicIncludes; the
+			// immutable executable plan must not be rewritten by an observer.
 			return
 		}
 		plan.Metadata.DynamicIncludes = append(plan.Metadata.DynamicIncludes, schema.LockedDynamicInclude{
+			SchemaVersion:      pin.SchemaVersion,
+			TargetScopeID:      pin.TargetScopeID,
 			StepID:             pin.StepID,
 			QualifiedNodeID:    pin.QualifiedNodeID,
 			Invocation:         pin.Invocation,
@@ -375,14 +364,15 @@ func runWithMode(args []string, mode engine.RunMode) int {
 			}
 		}
 	} else {
-		parsed, parseErr := parserImpl.Parse(ctx, runbookPath)
-		if parseErr != nil {
-			fmt.Fprintln(os.Stderr, parseErr)
+		prepared, provenance, prepareErr := prepareScopedCLI(ctx, parserImpl, runbookPath, *packageMapPath, runtimeProfile)
+		if prepareErr != nil {
+			fmt.Fprintln(os.Stderr, prepareErr)
 			return exitValidation
 		}
+		parsed := prepared.Root
 		var routeGraphHash string
 		if routeScenario != nil {
-			document, hashErr := (&graphdoc.Builder{Loader: &cliLoader{p: parserImpl}, Recurse: true}).Build(ctx, parsed)
+			document, hashErr := (&graphdoc.Builder{Loader: prepared.Loader, Recurse: true}).Build(ctx, parsed)
 			if hashErr != nil {
 				fmt.Fprintln(os.Stderr, hashErr)
 				return exitValidation
@@ -408,201 +398,30 @@ func runWithMode(args []string, mode engine.RunMode) int {
 		for _, w := range parsed.Warnings {
 			fmt.Fprintf(os.Stderr, "yawr: warning: %s: %s\n", w.Field, w.Message)
 		}
+		for _, warning := range prepared.Warnings {
+			fmt.Fprintln(os.Stderr, warning)
+		}
+		builtCatalog := prepared.Catalog
+		plannedRunID = uuid.NewString()
+		var packageOrigin map[string]string
+		if *packageMapPath != "" {
+			packageOrigin = make(map[string]string, len(provenance))
+			for _, origin := range provenance {
+				packageOrigin[origin.Package] = origin.Origin
+				fmt.Fprintf(os.Stderr, "yawr: package %q bound from %s\n", origin.Package, origin.Origin)
+			}
+		}
+		if emitErr := adapter.EmitPackageCatalogTraceEvents(preStart, plannedRunID, builtCatalog, packageOrigin); emitErr != nil {
+			fmt.Fprintln(os.Stderr, emitErr)
+			return exitRuntime
+		}
 		if err := applyInputDefaults(parsed, runVars); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return exitValidation
 		}
-
-		// The include closure's global package
-		// set and per-file lexical tool binding is not implemented in
-		// this revision; fail closed (PKG-017) rather than silently
-		// dynamic-scope an included file's own requires:/toolRefs:
-		// against the root's frozen catalog and registry.
-		if lexErrs := checkIncludeClosureLexicalScoping(ctx, parserImpl, parsed); len(lexErrs) > 0 {
-			for _, e := range lexErrs {
-				fmt.Fprintln(os.Stderr, e)
-			}
-			return exitValidation
-		}
-
-		var builtCatalog *pkgcatalog.Catalog
-
-		// Resolve requires:/toolRefs: against the Tool Packages MVP catalog
-		// (pkg/pkgcatalog) and register the results into both registries.
-		// The project's real .yawr/config.yaml bindings are used unless
-		// --package-map overrides them, so the exact same runbook binds
-		// its real project tools by default and mock/test bindings under
-		// --package-map, with no runbook edits either way.
-		if parsed.Runbook != nil {
-			workspaceRoot, wderr := os.Getwd()
-			if wderr != nil {
-				fmt.Fprintln(os.Stderr, wderr)
-				return exitRuntime
-			}
-			projCfg, cfgErr := loadProjectConfig(workspaceRoot)
-			if cfgErr != nil {
-				fmt.Fprintln(os.Stderr, cfgErr)
-				return exitValidation
-			}
-			var projectRequires []*schema.PackageRequirement
-			var projectToolPaths []string
-			if projCfg != nil {
-				projectRequires = projCfg.Requires
-				projectToolPaths = projCfg.ToolPaths
-			}
-			var overrideRequires []*schema.PackageRequirement
-			var overrideToolPaths []string
-			if *packageMapPath != "" {
-				pmCfg, pmErr := loadPackageMap(*packageMapPath)
-				if pmErr != nil {
-					fmt.Fprintln(os.Stderr, pmErr)
-					return exitValidation
-				}
-				if pmCfg != nil {
-					overrideRequires = pmCfg.Requires
-					overrideToolPaths = pmCfg.ToolPaths
-				}
-			}
-			mergedRequires, provenance := mergePackageBindings(projectRequires, overrideRequires)
-			mergedToolPaths := mergeToolPaths(projectToolPaths, overrideToolPaths)
-
-			catOpts := adapter.PackageCatalogOptions{
-				WorkspaceRoot:    workspaceRoot,
-				Builtins:         internaltool.NewBuiltinRegistry().All(),
-				ProjectRequires:  mergedRequires,
-				ProjectToolPaths: mergedToolPaths,
-			}
-			cat, catErrs := adapter.BuildPackageCatalog(catOpts, runbookPath, parsed.Runbook.Requires)
-			fatalCatErrs, warnCatErrs := errkit.SplitWarnings(catErrs)
-			if len(fatalCatErrs) > 0 {
-				for _, e := range fatalCatErrs {
-					fmt.Fprintln(os.Stderr, e)
-				}
-				return exitValidation
-			}
-			for _, e := range warnCatErrs {
-				fmt.Fprintln(os.Stderr, e)
-			}
-			builtCatalog = cat
-			// Wire the frozen catalog into the dynamic include resolver now
-			// that Phase C is complete. Must happen before eng.Start so the
-			// proxy is ready when the first dynamic include executes.
-			resolverProxy.Set(adapter.NewCatalogIncludeResolver(builtCatalog, parserImpl))
-			// Emit package/resolved (per resolved package) and
-			// catalog/frozen (once) at the actual runtime boundary where
-			// Phase C (catalog construction) completes, before Phase B
-			// (binding) and before the engine's own run/started event —
-			// using the same runID the run is about to Start with and the
-			// same TraceWriter the engine writes every other event to.
-			plannedRunID = uuid.New().String()
-			var packageOrigin map[string]string
-			if *packageMapPath != "" {
-				packageOrigin = make(map[string]string, len(provenance))
-				for _, p := range provenance {
-					packageOrigin[p.Package] = p.Origin
-				}
-			}
-			if emitErr := adapter.EmitPackageCatalogTraceEvents(preStart, plannedRunID, cat, packageOrigin); emitErr != nil {
-				fmt.Fprintln(os.Stderr, emitErr)
-				return exitRuntime
-			}
-			if *packageMapPath != "" {
-				for _, p := range provenance {
-					fmt.Fprintf(os.Stderr, "yawr: package %q bound from %s\n", p.Package, p.Origin)
-				}
-			}
-
-			if len(parsed.Runbook.ToolRefs) > 0 {
-				var warnErrs []error
-				bindErrs := func() []error {
-					defs, errs := adapter.ResolveToolRefsViaCatalog(cat, runbookPath, parsed.Runbook.ToolRefs)
-					// ResolveToolRefsViaCatalog already separates fatal
-					// errors from PKG-W* advisories: a non-nil defs return
-					// alongside a non-empty errs means errs is
-					// warnings-only:
-					// PKG-W003 workspace-escape reports MUST NOT abort
-					// binding). A nil defs return with non-empty errs is
-					// the fatal case.
-					if defs == nil && len(errs) > 0 {
-						return errs
-					}
-					warnErrs = errs
-					// Force-register into the runtime tool registry via
-					// Override so a catalog-bound name always wins
-					// invocation, even when the generic workspace
-					// directory scan (adapter.BuildEngineConfig's
-					// ToolScanDir walk, done once at wiring time) already
-					// registered a same-named tool from a different
-					// package root — see internal/tool.OverlayRegistry.
-					reg := ecfg.ToolRuntime.(*internaltool.DefaultToolRuntime).Registry()
-					overlay, isOverlay := reg.(*internaltool.OverlayRegistry)
-					for _, def := range defs {
-						if isOverlay {
-							overlay.Override(def)
-							continue
-						}
-						if err := reg.Register(def); err != nil {
-							return []error{fmt.Errorf("failed to register tool %s: %w", def.Name, err)}
-						}
-					}
-					// Register into planner's schema registry so Plan()'s
-					// tool/action lookups succeed for package- and
-					// bare-name-resolved refs the same way they already do
-					// for path-resolved ones.
-					for _, def := range defs {
-						schemaDef := schemaToolDefFromRuntime(def)
-						for action := range schemaDef.Actions {
-							registry.tools[schemaDef.Name+"/"+action] = schemaDef
-						}
-					}
-					return nil
-				}()
-				if len(bindErrs) > 0 {
-					for _, e := range bindErrs {
-						fmt.Fprintln(os.Stderr, e)
-					}
-					return exitValidation
-				}
-				for _, e := range warnErrs {
-					fmt.Fprintln(os.Stderr, e)
-				}
-			}
-		}
-
-		// Substitution contracts MUST be
-		// validated statically at plan time, for every reachable action
-		// (dry-run and unreachable-by-condition steps included), not
-		// lazily the first time a substituted step executes. Runs
-		// unconditionally here -- before Plan and before Start -- so it
-		// also covers --mode=dry-run, which never itself reaches
-		// internal/executor/tool.go's runtime check.
-		//
-		// This check and Plan() (which runs ENUM-006/007) are
-		// independent, orthogonal validations over the same runbook; a
-		// genuine finding from one MUST NOT mask a genuine finding from
-		// the other (a substitution-contract defect on one action, e.g.
-		// a PKG-013 output-name mismatch, is unrelated to an enum
-		// default/literal defect on a different declaration, and both
-		// belong in the same validation report). Both therefore run
-		// unconditionally and their errors are aggregated before
-		// deciding whether to abort.
-		var subErrs []error
-		if reg := ecfg.ToolRuntime.(*internaltool.DefaultToolRuntime).Registry(); reg != nil {
-			toolDefs := make(map[string]toolpkg.ToolDef)
-			for _, def := range reg.All() {
-				toolDefs[def.Name] = def
-			}
-			subErrs = validateSubstitutionsPlanTime(ctx, parserImpl, parsed, toolDefs)
-		}
-
-		plan, err = plannerImpl.Plan(ctx, parsed)
-		if err != nil || len(subErrs) > 0 {
-			for _, e := range subErrs {
-				fmt.Fprintln(os.Stderr, e)
-			}
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-			}
+		plan, err = prepared.Plan(ctx, expand.Policy{Default: expandDefault})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			return exitValidation
 		}
 		if routeScenario != nil {
@@ -633,31 +452,11 @@ func runWithMode(args []string, mode engine.RunMode) int {
 			// written before the plan/run object existed.
 			plan.RunID = plannedRunID
 		}
-		if builtCatalog != nil {
-			// Freeze the package/catalog digests into the plan's metadata
-			// so they are persisted as part of RunState.Plan (RunStore.
-			// SaveState marshals the whole state, plan included) and can
-			// be compared against a freshly recomputed catalog on resume
-			// (checkResumePackageDrift below) via pkg/pkgdrift.Evaluate.
-			plan.Metadata.CatalogDigest = builtCatalog.CatalogDigest()
-			pkgDigests := make(map[string]string, len(builtCatalog.Packages))
-			for _, p := range builtCatalog.Packages {
-				pkgDigests[p.Name] = p.Digest
-			}
-			plan.Metadata.PackageDigests = pkgDigests
-		}
 		// Seed the entry runbook's governance into ctx so executeDynamic can
 		// compose child governance against the root policy rather than nil
 		// (DEF-006). This must happen after Plan() so parsed.Runbook is final.
 		if parsed != nil && parsed.Runbook != nil {
 			ctx = internalexecutor.WithEntryGovernance(ctx, parsed.Runbook.Governance)
-		}
-		// Carry the runtime profile onto the plan so approval and preflight
-		// checks can consume it without a separate lookup.
-		// The profile MUST be consumed from plan.Tools (post-catalog,
-		// post-package-map), never used to re-resolve toolRefs.
-		if runtimeProfile != nil {
-			plan.Metadata.Profile = runtimeProfile
 		}
 		if interactionBroker != nil {
 			if plan.RunID == "" {

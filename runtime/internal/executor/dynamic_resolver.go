@@ -14,6 +14,7 @@ import (
 // DynamicIncludeResult carries everything the IncludeExecutor needs after a
 // successful dynamic include resolution.
 type DynamicIncludeResult struct {
+	TargetScopeID   string
 	Flow            []schema.FlowNode
 	QualifiedID     string
 	RunbookID       string
@@ -66,6 +67,8 @@ func MaterializeLazyIncludes(ctx context.Context, registry engine.ExecutorRegist
 // replay/resume determinism. The replay layer maps this to
 // schema.LockedDynamicInclude in PlanMetadata.DynamicIncludes.
 type DynamicIncludePin struct {
+	SchemaVersion      string
+	TargetScopeID      string
 	StepID             string
 	QualifiedNodeID    string
 	Invocation         int

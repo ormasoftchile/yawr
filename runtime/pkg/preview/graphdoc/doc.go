@@ -152,6 +152,7 @@ type Node struct {
 	QualifiedID      string       `json:"qualified_id,omitempty"`
 	StepID           string       `json:"step_id,omitempty"`
 	CallPath         []string     `json:"call_path,omitempty"`
+	RuntimeNodeID    string       `json:"runtime_node_id,omitempty"`
 	Kind             string       `json:"kind"`
 	Title            string       `json:"title,omitempty"`
 	FrameID          string       `json:"frame_id"`

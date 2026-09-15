@@ -24,14 +24,13 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/internal/sessionstore"
 	internaltool "github.com/ormasoftchile/yawr/runtime/internal/tool"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
-	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/expand"
 	parserpkg "github.com/ormasoftchile/yawr/runtime/pkg/parser"
+	"github.com/ormasoftchile/yawr/runtime/pkg/pkgcatalog"
 	plannerpkg "github.com/ormasoftchile/yawr/runtime/pkg/planner"
 	"github.com/ormasoftchile/yawr/runtime/pkg/platform"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 	"github.com/ormasoftchile/yawr/runtime/pkg/session"
-	toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 )
 
 func runSession(args []string) int {
@@ -328,12 +327,6 @@ func sessionStartMain(ctx context.Context, args []string, input io.ReadCloser, o
 		fmt.Fprintln(errorOutput, err)
 		return exitValidation
 	}
-	if lexicalErrors := checkIncludeClosureLexicalScoping(ctx, stack.parser, parsed); len(lexicalErrors) > 0 {
-		for _, lexicalErr := range lexicalErrors {
-			fmt.Fprintln(errorOutput, lexicalErr)
-		}
-		return exitValidation
-	}
 	plan, planningWarnings, err := stack.plan(ctx, runbookPath, parsed)
 	for _, warning := range planningWarnings {
 		fmt.Fprintln(errorOutput, warning)
@@ -347,6 +340,10 @@ func sessionStartMain(ctx context.Context, args []string, input io.ReadCloser, o
 	segmentID := uuid.NewSHA1(parsedSessionID, []byte("segment:"+*commandID)).String()
 	plan.RunID = runID
 	plan.Metadata.PlannedAt = time.Time{}
+	if err := internalplanner.ValidateExecutionPlan(plan); err != nil {
+		fmt.Fprintln(errorOutput, err)
+		return exitValidation
+	}
 	if err := stack.preparePlan(ctx, plan); err != nil {
 		fmt.Fprintln(errorOutput, err)
 		return exitValidation
@@ -586,6 +583,15 @@ func buildSessionRuntimeStack(
 	}
 	resolver, err := sessioncoordinator.NewStaticHandoffResolver(sessioncoordinator.StaticHandoffResolverConfig{
 		Parser: parserImpl, Planner: plannerImpl, Loader: loader,
+		Prepare: func(ctx context.Context, path string) (*engine.ExecutionPlan, error) {
+			temporary := &sessionRuntimeStack{parser: parserImpl, workspaceRoot: workspaceRoot,
+				packageRequires: packageRequires, packageToolPaths: packageToolPaths, profile: profile}
+			plan, warnings, err := temporary.plan(ctx, path, nil)
+			for _, warning := range warnings {
+				fmt.Fprintln(os.Stderr, warning)
+			}
+			return plan, err
+		},
 	})
 	if err != nil {
 		shutdown()
@@ -623,52 +629,21 @@ func (stack *sessionRuntimeStack) plan(
 	runbookPath string,
 	parsed *parserpkg.ParsedRunbook,
 ) (*engine.ExecutionPlan, []error, error) {
-	if parsed == nil || parsed.Runbook == nil {
-		return nil, nil, errors.New("session runtime requires a parsed runbook")
+	entrypoint, err := filepath.Abs(runbookPath)
+	if err != nil {
+		return nil, nil, err
 	}
-	catalog, catalogErrors := adapter.BuildPackageCatalog(adapter.PackageCatalogOptions{
-		WorkspaceRoot:    stack.workspaceRoot,
-		Builtins:         internaltool.NewBuiltinRegistry().All(),
-		ProjectRequires:  stack.packageRequires,
-		ProjectToolPaths: stack.packageToolPaths,
-	}, runbookPath, parsed.Runbook.Requires)
-	fatalCatalogErrors, warnings := errkit.SplitWarnings(catalogErrors)
-	if len(fatalCatalogErrors) > 0 {
-		return nil, warnings, errors.Join(fatalCatalogErrors...)
+	prepared, err := adapter.PrepareScopedRun(ctx, adapter.ScopedRunOptions{
+		Catalog: pkgcatalog.BuildOptions{WorkspaceRoot: stack.workspaceRoot, Builtins: internaltool.NewBuiltinRegistry().All(),
+			ProjectRequires: stack.packageRequires, ProjectToolPaths: stack.packageToolPaths},
+		Entrypoint: entrypoint, Parser: stack.parser, Profile: stack.profile,
+	})
+	if err != nil {
+		return nil, nil, err
 	}
-	stack.resolverProxy.Set(adapter.NewCatalogIncludeResolver(catalog, stack.parser))
-	definitions, bindingErrors := adapter.ResolveToolRefsViaCatalog(catalog, runbookPath, parsed.Runbook.ToolRefs)
-	fatalBindingErrors, bindingWarnings := errkit.SplitWarnings(bindingErrors)
-	warnings = append(warnings, bindingWarnings...)
-	if len(fatalBindingErrors) > 0 {
-		return nil, warnings, errors.Join(fatalBindingErrors...)
+	if parsed != nil {
+		*parsed = *prepared.Root
 	}
-	for _, definition := range definitions {
-		stack.runtimeTools.Override(definition)
-		schemaDefinition := schemaToolDefFromRuntime(definition)
-		for action := range schemaDefinition.Actions {
-			stack.plannerTools.tools[schemaDefinition.Name+"/"+action] = schemaDefinition
-		}
-	}
-	toolDefinitions := make(map[string]toolpkg.ToolDef)
-	for _, definition := range stack.runtimeTools.All() {
-		toolDefinitions[definition.Name] = definition
-	}
-	substitutionErrors := validateSubstitutionsPlanTime(ctx, stack.parser, parsed, toolDefinitions)
-	plan, planErr := stack.planner.Plan(ctx, parsed)
-	if planErr != nil || len(substitutionErrors) > 0 {
-		if planErr != nil {
-			substitutionErrors = append(substitutionErrors, planErr)
-		}
-		return nil, warnings, errors.Join(substitutionErrors...)
-	}
-	plan.Metadata.CatalogDigest = catalog.CatalogDigest()
-	plan.Metadata.PackageDigests = make(map[string]string, len(catalog.Packages))
-	for _, resolvedPackage := range catalog.Packages {
-		plan.Metadata.PackageDigests[resolvedPackage.Name] = resolvedPackage.Digest
-	}
-	if stack.profile != nil {
-		plan.Metadata.Profile = stack.profile
-	}
-	return plan, warnings, nil
+	plan, err := prepared.Plan(ctx, expand.Policy{Default: expand.ModeEager})
+	return plan, prepared.Warnings, err
 }

@@ -40017,7 +40017,7 @@
             setLocateNodeID(entry.nodeID);
             setShowPanel(true);
           }
-        } }, /* @__PURE__ */ import_react15.default.createElement("option", { value: "" }, "Choose a preceding step"), history.map((entry, index) => /* @__PURE__ */ import_react15.default.createElement("option", { key: `${entry.nodeID}:${entry.sequence}`, value: index }, index + 1, ". ", entry.path, " [", entry.status, "]")))), /* @__PURE__ */ import_react15.default.createElement("small", null, document2.frames.find((frame2) => frame2.id === (selected ?? executionNode)?.data.frame_id)?.runbook_path)) : null, pending2 ? /* @__PURE__ */ import_react15.default.createElement(
+        } }, /* @__PURE__ */ import_react15.default.createElement("option", { value: "" }, "Choose a preceding step"), history.map((entry, index) => /* @__PURE__ */ import_react15.default.createElement("option", { key: `${entry.nodeID}:${entry.sequence}`, value: index, "data-occurrence-id": entry.occurrenceID }, index + 1, ". ", entry.path, " [", entry.status, "]")))), /* @__PURE__ */ import_react15.default.createElement("small", null, document2.frames.find((frame2) => frame2.id === (selected ?? executionNode)?.data.frame_id)?.runbook_path)) : null, pending2 ? /* @__PURE__ */ import_react15.default.createElement(
           InteractionPane,
           {
             key: `${pending2.turnID}:${runError ?? ""}`,

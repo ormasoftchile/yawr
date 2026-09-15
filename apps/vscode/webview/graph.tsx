@@ -2585,7 +2585,7 @@ function GraphView({
                   }
                 }}>
                   <option value="">Choose a preceding step</option>
-                  {history.map((entry, index) => <option key={`${entry.nodeID}:${entry.sequence}`} value={index}>
+                  {history.map((entry, index) => <option key={`${entry.nodeID}:${entry.sequence}`} value={index} data-occurrence-id={entry.occurrenceID}>
                     {index + 1}. {entry.path} [{entry.status}]
                   </option>)}
                 </select>

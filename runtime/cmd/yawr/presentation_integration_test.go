@@ -55,7 +55,7 @@ func TestPresentationRealRunFrozenInspection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"schema_version":"execution-plan/v3"`) {
+	if !strings.Contains(string(data), `"schema_version":"execution-plan/v4"`) {
 		t.Fatal("metadata run not frozen in current format")
 	}
 	for _, file := range files {

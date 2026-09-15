@@ -45,6 +45,11 @@ const (
 // Step is the unified step struct. The Type field discriminates which
 // type-specific fields are populated.
 type Step struct {
+	// IncludeAlias is captured from this document's imports, not inherited
+	// from a caller. It is presentation metadata, never an execution binding.
+	IncludeAlias   string `yaml:"-" json:"include_alias,omitempty"`
+	LexicalScopeID string `yaml:"-" json:"lexical_scope_id,omitempty"`
+	ToolBindingID  string `yaml:"-" json:"tool_binding_id,omitempty"`
 	// Common fields (available on all step types).
 	ID               string                `yaml:"id"                         json:"id"`
 	Type             StepType              `yaml:"type"                       json:"type"`

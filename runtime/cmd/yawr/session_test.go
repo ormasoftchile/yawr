@@ -440,10 +440,13 @@ flow:
 	if err != nil {
 		t.Fatalf("LoadPlan: %v", err)
 	}
-	if plan.Tools["kubectl"] == nil || plan.Metadata.CatalogDigest == "" || plan.Metadata.Profile == nil ||
+	if plan.ToolScopes == nil || len(plan.Tools) != 0 || plan.Metadata.CatalogDigest == "" || plan.Metadata.Profile == nil ||
 		plan.Metadata.Profile.ID != "test-profile" ||
 		plan.Metadata.PackageDigests["acme.incident-tools"] == "" {
 		t.Fatalf("session plan omitted catalog binding/provenance: tools=%v metadata=%#v", plan.Tools, plan.Metadata)
+	}
+	if _, err := plan.ToolScopes.Resolve(plan.RootScopeID, "kubectl", "identify"); err != nil {
+		t.Fatalf("session plan lost the catalog-owned tool binding: %v", err)
 	}
 }
 

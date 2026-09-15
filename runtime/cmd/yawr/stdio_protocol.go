@@ -24,15 +24,16 @@ const maxStdioCommandBytes = 1024 * 1024
 const maxStdioFrameBytes = 1024 * 1024
 
 type stdioProtocol struct {
-	graphMu       sync.Mutex
-	graphStore    engine.DurableRunStore
-	graphRevision int
-	graphBindings []sessioncoordinator.ExecutionGraphBinding
-	reader        *bufio.Reader
-	inputCloser   io.Closer
-	encoder       *json.Encoder
-	writeMu       sync.Mutex
-	terminalSent  bool
+	graphMu        sync.Mutex
+	graphStore     engine.DurableRunStore
+	graphRevision  int
+	graphPublished bool
+	graphBindings  []sessioncoordinator.ExecutionGraphBinding
+	reader         *bufio.Reader
+	inputCloser    io.Closer
+	encoder        *json.Encoder
+	writeMu        sync.Mutex
+	terminalSent   bool
 
 	mu       sync.RWMutex
 	runID    string

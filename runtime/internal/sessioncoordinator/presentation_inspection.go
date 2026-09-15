@@ -10,13 +10,21 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 )
 
-func frozenGraphDetails(index int, plan *engine.ExecutionPlan) *graphdoc.StepDetails {
+func frozenGraphDetails(index int, plan *engine.ExecutionPlan) (*graphdoc.StepDetails, error) {
 	d := graphdoc.DetailsForResolvedStep(plan.Steps[index])
 	if _, parallel := plan.Steps[index].Spec.(*schema.ParallelNode); !parallel {
 		d.ProjectExpressions()
 	}
 	if d == nil || d.Kind != "tool" {
-		return d
+		return d, nil
+	}
+	if plan.ToolScopes != nil {
+		definition, err := engine.FrozenToolDefinition(plan, plan.Steps[index])
+		if err != nil {
+			return nil, err
+		}
+		d.SetCodePresentation(presentation.ForAction(d.Tool, d.Action, "frozen", "", definition))
+		return d, nil
 	}
 	definition := plan.Tools[d.Tool]
 	for current := index; plan.Steps[current].ParentID != ""; {
@@ -44,7 +52,7 @@ func frozenGraphDetails(index int, plan *engine.ExecutionPlan) *graphdoc.StepDet
 	if plansnapshot.HasPresentation(definition) {
 		d.SetCodePresentation(presentation.ForAction(d.Tool, d.Action, "frozen", "", definition))
 	}
-	return d
+	return d, nil
 }
 
 // InspectionDocument is a read-only projection. It never finalizes or rewrites

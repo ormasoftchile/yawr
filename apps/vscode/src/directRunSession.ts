@@ -47,6 +47,7 @@ export function buildStdioRunArgs(
 ): string[] {
   const args = ['run', '--stdio'];
   const capabilities = [
+    'yawr.lexical-tool-scopes/v1',
     ...(typedResults ? ['yawr.typed-results/v1', 'yawr.run-results-chunks/v1'] : []),
     ...(executionGraph ? ['yawr.run-graph/v1'] : []),
   ];

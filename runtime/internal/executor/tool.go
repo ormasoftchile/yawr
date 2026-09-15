@@ -80,11 +80,19 @@ func (e *ToolExecutor) IsPureRunbookSubstitution(
 	if err != nil {
 		return false, err
 	}
-	if frozenSubstitutionDefinition(ctx, toolName, action) != nil {
+	bound, err := resolveBoundInvocation(ctx, step, toolName, action)
+	if err != nil {
+		return false, err
+	}
+	frozen, err := frozenInvocationDefinition(ctx, toolName, action, bound)
+	if err != nil {
+		return false, err
+	}
+	if frozen != nil {
 		return true, nil
 	}
-	lookup, ok := e.runtime.(tool.ToolDefLookup)
-	if !ok {
+	lookup := e.invocationLookup(bound)
+	if lookup == nil {
 		return false, nil
 	}
 	definition, found := lookup.LookupDef(toolName)
@@ -122,12 +130,31 @@ func (e *ToolExecutor) Execute(ctx context.Context, step engine.ResolvedStep, va
 	if action, err = resolveTemplate(e.evaluator, action, vars); err != nil {
 		return nil, err
 	}
-	engine.RecordToolPresentation(ctx, toolName, action, engine.PlanToolsFromContext(ctx)[toolName])
-	if definition := frozenSubstitutionDefinition(ctx, toolName, action); definition != nil {
+	bound, err := resolveBoundInvocation(ctx, step, toolName, action)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = recordInvocationPresentation(ctx, toolName, action, bound)
+	if err != nil {
+		return nil, err
+	}
+	definition, err := frozenInvocationDefinition(ctx, toolName, action, bound)
+	if err != nil {
+		return nil, err
+	}
+	if definition != nil {
 		return e.ExecuteFrozenSubstitution(ctx, step, vars, definition)
 	}
 	if e.runtime == nil {
 		return nil, fmt.Errorf("tool executor: runtime not configured")
+	}
+	var boundRuntime tool.BoundToolRuntime
+	if bound != nil {
+		var supported bool
+		boundRuntime, supported = e.runtime.(tool.BoundToolRuntime)
+		if !supported {
+			return nil, errkit.New("SCOPE-002", "tool runtime does not support immutable bound invocation")
+		}
 	}
 
 	args := make(map[string]any)
@@ -157,7 +184,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, step engine.ResolvedStep, va
 	// the nested-runbook path instead of runtime.Invoke. Detection requires
 	// the runtime to expose tool.ToolDefLookup (test fakes that only
 	// implement Invoke fall through to the plain process path unchanged).
-	if lookup, ok := e.runtime.(tool.ToolDefLookup); ok {
+	if lookup := e.invocationLookup(bound); lookup != nil {
 		if def, found := lookup.LookupDef(toolName); found && def != nil {
 			if parsed, parseErr := url.Parse(def.URL); parseErr == nil && parsed.Hostname() != "" {
 				dispatchEndpoint = "mcp-http:" + parsed.Hostname()
@@ -215,7 +242,12 @@ func (e *ToolExecutor) Execute(ctx context.Context, step engine.ResolvedStep, va
 	}
 	ctx = engine.WithPreparedDispatch(ctx, dispatch)
 	engine.RecordRouteTestExternalDispatch(ctx)
-	res, err := e.runtime.Invoke(ctx, toolName, action, args)
+	var res *tool.ToolResult
+	if bound != nil {
+		res, err = boundRuntime.InvokeBound(ctx, *bound, args)
+	} else {
+		res, err = e.runtime.Invoke(ctx, toolName, action, args)
+	}
 	if err != nil {
 		failed := newResult(step, engine.StepStatusFailed)
 		failed.Error = err
@@ -281,13 +313,20 @@ func (e *ToolExecutor) ValidateSavedResult(ctx context.Context, step engine.Reso
 	if action, err = resolveTemplate(e.evaluator, action, vars); err != nil {
 		return nil, err
 	}
+	bound, err := resolveBoundInvocation(ctx, step, toolName, action)
+	if err != nil {
+		return nil, err
+	}
 	var actionDef *tool.ToolAction
-	if lookup, ok := e.runtime.(tool.ToolDefLookup); ok {
+	if lookup := e.invocationLookup(bound); lookup != nil {
 		if def, found := lookup.LookupDef(toolName); found && def != nil {
 			actionDef = def.Actions[action]
 		}
 	}
-	engine.RecordToolPresentation(ctx, toolName, action, engine.PlanToolsFromContext(ctx)[toolName])
+	ctx, err = recordInvocationPresentation(ctx, toolName, action, bound)
+	if err != nil {
+		return nil, err
+	}
 	validated, err := e.validateCompletedResult(step, vars, toolName, action, actionDef, result)
 	if err == nil && validated != nil && validated.Status == engine.StepStatusCompleted && actionDef != nil {
 		engine.ApproveToolPresentationOutputs(ctx)
@@ -309,15 +348,12 @@ func (e *ToolExecutor) ValidateFrozenSavedResult(
 		return result, nil
 	}
 	spec, ok := step.Spec.(*schema.ToolCallSpec)
-	if !ok || spec == nil || definition == nil {
+	if !ok || spec == nil || (definition == nil && engine.ToolScopesFromContext(ctx) == nil) {
 		return nil, fmt.Errorf("tool executor: invalid frozen tool result for step %s", step.ID)
 	}
 	toolName, err := resolveTemplate(e.evaluator, spec.Tool.Name, vars)
 	if err != nil {
 		return nil, err
-	}
-	if toolName != definition.Name {
-		return nil, fmt.Errorf("tool executor: frozen tool definition mismatch for %q", toolName)
 	}
 	actionName := spec.Tool.Action
 	if actionName == "" {
@@ -327,11 +363,29 @@ func (e *ToolExecutor) ValidateFrozenSavedResult(
 	if err != nil {
 		return nil, err
 	}
+	bound, err := resolveBoundInvocation(ctx, step, toolName, actionName)
+	if err != nil {
+		return nil, err
+	}
+	if bound != nil {
+		definition = schema.CloneToolDef(bound.Definition.Declaration)
+		definition.Name = toolName
+	}
+	if toolName != definition.Name {
+		return nil, fmt.Errorf("tool executor: frozen tool definition mismatch for %q", toolName)
+	}
 	action := definition.Actions[actionName]
 	if action == nil {
 		return nil, fmt.Errorf("tool executor: frozen action %s#%s is unavailable", toolName, actionName)
 	}
-	engine.RecordToolPresentation(ctx, toolName, actionName, definition)
+	if bound != nil {
+		ctx, err = recordInvocationPresentation(ctx, toolName, actionName, bound)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		engine.RecordToolPresentation(ctx, toolName, actionName, definition)
+	}
 	validated, validationErr := e.validateCompletedResult(step, vars, toolName, actionName, &tool.ToolAction{
 		Outputs: schemaActionOutputs(action), OutputContract: action.OutputContract,
 	}, result)
@@ -467,15 +521,12 @@ func (e *ToolExecutor) ExecuteFrozenSubstitution(
 		return nil, errors.New("tool executor: frozen substitution requires a SubStepRunner")
 	}
 	spec, ok := step.Spec.(*schema.ToolCallSpec)
-	if !ok || spec == nil || definition == nil {
+	if !ok || spec == nil || (definition == nil && engine.ToolScopesFromContext(ctx) == nil) {
 		return nil, fmt.Errorf("tool executor: invalid frozen substitution for step %s", step.ID)
 	}
 	toolName, err := resolveTemplate(e.evaluator, spec.Tool.Name, vars)
 	if err != nil {
 		return nil, err
-	}
-	if toolName != definition.Name {
-		return nil, fmt.Errorf("tool executor: frozen tool definition mismatch for %q", toolName)
 	}
 	actionName := spec.Tool.Action
 	if actionName == "" {
@@ -485,11 +536,34 @@ func (e *ToolExecutor) ExecuteFrozenSubstitution(
 	if err != nil {
 		return nil, err
 	}
+	bound, err := resolveBoundInvocation(ctx, step, toolName, actionName)
+	if err != nil {
+		return nil, err
+	}
+	if bound != nil {
+		definition, err = frozenInvocationDefinition(ctx, toolName, actionName, bound)
+		if err != nil {
+			return nil, err
+		}
+		if definition == nil {
+			return nil, errkit.New("SCOPE-002", "bound action is not a frozen substitution")
+		}
+	}
+	if toolName != definition.Name {
+		return nil, fmt.Errorf("tool executor: frozen tool definition mismatch for %q", toolName)
+	}
 	action := definition.Actions[actionName]
 	if action == nil || action.Execute == nil || !action.Execute.IsSubstitution() || action.FrozenSubstitution == nil {
 		return nil, fmt.Errorf("tool executor: action %s#%s has no frozen substitution", toolName, actionName)
 	}
-	engine.RecordToolPresentation(ctx, toolName, actionName, definition)
+	if bound != nil {
+		ctx, err = recordInvocationPresentation(ctx, toolName, actionName, bound)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		engine.RecordToolPresentation(ctx, toolName, actionName, definition)
+	}
 	args := make(map[string]any, len(spec.Tool.Args))
 	for name, value := range spec.Tool.Args {
 		if text, isText := value.(string); isText {
@@ -513,15 +587,25 @@ func (e *ToolExecutor) ExecuteFrozenSubstitution(
 		failed.Error = err
 		return failed, nil
 	}
-	flow, err := plansnapshot.RestoreFlowClosure(action.FrozenSubstitution.ExecutableClosure)
+	var flow []schema.FlowNode
+	if bound != nil {
+		scopes := engine.ToolScopesFromContext(ctx)
+		if err := plansnapshot.ValidateFrozenToolSubstitution(action.FrozenSubstitution, scopes); err != nil {
+			return nil, err
+		}
+		flow, err = plansnapshot.RestoreScopedFlowClosure(action.FrozenSubstitution.ExecutableClosure, scopes, action.FrozenSubstitution.TargetScopeID)
+	} else {
+		flow, err = plansnapshot.RestoreFlowClosure(action.FrozenSubstitution.ExecutableClosure)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("tool executor: restore frozen substitution: %w", err)
 	}
 	substitute := &schema.Runbook{
 		ID: action.FrozenSubstitution.RunbookID, Name: action.FrozenSubstitution.RunbookName,
 		Flow: flow, Inputs: action.FrozenSubstitution.Inputs, Outputs: action.FrozenSubstitution.Outputs,
-		Bindings:   action.FrozenSubstitution.Bindings,
-		Governance: action.FrozenSubstitution.Governance,
+		Bindings:       action.FrozenSubstitution.Bindings,
+		Governance:     action.FrozenSubstitution.Governance,
+		LexicalScopeID: action.FrozenSubstitution.TargetScopeID,
 	}
 	state, hasState := substStateFromContext(ctx)
 	frames := state.frames
@@ -611,6 +695,7 @@ func (e *ToolExecutor) executePlannedSubstitution(
 		InvocationState:   invocationState,
 		ID:                step.ID,
 		RunbookPath:       planResult.SubstitutePath,
+		RootScopeID:       planResult.SubstituteRunbook.LexicalScopeID,
 		Kind:              "tool-substitution",
 		NestDepth:         step.NestDepth + 1,
 	}, planResult.SubstituteRunbook.Flow, childVars)

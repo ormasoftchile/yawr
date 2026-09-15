@@ -39,7 +39,7 @@ func sanitizeExecutionGraph(value any, secrets []string, redactor *internalgover
 				"kind", "frame_id", "parent_node_id", "parent_include_node_id", "runbook_id", "depth")
 			if key == "nodes" {
 				restore(target["data"].(map[string]any), source["data"].(map[string]any),
-					"id", "kind", "step_id", "frame_id", "group_id", "call_path", "order")
+					"id", "kind", "step_id", "frame_id", "group_id", "call_path", "order", "runtime_node_id")
 			}
 		}
 	}
@@ -49,7 +49,7 @@ func sanitizeExecutionGraph(value any, secrets []string, redactor *internalgover
 // Called under graphMu: graph chunks precede the event/interaction using them.
 // This runs in the protocol consumer, never in the execution scheduler.
 func (p *stdioProtocol) publishExecutionGraph(state engine.RunState) error {
-	if len(state.DynamicIncludes) <= p.graphRevision {
+	if p.graphPublished && len(state.DynamicIncludes) <= p.graphRevision {
 		return nil
 	}
 	digest, ok := p.graphStore.PlanDigest(state.RunID)
@@ -90,7 +90,7 @@ func (p *stdioProtocol) publishExecutionGraph(state engine.RunState) error {
 		return fmt.Errorf("execution graph exceeds %d bytes", maxExecutionGraphBytes)
 	}
 	hash := fmt.Sprintf("sha256:%x", sha256.Sum256(body))
-	revision := len(state.DynamicIncludes)
+	revision := len(state.DynamicIncludes) + 1
 	for offset := 0; offset < len(body); offset += executionGraphChunkBytes {
 		end := min(offset+executionGraphChunkBytes, len(body))
 		if err := p.sendResultsFrame(map[string]any{
@@ -101,7 +101,8 @@ func (p *stdioProtocol) publishExecutionGraph(state engine.RunState) error {
 			return err
 		}
 	}
-	p.graphRevision, p.graphBindings = revision, bindings
+	p.graphRevision, p.graphBindings = len(state.DynamicIncludes), bindings
+	p.graphPublished = true
 	return nil
 }
 

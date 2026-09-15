@@ -185,6 +185,8 @@ type ExecuteSpec struct {
 }
 
 type FrozenToolSubstitution struct {
+	SchemaVersion      string             `yaml:"-" json:"schema_version,omitempty"`
+	TargetScopeID      string             `yaml:"-" json:"target_scope_id,omitempty"`
 	Bindings           []Binding          `yaml:"-" json:"bindings,omitempty"`
 	PackageName        string             `yaml:"-" json:"package_name,omitempty"`
 	RunbookPath        string             `yaml:"-" json:"runbook_path"`

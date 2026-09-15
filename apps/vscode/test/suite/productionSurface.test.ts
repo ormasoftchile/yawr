@@ -38,21 +38,30 @@ async function directoryEntries(path: string): Promise<string[]> {
 }
 
 suite('Installed VSIX production surface', () => {
-  test('dynamic included runbooks form one paced CURRENT stream and retain the complete return history', async function () {
+  for (const scenario of [
+    { label: 'dynamic included runbooks', directory: 'execution-graph', entry: ['runbooks', 'dynamic-router.runbook.yaml'],
+      title: 'Dynamic router - nested calls and returns', steps: 9, nodes: 9, runbooks: 3, evidence: 'included-runbooks-500ms.json' },
+    { label: 'lexically scoped included runbooks', directory: 'dependency-scopes', entry: ['dynamic.runbook.yaml'],
+      title: 'Dynamically selected children own their package dependencies',
+      steps: 15, nodes: 13, runbooks: 7, evidence: 'dependency-scopes-500ms.json' },
+  ]) test(`${scenario.label} form one paced CURRENT stream and retain the complete return history`, async function () {
     this.timeout(60_000);
     assert.equal(vscode.version, '1.136.2');
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);
     await extension.activate();
+    const { directOccurrenceID }: {
+      directOccurrenceID(runID: string, nodeID: string, payload: Record<string, unknown>): string;
+    } = require(join(extension.extensionPath, 'out', 'executionProgress.js'));
     const root = process.env.YAWR_TEST_STATE_ROOT;
     const core = join(__dirname, '..', '..', '..', '..', '..', 'runtime');
     const port = process.env.YAWR_TEST_CDP_PORT;
     assert.ok(root && core && port, 'the installed harness must supply its isolated environment');
-    const destination = join(root, 'workspace', 'execution-graph');
-    await cp(join(core, 'examples', 'execution-graph'), destination, {
+    const destination = join(root, 'workspace', scenario.directory);
+    await cp(join(core, 'examples', scenario.directory), destination, {
       recursive: true, filter: source => !source.includes(`${require('node:path').sep}.runbook`),
     });
-    const uri = vscode.Uri.file(join(destination, 'runbooks', 'dynamic-router.runbook.yaml'));
+    const uri = vscode.Uri.file(join(destination, ...scenario.entry));
     const config = vscode.workspace.getConfiguration('yawr', uri);
     const previous = config.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue;
     const observer = await connectGraphObserver(port);
@@ -61,24 +70,31 @@ suite('Installed VSIX production surface', () => {
       await config.update('preview.minimumStepDisplayMs', 500, vscode.ConfigurationTarget.Workspace);
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
       panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.previewGraph');
-      await observer.waitForGraph();
-      const observation = observer.observe();
+      await observer.waitForGraph(scenario.title);
+      const observation = observer.observe(scenario.steps * 500 + 4000);
       const result = await vscode.commands.executeCommand<{
-        frames: Array<{ type: string; event?: { kind: string; payload: Record<string, unknown> } }>;
+        frames: Array<{ type: string; runID?: string; event?: { kind: string; payload: Record<string, unknown> } }>;
         finished: { status: string }; stderr: string;
       }>('yawr.runCurrentRunbook');
       const returnedAt = Date.now();
       const samples = await observation;
-      await writeFile(join(root, 'included-runbooks-500ms.json'), JSON.stringify({ samples, returnedAt, result }, null, 2));
+      await writeFile(join(root, scenario.evidence), JSON.stringify({ samples, returnedAt, result }, null, 2));
       if (process.env.YAWR_TEST_EVIDENCE_DIR) {
         await mkdir(process.env.YAWR_TEST_EVIDENCE_DIR, { recursive: true });
-        await copyFile(join(root, 'included-runbooks-500ms.json'), join(process.env.YAWR_TEST_EVIDENCE_DIR, 'included-runbooks-500ms.json'));
+        await copyFile(join(root, scenario.evidence), join(process.env.YAWR_TEST_EVIDENCE_DIR, scenario.evidence));
       }
       assert.equal(result?.finished.status, 'completed', result?.stderr);
       assert.ok(result.frames.some(frame => frame.type === 'run.graph'), 'real runtime graph updates must reach the extension');
       const expected = result.frames.filter(frame => frame.event?.kind === 'step/started').map(frame =>
         String(frame.event!.payload.graph_node_id ?? frame.event!.payload.qualified_node_id));
-      assert.equal(expected.length, 9, 'the shared router example has nine executed steps');
+      const expectedOccurrences = result.frames.filter(frame => frame.event?.kind === 'step/started').map(frame => {
+        assert.ok(frame.runID);
+        const payload = frame.event!.payload;
+        return directOccurrenceID(frame.runID, String(payload.graph_node_id ?? payload.qualified_node_id), payload);
+      });
+      assert.equal(expected.length, scenario.steps, 'every canonical fixture step must execute');
+      assert.equal(new Set(expected).size, scenario.nodes, 'the exact graph sites, including repeated include visits, must execute');
+      assert.equal(new Set(expectedOccurrences).size, scenario.steps, 'each canonical execution occurrence must occur exactly once');
       const first = samples.findIndex(sample => sample.ids.length > 0);
       assert.ok(first >= 0, 'the run must display current steps');
       const playback = samples.slice(first);
@@ -94,8 +110,9 @@ suite('Installed VSIX production surface', () => {
           `included step ${changes[index - 1].ids[0]} dwell was ${changes[index].at - changes[index - 1].at}ms`);
       }
       const final = playback.at(-1)!;
-      assert.equal(final.runbooks?.length, 3, 'root, child and grandchild must remain navigable after completion');
-      assert.equal(final.history?.length, 9, 'execution history must retain child entry and parent return');
+      assert.equal(final.runbooks?.length, scenario.runbooks, 'all runbook invocations must remain navigable after completion');
+      assert.equal(final.history?.length, scenario.steps, 'execution history must retain child entry and parent return');
+      assert.deepEqual(final.historyIDs, expectedOccurrences, 'retained occurrence identities must exactly match canonical runtime order');
       for (const id of expected) assert.ok(final.nodes?.includes(id), `completed graph lost ${id}`);
       assert.ok(returnedAt < changes.at(-2)!.at, 'runtime completion must not wait for visual playback');
       console.log(`Installed included-runbook CURRENT dwells: ${changes.slice(1).map((sample, index) => sample.at - changes[index].at).join(', ')}ms`);
@@ -155,7 +172,7 @@ flow:
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(runbook));
       panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.previewGraph');
       assert.ok(panel);
-      await observer.waitForGraph();
+      await observer.waitForGraph('Single current stream');
       const observation = observer.observe();
       const execution = (async () => {
         const result = await vscode.commands.executeCommand<{
@@ -504,7 +521,7 @@ flow:
       'run',
       '--stdio',
       '--require-capabilities',
-      'yawr.typed-results/v1,yawr.run-results-chunks/v1,yawr.run-graph/v1',
+      'yawr.lexical-tool-scopes/v1,yawr.typed-results/v1,yawr.run-results-chunks/v1,yawr.run-graph/v1',
       '--package-map',
       workspaceMap,
       runbookDocument.fileName,

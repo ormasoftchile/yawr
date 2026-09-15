@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.17 (review candidate)
+
+- Allows included runbooks to declare their own `requires` and `toolRefs`.
+  Package sources and file-local tool bindings are frozen before execution;
+  lazy, dynamic, parallel, and tool-backed children cannot inherit private
+  aliases or rebind another runbook's tools.
+- Bundles the matching lexical-scope runtime with v4 executable snapshots,
+  scoped resume/replay and editor metadata. Legacy saved-run readers remain
+  explicit; older helpers cannot silently run the new contract.
+- Retains dynamic child graphs inside parallel branches and tool substitutions,
+  including distinct repeated execution occurrences and post-run history.
+  Adds five zero-input success examples and two intentional preflight failures.
+- Preserves VS Code 1.136.2 compatibility and the accepted single-CURRENT pacing,
+  including default 200 ms, configured 500 ms, ordered Results, and urgent bypasses.
+
 ## 0.2.16
 
 - Reveals dynamic child and grandchild runbooks during normal graphical runs,

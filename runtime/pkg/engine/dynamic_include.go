@@ -3,11 +3,31 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 )
 
 const DynamicIncludeResolutionStateSchemaV1 = "yawr.dynamic-include-resolution/v1"
+const DynamicIncludeResolutionStateSchemaV2 = "yawr.dynamic-include-resolution/v2"
+
+// ValidateDynamicIncludeResolutionVersion prevents a legacy state envelope
+// from silently acquiring scope-aware pin meaning.
+func ValidateDynamicIncludeResolutionVersion(state DynamicIncludeResolutionState) error {
+	switch state.SchemaVersion {
+	case DynamicIncludeResolutionStateSchemaV1:
+		if state.Pin.SchemaVersion != "" || state.Pin.TargetScopeID != "" {
+			return fmt.Errorf("engine: scoped pin requires dynamic resolution v2")
+		}
+	case DynamicIncludeResolutionStateSchemaV2:
+		if state.Pin.SchemaVersion != "yawr.dynamic-include-pin/v2" || state.Pin.TargetScopeID == "" {
+			return fmt.Errorf("engine: dynamic resolution v2 requires scoped pin")
+		}
+	default:
+		return fmt.Errorf("engine: unsupported dynamic resolution version %q", state.SchemaVersion)
+	}
+	return nil
+}
 
 const dynamicIncludeNotFoundOutcomeSchemaV1 = "yawr.dynamic-include-not-found-outcome/v1"
 

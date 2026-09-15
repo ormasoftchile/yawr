@@ -8,14 +8,18 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/presentation"
 )
 
-func DetailsForFrozenStep(step engine.ResolvedStep, plan *engine.ExecutionPlan, snapshotDigest string) *StepDetails {
+func DetailsForFrozenStep(step engine.ResolvedStep, plan *engine.ExecutionPlan, snapshotDigest string) (*StepDetails, error) {
 	d := DetailsForResolvedStep(step)
 	if d == nil || d.Kind != "tool" {
-		return d
+		return d, nil
 	}
-	d.CodePresentation = presentation.ForAction(d.Tool, d.Action, "frozen", snapshotDigest, plan.Tools[d.Tool])
+	definition, err := engine.FrozenToolDefinition(plan, step)
+	if err != nil {
+		return nil, err
+	}
+	d.CodePresentation = presentation.ForAction(d.Tool, d.Action, "frozen", snapshotDigest, definition)
 	maskDeclaredSecrets(d)
-	return d
+	return d, nil
 }
 
 func maskDeclaredSecrets(d *StepDetails) {

@@ -10,6 +10,7 @@ export interface GraphPlaybackSample {
   nodes?: string[];
   runbooks?: string[];
   history?: string[];
+  historyIDs?: string[];
 }
 
 export async function connectGraphObserver(port: string) {
@@ -28,6 +29,9 @@ export async function connectGraphObserver(port: string) {
   const contexts = new Map<string, { id: number; sessionId?: string; observation?: string }>();
   const samples: GraphPlaybackSample[] = [];
   const errors: Error[] = [];
+  let observedTitle: string | undefined;
+  let observedDocumentID: string | undefined;
+  let observing = false;
   const binding = '__yawrReadOnlyGraphPlaybackSample';
   const retiredContext = (error: Error) => /Execution context was destroyed|Cannot find context|Session with given id not found/.test(error.message);
   function send<T>(method: string, params: object = {}, sessionId?: string): Promise<T> {
@@ -74,7 +78,8 @@ export async function connectGraphObserver(port: string) {
               visibility: document.visibilityState,
               nodes: Array.from(document.querySelectorAll('.react-flow__node-yawrStep')).map(node => node.dataset.id),
               runbooks: Array.from(document.querySelectorAll('select[aria-label="Inspect runbook"] option')).slice(1).map(node => node.value),
-              history: Array.from(document.querySelectorAll('select[aria-label="Inspect executed step"] option')).slice(1).map(node => node.textContent)
+              history: Array.from(document.querySelectorAll('select[aria-label="Inspect executed step"] option')).slice(1).map(node => node.textContent),
+              historyIDs: Array.from(document.querySelectorAll('select[aria-label="Inspect executed step"] option')).slice(1).map(node => node.dataset.occurrenceId)
             }));
           };
           sample();
@@ -90,11 +95,21 @@ export async function connectGraphObserver(port: string) {
         context.observation = result.result.objectId;
       }).catch(error => { if (!retiredContext(error)) errors.push(error); });
     } else if (message.method === 'Runtime.bindingCalled' && message.params.name === binding) {
-      samples.push(JSON.parse(message.params.payload));
+      const sample: GraphPlaybackSample = JSON.parse(message.params.payload);
+      if (observing && sample.graphTitle === observedTitle && sample.ids.length > 0 && !observedDocumentID) {
+        observedDocumentID = sample.documentID;
+      }
+      samples.push(sample);
     } else if (message.method === 'Runtime.executionContextDestroyed') {
+      if (observing && observedDocumentID === `${message.sessionId ?? 'root'}:${message.params.executionContextId}`) {
+        errors.push(new Error('The observed graph document was destroyed during playback'));
+      }
       contexts.delete(`${message.sessionId ?? ''}:${message.params.executionContextId}`);
     } else if (message.method === 'Runtime.executionContextsCleared' || message.method === 'Target.detachedFromTarget') {
       const sessionId = message.method === 'Target.detachedFromTarget' ? message.params.sessionId : message.sessionId;
+      if (observing && observedDocumentID?.startsWith(`${sessionId ?? 'root'}:`)) {
+        errors.push(new Error('The observed graph target was replaced during playback'));
+      }
       for (const [key, context] of contexts) if (context.sessionId === sessionId) contexts.delete(key);
     }
   };
@@ -102,16 +117,32 @@ export async function connectGraphObserver(port: string) {
   await send('Runtime.enable');
   await send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
   return {
-    async waitForGraph() {
+    async waitForGraph(title: string) {
       const deadline = Date.now() + 20_000;
-      while (!samples.length && !errors.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+      while (!errors.length && Date.now() < deadline) {
+        const ready = samples.slice().reverse().find(sample => sample.graphTitle === title && sample.status === 'idle' &&
+          sample.visibility === 'visible' && sample.nodes?.length && sample.ids.length === 0);
+        if (ready) {
+          observedTitle = title;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
       if (errors.length) throw errors[0];
-      if (!samples.length) throw new Error('Installed graph was not observed before execution');
+      if (!observedTitle) throw new Error(`Installed graph "${title}" was not ready before execution`);
     },
-    async observe(): Promise<GraphPlaybackSample[]> {
-      await new Promise(resolve => setTimeout(resolve, 8000));
+    async observe(durationMs = 8000): Promise<GraphPlaybackSample[]> {
+      if (!observedTitle) throw new Error('Select the ready graph before observing execution');
+      const start = samples.length;
+      observedDocumentID = undefined;
+      observing = true;
+      await new Promise(resolve => setTimeout(resolve, durationMs));
+      observing = false;
       if (errors.length) throw errors[0];
-      return samples.slice();
+      // Run Current Runbook can replace the idle preview before execution.
+      // Anchor to the first CURRENT, retaining any competing CURRENT stream.
+      return samples.slice(start).filter(sample => sample.graphTitle === observedTitle &&
+        (!observedDocumentID || sample.documentID === observedDocumentID || sample.ids.length > 0));
     },
     async close() {
       try {

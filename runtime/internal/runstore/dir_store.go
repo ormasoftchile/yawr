@@ -24,6 +24,7 @@ import (
 	internaltrace "github.com/ormasoftchile/yawr/runtime/internal/trace"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/evidence"
+	"github.com/ormasoftchile/yawr/runtime/pkg/toolscope"
 	tracepkg "github.com/ormasoftchile/yawr/runtime/pkg/trace"
 )
 
@@ -354,7 +355,11 @@ func (s *DirRunStore) SaveState(ctx context.Context, state engine.RunState) erro
 	if err := validateExecutionFrameStates(state.WriterEpoch, state.ExecutionFrames); err != nil {
 		return err
 	}
-	if err := validateDynamicIncludeResolutions(state.WriterEpoch, state.DynamicIncludes); err != nil {
+	scopes, err := s.scopeSetForResolutions(ctx, state.RunID, state.DynamicIncludes)
+	if err != nil {
+		return err
+	}
+	if err := validateDynamicIncludeResolutions(state.WriterEpoch, state.DynamicIncludes, scopes); err != nil {
 		return err
 	}
 	if err := validatePendingHandoff(state.Status, state.PendingHandoff); err != nil {
@@ -613,7 +618,11 @@ func (s *DirRunStore) LoadState(ctx context.Context, runID string) (engine.RunSt
 	if err := validateDispatchStates(snapshot.WriterEpoch, snapshot.Dispatches); err != nil {
 		return engine.RunState{}, err
 	}
-	if err := validateDynamicIncludeResolutions(snapshot.WriterEpoch, snapshot.DynamicIncludes); err != nil {
+	scopes, err := s.scopeSetForResolutions(ctx, runID, snapshot.DynamicIncludes)
+	if err != nil {
+		return engine.RunState{}, err
+	}
+	if err := validateDynamicIncludeResolutions(snapshot.WriterEpoch, snapshot.DynamicIncludes, scopes); err != nil {
 		return engine.RunState{}, err
 	}
 	if err := validatePendingHandoff(snapshot.Status, snapshot.PendingHandoff); err != nil {
@@ -974,6 +983,7 @@ func validateExecutionFrameStates(writerEpoch uint64, frames map[string]*engine.
 func validateDynamicIncludeResolutions(
 	writerEpoch uint64,
 	resolutions map[string]*engine.DynamicIncludeResolutionState,
+	scopeSets ...*toolscope.Set,
 ) error {
 	if len(resolutions) > maxStoredValueEntries {
 		return fmt.Errorf("runstore: dynamic include resolution count exceeds %d", maxStoredValueEntries)
@@ -983,7 +993,10 @@ func validateDynamicIncludeResolutions(
 		if resolution == nil || resolutionID == "" || resolution.ResolutionID != resolutionID || !validSHA256Digest(resolutionID) {
 			return fmt.Errorf("runstore: dynamic include resolution map key %q does not match resolution", resolutionID)
 		}
-		if resolution.SchemaVersion != engine.DynamicIncludeResolutionStateSchemaV1 || resolution.WriterEpoch == 0 ||
+		if err := engine.ValidateDynamicIncludeResolutionVersion(*resolution); err != nil {
+			return err
+		}
+		if resolution.WriterEpoch == 0 ||
 			resolution.QualifiedNodeID == "" || resolution.StepID == "" || resolution.Invocation < 1 ||
 			resolution.Revision < 1 || revisions[resolution.Revision] ||
 			len(resolution.CallPath) > 128 || resolution.QualifiedNodeID != engine.DebugNodeID(resolution.CallPath, resolution.StepID) {
@@ -1006,7 +1019,14 @@ func validateDynamicIncludeResolutions(
 		if len(pin.ExecutableClosure) > maxPlanSnapshotBytes {
 			return fmt.Errorf("runstore: dynamic include resolution %q closure is too large", resolutionID)
 		}
-		if len(pin.ExecutableClosure) > 0 {
+		if resolution.SchemaVersion == engine.DynamicIncludeResolutionStateSchemaV2 {
+			if len(scopeSets) == 0 || scopeSets[0] == nil {
+				return fmt.Errorf("runstore: scoped resolution requires its immutable plan")
+			}
+			if err := plansnapshot.ValidateDynamicIncludePin(pin, scopeSets[0]); err != nil {
+				return fmt.Errorf("runstore: dynamic include resolution %q has invalid scoped closure: %w", resolutionID, err)
+			}
+		} else if len(pin.ExecutableClosure) > 0 {
 			if err := plansnapshot.ValidateFlowClosure(pin.ExecutableClosure); err != nil {
 				return fmt.Errorf("runstore: dynamic include resolution %q has invalid closure: %w", resolutionID, err)
 			}

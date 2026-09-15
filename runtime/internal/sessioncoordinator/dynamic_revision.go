@@ -60,6 +60,9 @@ func finalizeExecutionPlanGraph(
 		}
 	}
 	plan.Metadata.GraphContentHash = generatedDocument.Hash
+	if err := internalplanner.ValidateExecutionPlan(plan); err != nil {
+		return nil, err
+	}
 	return generated, nil
 }
 
@@ -162,6 +165,9 @@ func dynamicRevisionPlan(
 		return resolutions[left].Revision < resolutions[right].Revision
 	})
 	for index, resolution := range resolutions {
+		if err := engine.ValidateDynamicIncludeResolutionVersion(*resolution); err != nil {
+			return nil, nil, err
+		}
 		if resolution.Revision != int64(index+1) {
 			return nil, nil, errors.New("session coordinator: dynamic include revisions are not contiguous")
 		}
@@ -175,40 +181,16 @@ func dynamicRevisionPlan(
 		return nil, nil, err
 	}
 	for _, resolution := range selected {
-		if err := plansnapshot.ValidateDynamicIncludePin(resolution.Pin); err != nil {
-			return nil, nil, errors.New("session coordinator: dynamic include revision pin is invalid")
-		}
-		flow, err := plansnapshot.RestoreFlowClosure(resolution.Pin.ExecutableClosure)
-		if err != nil {
-			return nil, nil, errors.New("session coordinator: dynamic include revision closure is invalid")
-		}
-		matched, err := dynamicRevisionParentIndex(plan, resolution.Pin)
-		if err != nil {
+		if err := applyDynamicRevisionPin(plan, resolution.Pin); err != nil {
 			return nil, nil, err
-		}
-		include, ok := plan.Steps[matched].Spec.(*schema.IncludeSpec)
-		if !ok || include == nil || !include.Include.IsDynamic() {
-			return nil, nil, errors.New("session coordinator: dynamic include revision parent is invalid")
-		}
-		include.ResolvedSteps = flow
-		include.ResolvedRunbookPath = resolution.Pin.AbsPath
-		include.ResolvedRunbookID = resolution.Pin.RunbookID
-		include.ResolvedRunbookName = resolution.Pin.RunbookName
-		include.ResolvedRunbookContentHash = resolution.Pin.RunbookContentHash
-		include.ResolvedInputs = resolution.Pin.ResolvedInputs
-		include.ResolvedBindings = resolution.Pin.ResolvedBindings
-		include.ResolvedOutputs = resolution.Pin.ResolvedOutputs
-		include.ResolvedGovernance = resolution.Pin.ResolvedGovernance
-		if err := attachDynamicPinToCanonicalTree(plan, resolution.Pin, flow); err != nil {
-			return nil, nil, err
-		}
-		if err := internalplanner.FinalizeMaterializedPlan(plan); err != nil {
-			return nil, nil, fmt.Errorf("session coordinator: finalize dynamic revision plan: %w", err)
 		}
 	}
 	plan.Metadata.DynamicIncludes = make([]schema.LockedDynamicInclude, len(resolutions))
 	for index, resolution := range resolutions {
 		plan.Metadata.DynamicIncludes[index] = resolution.Pin
+	}
+	if err := internalplanner.ValidateExecutionPlan(plan); err != nil {
+		return nil, nil, err
 	}
 	return plan, resolutions, nil
 }
@@ -384,7 +366,16 @@ func executionPlanGraphWithBindings(
 	bindings *[]ExecutionGraphBinding,
 ) (json.RawMessage, error) {
 	if plan == nil || len(plan.Metadata.DynamicIncludes) == 0 {
-		return executionPlanGraphCurrentVersion(plan, resolutions)
+		encoded, err := executionPlanGraphCurrentVersion(plan, resolutions)
+		if err != nil || bindings == nil {
+			return encoded, err
+		}
+		var document graphjson.Document
+		if err := json.Unmarshal(encoded, &document); err != nil {
+			return nil, err
+		}
+		appendGraphRuntimeBindings(document, bindings)
+		return encoded, nil
 	}
 	base, err := baseDynamicRevisionPlan(plan)
 	if err != nil {
@@ -397,6 +388,9 @@ func executionPlanGraphWithBindings(
 	var cumulative graphjson.Document
 	if err := decodeHandoffJSON(baseGraph, &cumulative); err != nil {
 		return nil, errors.New("session coordinator: base dynamic GraphJSON is invalid")
+	}
+	if bindings != nil {
+		appendGraphRuntimeBindings(cumulative, bindings)
 	}
 	pins := append([]schema.LockedDynamicInclude(nil), plan.Metadata.DynamicIncludes...)
 	sort.Slice(pins, func(left, right int) bool { return pins[left].Revision < pins[right].Revision })
@@ -616,11 +610,22 @@ func executionPlanGraphCurrentVersion(
 		if iterate, ok := step.Spec.(*schema.IterateNode); ok && iterate != nil {
 			title = iterateGraphTitle(iterate)
 		}
+		details, err := frozenGraphDetails(index, plan)
+		if err != nil {
+			return nil, err
+		}
 		data := map[string]any{
 			"id": binding.ID, "step_id": step.ID, "call_path": callIDs,
 			"kind": step.Kind, "title": title, "group_id": binding.GroupID,
 			"frame_id": binding.FrameID, "order": index,
-			"details": frozenGraphDetails(index, plan),
+			"details": details,
+		}
+		if plan.ToolScopes != nil {
+			runtimePath, err := handoffRuntimeStepCallPath(plan, index)
+			if err != nil {
+				return nil, err
+			}
+			data["runtime_node_id"] = engine.DebugNodeID(runtimePath, step.ID)
 		}
 		if include, ok := step.Spec.(*schema.IncludeSpec); ok && include != nil && include.Include.IsDynamic() {
 			data["dynamic"] = true
@@ -649,6 +654,9 @@ func executionPlanGraphCurrentVersion(
 		},
 		Frames: renderedFrames, Nodes: nodes, Groups: groups, Edges: edges,
 		Regions: plan.Metadata.Regions, Inputs: handoffGraphInputDecls(plan),
+	}
+	if err := appendFrozenToolGraphs(plan, &document, nodeBindings); err != nil {
+		return nil, err
 	}
 	for _, frame := range renderedFrames {
 		if frame.Invocation != nil {
@@ -705,6 +713,7 @@ func clearDynamicMaterializations(spec engine.StepSpec) {
 		}
 		if typed.Include.IsDynamic() {
 			typed.ResolvedSteps = nil
+			typed.TargetScopeID = ""
 			typed.ResolvedRunbookPath = ""
 			typed.ResolvedRunbookID = ""
 			typed.ResolvedRunbookName = ""
@@ -799,14 +808,18 @@ func dynamicGraphStepSpec(step *schema.Step) engine.StepSpec {
 }
 
 func applyDynamicRevisionPin(plan *engine.ExecutionPlan, pin schema.LockedDynamicInclude) error {
-	if err := plansnapshot.ValidateDynamicIncludePin(pin); err != nil {
-		return errors.New("session coordinator: dynamic include revision pin is invalid")
-	}
-	flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+	flow, err := restoreRevisionPin(plan, pin)
 	if err != nil {
-		return errors.New("session coordinator: dynamic include revision closure is invalid")
+		return fmt.Errorf("session coordinator: dynamic include revision closure is invalid: %w", err)
 	}
 	matched, err := dynamicRevisionParentIndex(plan, pin)
+	if errors.Is(err, errDynamicRevisionParentUnavailable) && plan.ToolScopes != nil {
+		if err := validateDynamicToolRevisionPin(plan, pin); err != nil {
+			return err
+		}
+		plan.Metadata.DynamicIncludes = append(plan.Metadata.DynamicIncludes, pin)
+		return internalplanner.ValidateExecutionPlan(plan)
+	}
 	if err != nil {
 		return err
 	}
@@ -815,6 +828,7 @@ func applyDynamicRevisionPin(plan *engine.ExecutionPlan, pin schema.LockedDynami
 		return errors.New("session coordinator: dynamic include revision parent is invalid")
 	}
 	include.ResolvedSteps = flow
+	include.TargetScopeID = pin.TargetScopeID
 	include.ResolvedRunbookPath = pin.AbsPath
 	include.ResolvedRunbookID = pin.RunbookID
 	include.ResolvedRunbookName = pin.RunbookName
@@ -851,7 +865,7 @@ func dynamicRevisionParentIndex(plan *engine.ExecutionPlan, pin schema.LockedDyn
 		matched = index
 	}
 	if matched < 0 {
-		return -1, errors.New("session coordinator: dynamic include revision parent is unavailable")
+		return -1, errDynamicRevisionParentUnavailable
 	}
 	return matched, nil
 }
@@ -1073,6 +1087,7 @@ func setDynamicIncludeMaterialization(
 	flow []schema.FlowNode,
 ) {
 	include.ResolvedSteps = flow
+	include.TargetScopeID = pin.TargetScopeID
 	include.ResolvedRunbookPath = pin.AbsPath
 	include.ResolvedRunbookID = pin.RunbookID
 	include.ResolvedRunbookName = pin.RunbookName
@@ -1093,13 +1108,26 @@ func appendDynamicOccurrenceGraph(
 	if current.SchemaVersion == "3" {
 		cumulative.SchemaVersion = "3"
 	}
-	root := pin.QualifiedNodeID
+	runtimeRoot := pin.QualifiedNodeID
+	if runtimeRoot == "" {
+		runtimeRoot = pin.StepID
+	}
+	root := ""
+	for _, node := range current.Nodes {
+		if graphRuntimeNodeID(node) != runtimeRoot {
+			continue
+		}
+		if root != "" {
+			return errors.New("session coordinator: dynamic graph runtime parent is ambiguous")
+		}
+		root = node.ID
+	}
 	if root == "" {
-		root = pin.StepID
+		return errors.New("session coordinator: dynamic graph runtime parent is unavailable")
 	}
 	parent := root
 	if parentPin != nil {
-		parent = occurrenceNodes[parentPin.Revision][root]
+		parent = occurrenceNodes[parentPin.Revision][runtimeRoot]
 		if parent == "" {
 			return errors.New("session coordinator: dynamic graph parent occurrence is unavailable")
 		}
@@ -1126,9 +1154,15 @@ func appendDynamicOccurrenceGraph(
 		usedGroups[group.ID] = true
 	}
 	nodeMap := make(map[string]string)
+	runtimeNodes := make(map[string]string)
 	for _, node := range current.Nodes {
 		if strings.HasPrefix(node.ID, root+"/") {
 			nodeMap[node.ID] = allocateDynamicGraphID("node", pin, node.ID, usedNodes)
+			id := graphRuntimeNodeID(node)
+			if runtimeNodes[id] != "" {
+				return errors.New("session coordinator: dynamic graph runtime child is ambiguous")
+			}
+			runtimeNodes[id] = nodeMap[node.ID]
 		}
 	}
 	frameMap := make(map[string]string)
@@ -1201,7 +1235,7 @@ func appendDynamicOccurrenceGraph(
 		edge.Target = mappedTarget
 		cumulative.Edges = append(cumulative.Edges, edge)
 	}
-	occurrenceNodes[pin.Revision] = nodeMap
+	occurrenceNodes[pin.Revision] = runtimeNodes
 	return nil
 }
 

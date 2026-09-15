@@ -581,6 +581,8 @@ func TestValidateDurableHandoffArtifactsDoesNotTrustInvalidDynamicClosure(t *tes
 			}},
 		},
 	}
+	invalidPins := plan.Metadata.DynamicIncludes
+	plan.Metadata.DynamicIncludes = nil
 	if err := planner.ValidateExecutionPlan(plan); err != nil {
 		t.Fatalf("ValidateExecutionPlan: %v", err)
 	}
@@ -588,6 +590,8 @@ func TestValidateDurableHandoffArtifactsDoesNotTrustInvalidDynamicClosure(t *tes
 	if err != nil {
 		t.Fatalf("FromExecutionPlan: %v", err)
 	}
+	plan.Metadata.DynamicIncludes = invalidPins
+	snapshot.Metadata.DynamicIncludes = invalidPins
 	snapshot.SnapshotDigest = ""
 	unsigned, err := json.Marshal(snapshot)
 	if err != nil {

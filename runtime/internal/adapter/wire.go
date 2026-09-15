@@ -145,7 +145,7 @@ func BuildEngineConfig(ctx context.Context, opts WireOptions) (engine.EngineConf
 		ToolRuntime:            toolRuntime,
 		LazyRunbookLoader:      opts.LazyRunbookLoader,
 		SubstitutionParser:     opts.SubstitutionParser,
-		DynamicIncludeResolver: opts.DynamicIncludeResolver,
+		DynamicIncludeResolver: versionedIncludeResolver{legacy: opts.DynamicIncludeResolver},
 		PinRecorder:            opts.PinRecorder,
 		MaxIncludeDepth:        opts.MaxIncludeDepth,
 		Output:                 opts.Output,
@@ -392,6 +392,12 @@ type subEngineTraceSink struct{}
 func (subEngineTraceSink) Append(tracepkg.TraceEvent) error { return nil }
 func (subEngineTraceSink) Close() error                     { return nil }
 
+func ExecuteSubSteps(ctx context.Context, cfg engine.EngineConfig, parent internalexecutor.SubStepParent, nodes []schema.FlowNode, vars map[string]any) ([]*engine.StepResult, error) {
+	return runSubStepsViaEngine(ctx, cfg.Executors, parent, nodes, vars, engine.RunModeReal,
+		cfg.TraceWriter, cfg.Dispatcher, cfg.Platform, cfg.InputProvider, cfg.PromptProvider,
+		cfg.ToolRuntime, cfg.ApprovalGate, cfg.Evaluator, cfg.ConditionEvaluator, cfg.EventBus, cfg.OnEvent)
+}
+
 func runSubStepsViaEngine(
 	ctx context.Context,
 	registry engine.ExecutorRegistry,
@@ -409,6 +415,7 @@ func runSubStepsViaEngine(
 	evaluator exprpkg.Evaluator,
 	conditionEvaluator exprpkg.ConditionEvaluator,
 	eventBus eventbuspkg.EventBus,
+	onEvents ...func(engine.Event),
 ) ([]*engine.StepResult, error) {
 	if replayRegistry := internalexecutor.ExecutorRegistryFromContext(ctx); replayRegistry != nil {
 		registry = replayRegistry
@@ -429,6 +436,11 @@ func runSubStepsViaEngine(
 		step.ParentID = parent.ID
 		step.ParentKind = parent.Kind
 		step.BranchLabel = parent.BranchLabel
+		if step.LexicalScopeID == "" {
+			step.LexicalScopeID = parent.RootScopeID
+		}
+		step.NestDepth = parent.NestDepth
+		engine.ApplyPlanStepPresentation(ctx, &step)
 		steps = append(steps, step)
 	}
 	if len(steps) == 0 && (parent.RunbookInvocation == nil || len(parent.RunbookInvocation.Bindings) == 0) {
@@ -440,7 +452,11 @@ func runSubStepsViaEngine(
 	} else if scope := engine.BindingScopeFromContext(ctx); scope != nil && scope.Invocation != nil {
 		declarations = scope.Invocation.Bindings
 	}
-	if err := internalplanner.ValidateTypedBoundFlow(nodes, declarations, engine.PlanToolsFromContext(ctx)); err != nil {
+	if scopes := engine.ToolScopesFromContext(ctx); scopes != nil {
+		if err := internalplanner.ValidateScopedTypedBoundFlow(nodes, declarations, scopes, parent.RootScopeID); err != nil {
+			return nil, err
+		}
+	} else if err := internalplanner.ValidateTypedBoundFlow(nodes, declarations, engine.PlanToolsFromContext(ctx)); err != nil {
 		return nil, err
 	}
 	transferBindings := func(vars map[string]any) {
@@ -511,11 +527,21 @@ func runSubStepsViaEngine(
 		RunbookPath: "substeps",
 		Steps:       remainingSteps,
 		Tools:       engine.PlanToolsFromContext(ctx),
+		ToolScopes:  engine.ToolScopesFromContext(ctx),
+		RootScopeID: parent.RootScopeID,
 		Metadata: engine.PlanMetadata{
 			RunbookID:   "substeps",
 			RunbookName: "substeps",
 			PlannedAt:   time.Now(),
 		},
+	}
+	if plan.ToolScopes != nil {
+		plan.Tools = nil
+		plan.Metadata.CatalogDigest = plan.ToolScopes.Export().CatalogDigest
+		plan.Metadata.Profile = engine.PlanProfileFromContext(ctx)
+		plan.ScopeBoundary = &engine.ToolScopeBoundary{
+			ParentID: parent.ID, ParentKind: parent.Kind, ScopeID: parent.RootScopeID,
+		}
 	}
 	if err := internalplanner.ValidateExecutionPlan(plan); err != nil {
 		return nil, err
@@ -537,6 +563,10 @@ func runSubStepsViaEngine(
 	if inheritedEvidenceHook, bound := internalexecutor.RunEvidenceHookFromContext(ctx); bound {
 		evidenceHook = inheritedEvidenceHook
 	}
+	var onEvent func(engine.Event)
+	if len(onEvents) > 0 {
+		onEvent = onEvents[0]
+	}
 	eng := internalengine.New(engine.EngineConfig{
 		Executors:           registry,
 		Dispatcher:          dispatcher,
@@ -552,6 +582,7 @@ func runSubStepsViaEngine(
 		Store:               nil,
 		EvidenceHook:        evidenceHook,
 		GovernanceEvaluator: internalgovernance.BuildEvaluator(approvalGate),
+		OnEvent:             onEvent,
 	})
 	// Forward events from this sub-engine back to the parent run so
 	// nested step lifecycle reaches the parent's event consumers (CLI
@@ -622,6 +653,10 @@ func runSubStepsViaEngine(
 	return results, nil
 }
 
+func ResolveFlowNode(node schema.FlowNode) (engine.ResolvedStep, bool) {
+	return resolveFlowNode(node)
+}
+
 func resolveFlowNode(node schema.FlowNode) (engine.ResolvedStep, bool) {
 	if node.Step != nil {
 		step := node.Step
@@ -634,6 +669,8 @@ func resolveFlowNode(node schema.FlowNode) (engine.ResolvedStep, bool) {
 			When:            step.When,
 			Delay:           step.Delay,
 			OnError:         step.OnError,
+			LexicalScopeID:  step.LexicalScopeID,
+			ToolBindingID:   step.ToolBindingID,
 		}, true
 	}
 	if node.Iterate != nil {

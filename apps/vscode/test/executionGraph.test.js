@@ -8,7 +8,7 @@ const { buildStdioRunArgs } = require('../out/directRunSession');
 
 test('ordinary legacy-shaped runbooks request live graphs independently of typed Results', () => {
   assert.deepEqual(buildStdioRunArgs('root.yaml', {}, undefined, false, new Set(), undefined, false, true),
-    ['run', '--stdio', '--require-capabilities', 'yawr.run-graph/v1', 'root.yaml']);
+    ['run', '--stdio', '--require-capabilities', 'yawr.lexical-tool-scopes/v1,yawr.run-graph/v1', 'root.yaml']);
 });
 
 const node = (id, frame = 'root', extra = {}) => ({ id, position: { x: 0, y: 0 },

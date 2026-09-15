@@ -35,18 +35,8 @@ func validateEnumConstraints(vp *engine.ValidatedPlan, errs *[]engine.PlanValida
 		}
 		key := "inputs." + name
 		recordEnumMeta(vp, key, in.Enum, isRedactedName(name, redactPatterns))
-		if in.Default != nil {
-			defStr := fmt.Sprint(in.Default)
-			// GIS-interpolated defaults are checked at runtime only
-			// (AR-ENUM-7: "Explicitly NOT plan time: any value containing
-			// GIS interpolation"), mirroring the ENUM-007 literal-check
-			// skip below.
-			if s, ok := in.Default.(string); ok && strings.Contains(s, "${") {
-				// skip: runtime-only
-			} else if !in.Enum.Contains(defStr) {
-				*errs = append(*errs, validationErr("", key, defStr, errkit.New("ENUM-006",
-					fmt.Sprintf("input %q default %q is not a declared enum member", name, defStr))))
-			}
+		if err := schema.ValidateEnumDefault(in.Enum, in.Default, fmt.Sprintf("input %q", name)); err != nil {
+			*errs = append(*errs, validationErr("", key, fmt.Sprint(in.Default), err))
 		}
 	}
 
@@ -60,8 +50,9 @@ func validateEnumConstraints(vp *engine.ValidatedPlan, errs *[]engine.PlanValida
 	}
 
 	// S1/S2: tool action args.<name> / outputs.<name>.
-	for _, toolName := range sortedToolKeys(plan.Tools) {
-		toolDef := plan.Tools[toolName]
+	definitions := validationToolDefinitions(plan)
+	for _, toolName := range sortedToolKeys(definitions) {
+		toolDef := definitions[toolName]
 		if toolDef == nil {
 			continue
 		}
@@ -77,14 +68,8 @@ func validateEnumConstraints(vp *engine.ValidatedPlan, errs *[]engine.PlanValida
 				}
 				key := fmt.Sprintf("tool.%s.%s.args.%s", toolName, actionName, argName)
 				recordEnumMeta(vp, key, arg.Enum, isRedactedName(argName, redactPatterns))
-				if arg.Default != nil {
-					defStr := fmt.Sprint(arg.Default)
-					if s, ok := arg.Default.(string); ok && strings.Contains(s, "${") {
-						// GIS-interpolated: runtime-only check (AR-ENUM-7).
-					} else if !arg.Enum.Contains(defStr) {
-						*errs = append(*errs, validationErr("", key, defStr, errkit.New("ENUM-006",
-							fmt.Sprintf("tool %q action %q arg %q default %q is not a declared enum member", toolName, actionName, argName, defStr))))
-					}
+				if err := schema.ValidateEnumDefault(arg.Enum, arg.Default, fmt.Sprintf("tool %q action %q arg %q", toolName, actionName, argName)); err != nil {
+					*errs = append(*errs, validationErr("", key, fmt.Sprint(arg.Default), err))
 				}
 			}
 			for _, outName := range sortedKeys(action.Outputs) {
@@ -99,14 +84,8 @@ func validateEnumConstraints(vp *engine.ValidatedPlan, errs *[]engine.PlanValida
 				// output default"): a substitute's declared output default
 				// not itself a member is ENUM-006 at plan time, independent
 				// of the substitute's own runtime ENUM-009 check.
-				if out.Default != nil {
-					defStr := fmt.Sprint(out.Default)
-					if s, ok := out.Default.(string); ok && strings.Contains(s, "${") {
-						// GIS-interpolated: runtime-only check (AR-ENUM-7).
-					} else if !out.Enum.Contains(defStr) {
-						*errs = append(*errs, validationErr("", key, defStr, errkit.New("ENUM-006",
-							fmt.Sprintf("tool %q action %q output %q default %q is not a declared enum member", toolName, actionName, outName, defStr))))
-					}
+				if err := schema.ValidateEnumDefault(out.Enum, out.Default, fmt.Sprintf("tool %q action %q output %q", toolName, actionName, outName)); err != nil {
+					*errs = append(*errs, validationErr("", key, fmt.Sprint(out.Default), err))
 				}
 			}
 		}
@@ -119,8 +98,8 @@ func validateEnumConstraints(vp *engine.ValidatedPlan, errs *[]engine.PlanValida
 		if !ok || spec == nil {
 			continue
 		}
-		toolDef, ok := plan.Tools[spec.Tool.Name]
-		if !ok || toolDef == nil {
+		toolDef := stepToolDefinition(plan, step, spec)
+		if toolDef == nil {
 			continue
 		}
 		action, ok := toolDef.Actions[spec.Tool.Action]

@@ -8,25 +8,26 @@ import (
 
 // Runbook is the top-level parsed representation of a yawr runbook document.
 type Runbook struct {
-	Schema      string                `yaml:"$schema,omitempty"     json:"$schema,omitempty"`
-	APIVersion  string                `yaml:"apiVersion"            json:"apiVersion"`
-	ID          string                `yaml:"id"                    json:"id"`
-	Name        string                `yaml:"name"                  json:"name"`
-	Kind        RunbookKind           `yaml:"kind,omitempty"        json:"kind,omitempty"`
-	Description string                `yaml:"description,omitempty" json:"description,omitempty"`
-	Vars        map[string]any        `yaml:"vars,omitempty"        json:"vars,omitempty"`
-	Bindings    []Binding             `yaml:"bindings,omitempty" json:"bindings,omitempty"`
-	Inputs      map[string]*Input     `yaml:"inputs,omitempty"      json:"inputs,omitempty"`
-	Outputs     map[string]*Output    `yaml:"outputs,omitempty"    json:"outputs,omitempty"`
-	ToolRefs    []*ToolRef            `yaml:"toolRefs,omitempty"    json:"toolRefs,omitempty"`
-	Requires    []*PackageRequirement `yaml:"requires,omitempty" json:"requires,omitempty"`
-	Extensions  []*ExtensionRef       `yaml:"extensions,omitempty"  json:"extensions,omitempty"`
-	Imports     map[string]string     `yaml:"imports,omitempty"     json:"imports,omitempty"`
-	Defaults    *StepDefaults         `yaml:"defaults,omitempty"    json:"defaults,omitempty"`
-	Governance  *GovernanceConfig     `yaml:"governance,omitempty"  json:"governance,omitempty"`
-	Prose       map[string]string     `yaml:"prose,omitempty"       json:"prose,omitempty"`
-	Metadata    map[string]string     `yaml:"metadata,omitempty"    json:"metadata,omitempty"`
-	Flow        []FlowNode            `yaml:"flow"                  json:"flow"`
+	LexicalScopeID string                `yaml:"-" json:"-"`
+	Schema         string                `yaml:"$schema,omitempty"     json:"$schema,omitempty"`
+	APIVersion     string                `yaml:"apiVersion"            json:"apiVersion"`
+	ID             string                `yaml:"id"                    json:"id"`
+	Name           string                `yaml:"name"                  json:"name"`
+	Kind           RunbookKind           `yaml:"kind,omitempty"        json:"kind,omitempty"`
+	Description    string                `yaml:"description,omitempty" json:"description,omitempty"`
+	Vars           map[string]any        `yaml:"vars,omitempty"        json:"vars,omitempty"`
+	Bindings       []Binding             `yaml:"bindings,omitempty" json:"bindings,omitempty"`
+	Inputs         map[string]*Input     `yaml:"inputs,omitempty"      json:"inputs,omitempty"`
+	Outputs        map[string]*Output    `yaml:"outputs,omitempty"    json:"outputs,omitempty"`
+	ToolRefs       []*ToolRef            `yaml:"toolRefs,omitempty"    json:"toolRefs,omitempty"`
+	Requires       []*PackageRequirement `yaml:"requires,omitempty" json:"requires,omitempty"`
+	Extensions     []*ExtensionRef       `yaml:"extensions,omitempty"  json:"extensions,omitempty"`
+	Imports        map[string]string     `yaml:"imports,omitempty"     json:"imports,omitempty"`
+	Defaults       *StepDefaults         `yaml:"defaults,omitempty"    json:"defaults,omitempty"`
+	Governance     *GovernanceConfig     `yaml:"governance,omitempty"  json:"governance,omitempty"`
+	Prose          map[string]string     `yaml:"prose,omitempty"       json:"prose,omitempty"`
+	Metadata       map[string]string     `yaml:"metadata,omitempty"    json:"metadata,omitempty"`
+	Flow           []FlowNode            `yaml:"flow"                  json:"flow"`
 
 	// Expand selects how this runbook's include sites are materialized
 	// into the execution plan: "" (inherit), "eager", "lazy", or "auto".

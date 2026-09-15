@@ -197,7 +197,36 @@ func resolveBindingSnapshot(req Request, sourceRoot *yaml.Node, snapshot *bindin
 	}
 	catalogFiles := map[string]bool{}
 	source := &pkgcatalog.Source{ReadFile: func(path string) ([]byte, error) { catalogFiles[pathKey(path)] = true; return f.read(path) }, Stat: f.stat, WalkDir: f.walk, MetadataOnly: true}
-	catalog, errs := pkgcatalog.Build(pkgcatalog.BuildOptions{Source: source, Builtins: internaltool.NewBuiltinRegistry().All(), WorkspaceRoot: req.Context.ProjectRoot, ProjectRequires: cfg.Requires, RunbookRequires: requirements, RunbookPath: entry, ProjectToolPaths: cfg.ToolPaths})
+	catalogOptions := pkgcatalog.BuildOptions{Source: source, Builtins: internaltool.NewBuiltinRegistry().All(),
+		WorkspaceRoot: req.Context.ProjectRoot, ProjectRequires: cfg.Requires, RunbookRequires: requirements,
+		RunbookPath: entry, ProjectToolPaths: cfg.ToolPaths, LexicalBindings: true}
+	catalog, errs := pkgcatalog.Build(catalogOptions)
+	packageRoot := req.Context.PackageRoot
+	if pathKey(entry) != pathKey(req.Document.Path) || needsDependencyClosure(entryRoot, catalog, entry) {
+		ctx := context.Background()
+		if snapshot != nil && snapshot.ctx != nil {
+			ctx = snapshot.ctx
+		}
+		closure, closureErrors := pkgcatalog.BuildClosure(ctx, pkgcatalog.ClosureOptions{
+			Catalog: catalogOptions, Entrypoint: entry, Parser: dependencyMetadataParser{},
+		})
+		fatal, _ := errkit.SplitWarnings(closureErrors)
+		if closure == nil || len(fatal) > 0 {
+			return fail(reasonFor(fatal))
+		}
+		catalog, errs = closure.Catalog, closureErrors
+		found := false
+		for _, document := range closure.Documents {
+			if pathKey(document.Path) == pathKey(req.Document.Path) &&
+				(packageRoot == "" || pathKey(document.PackageRoot) == pathKey(packageRoot)) {
+				packageRoot, found = document.PackageRoot, true
+				break
+			}
+		}
+		if !found {
+			return fail("missing-dependency")
+		}
+	}
 	fatal, _ := errkit.SplitWarnings(errs)
 	catalogReason := ""
 	if len(fatal) > 0 {
@@ -256,7 +285,7 @@ func resolveBindingSnapshot(req Request, sourceRoot *yaml.Node, snapshot *bindin
 			reply.Bindings = append(reply.Bindings, b)
 			continue
 		}
-		bound, errs := pkgcatalog.BindFile(catalog, req.Document.Path, []*schema.ToolRef{ref}, req.Context.PackageRoot)
+		bound, errs := pkgcatalog.BindFile(catalog, req.Document.Path, []*schema.ToolRef{ref}, packageRoot)
 		fatal, _ := errkit.SplitWarnings(errs)
 		if len(fatal) > 0 || len(bound) != 1 {
 			b.Reason = reasonFor(fatal)

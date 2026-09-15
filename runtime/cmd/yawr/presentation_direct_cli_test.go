@@ -107,9 +107,16 @@ func TestPresentationDirectCLIPackageFrozenInspection(t *testing.T) {
 				t.Fatal(err)
 			}
 			var staticPlan plansnapshot.SnapshotV1
-			if err := json.Unmarshal(staticData, &staticPlan); err != nil || staticPlan.SchemaVersion != plansnapshot.SchemaVersionV3 ||
-				staticPlan.Tools[name] == nil || staticPlan.Tools[name].Actions[sqlAction] == nil {
-				t.Fatalf("static writer did not preserve legal names in v2: %v", err)
+			if err := json.Unmarshal(staticData, &staticPlan); err != nil || staticPlan.SchemaVersion != "execution-plan/v4" {
+				t.Fatalf("static writer did not use the scoped format: %v", err)
+			}
+			restored, err := plansnapshot.Restore(staticPlan)
+			if err != nil || restored.ToolScopes == nil || len(restored.Tools) != 0 {
+				t.Fatalf("static writer did not preserve immutable scopes: %v", err)
+			}
+			bound, err := restored.ToolScopes.Resolve(restored.RootScopeID, name, sqlAction)
+			if err != nil || bound.LogicalName != name || bound.Definition.Declaration.Actions[sqlAction] == nil {
+				t.Fatalf("static writer did not preserve legal local names: %v", err)
 			}
 			writeFile(t, filepath.Join(dir, "yawr-package.yaml"), fmt.Sprintf(`apiVersion: yawr.tool-package/v1
 meta: {name: presentation-fixture, version: "1.0.0"}
@@ -157,14 +164,17 @@ flow:
 			}
 			for _, resolution := range state.DynamicIncludes {
 				closure := resolution.Pin.ExecutableClosure
-				if !bytes.Contains(closure, []byte(plansnapshot.FlowClosureSchemaV3)) {
-					t.Fatalf("closure not v2: %s", closure)
+				if !bytes.Contains(closure, []byte("execution-flow-closure/v4")) {
+					t.Fatalf("closure not scoped v4: %s", closure)
 				}
-				tools, err := plansnapshot.RestoreFlowTools(closure)
-				if err != nil || tools[name] == nil || tools[name].Actions[sqlAction] == nil {
+				if err := plansnapshot.ValidateDynamicIncludePin(resolution.Pin, plan.ToolScopes); err != nil {
+					t.Fatalf("invalid frozen dynamic binding: %v", err)
+				}
+				bound, err := plan.ToolScopes.Resolve(resolution.Pin.TargetScopeID, name, sqlAction)
+				if err != nil || bound.LogicalName != name || bound.Definition.Declaration.Actions[sqlAction] == nil {
 					t.Fatalf("original frozen action missing: %v", err)
 				}
-				action := tools[name].Actions[sqlAction]
+				action := bound.Definition.Declaration.Actions[sqlAction]
 				if action.Args[argName].Presentation.Language != "sql" || action.Outputs[outputName].Presentation.Language != "sql" {
 					t.Fatal("frozen descriptors changed")
 				}

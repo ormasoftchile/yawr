@@ -137,7 +137,8 @@ flow:
 					"--trace", "trace.jsonl", "--output", "quiet",
 				})
 			})
-			if runLast != exitRuntime || !strings.Contains(stderr, "output/value-expr") {
+			if runLast != exitValidation || !strings.Contains(stderr, "output/value-expr") ||
+				!strings.Contains(stderr, "GXL-PARSE-001") {
 				t.Fatalf("materialization failure: exit=%d stderr=%s", runLast, stderr)
 			}
 			assertNoStructuredDispatch(t)
@@ -157,6 +158,8 @@ func TestRun_StructuredInvalidAuthoredValuesRejectBeforeDispatch(t *testing.T) {
 			writeFile(t, filepath.Join(dir, "gather.runbook.yaml"), `apiVersion: yawr.runbook/v1
 id: gather
 name: Reject before any child work
+toolRefs:
+  - {name: records, package: acme.structured-values}
 inputs: {configurations: {type: array, required: true}}
 outputs:
   records: {type: array, value_expr: records}
@@ -181,7 +184,7 @@ flow:
 					"--trace", "trace.jsonl", "--output", "quiet",
 				})
 			})
-			if runLast == exitSuccess || !strings.Contains(stderr, "collect_values") {
+			if runLast != exitValidation || !strings.Contains(stderr, "collect_values") {
 				t.Fatalf("expected collection plan error, exit=%d stderr=%s", runLast, stderr)
 			}
 			assertNoStructuredDispatch(t)

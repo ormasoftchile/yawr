@@ -10,6 +10,7 @@ import (
 	internalplanner "github.com/ormasoftchile/yawr/runtime/internal/planner"
 	"github.com/ormasoftchile/yawr/runtime/internal/plansnapshot"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
+	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/expand"
 	"github.com/ormasoftchile/yawr/runtime/pkg/parser"
 	"github.com/ormasoftchile/yawr/runtime/pkg/pkgsubst"
@@ -45,6 +46,27 @@ func validateFrozenToolSubstitutions(plan *engine.ExecutionPlan) (bool, error) {
 	if plan == nil {
 		return false, nil
 	}
+	if plan.ToolScopes != nil {
+		for _, definition := range plan.ToolScopes.Export().Definitions {
+			if definition.Declaration == nil {
+				return false, errkit.New("SCOPE-002", "scoped tool definition has no frozen declaration")
+			}
+			for _, action := range definition.Declaration.Actions {
+				if action == nil {
+					return false, errkit.New("SCOPE-002", "scoped tool definition has a missing action")
+				}
+				if action.Execute.IsSubstitution() || action.FrozenSubstitution != nil {
+					if action.FrozenSubstitution == nil {
+						return false, errkit.New("SCOPE-002", "scoped substitutions must be captured before execution")
+					}
+					if err := plansnapshot.ValidateFrozenToolSubstitution(action.FrozenSubstitution, plan.ToolScopes); err != nil {
+						return false, err
+					}
+				}
+			}
+		}
+		return false, nil
+	}
 	missing := false
 	for _, definition := range plan.Tools {
 		if definition == nil {
@@ -78,6 +100,10 @@ func validateFrozenToolSubstitutions(plan *engine.ExecutionPlan) (bool, error) {
 func (e *ToolExecutor) MaterializeToolSubstitutions(ctx context.Context, plan *engine.ExecutionPlan) error {
 	if plan == nil {
 		return errors.New("tool executor: plan is required")
+	}
+	if plan.ToolScopes != nil {
+		_, err := validateFrozenToolSubstitutions(plan)
+		return err
 	}
 	lookup, ok := e.runtime.(tool.ToolDefLookup)
 	if !ok {

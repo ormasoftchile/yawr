@@ -1,6 +1,8 @@
 apiVersion: yawr.runbook/v1
 id: relay
 name: Re-export another substituted tool's captured structured outputs
+toolRefs:
+  - {name: records, package: acme.structured-values}
 outputs:
   records: {type: array, value_expr: captured_records}
   labels: {type: array, value_expr: captured_labels}

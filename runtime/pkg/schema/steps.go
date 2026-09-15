@@ -31,7 +31,8 @@ type ToolInvocation struct {
 
 // IncludeSpec holds the fields for a step of type "include".
 type IncludeSpec struct {
-	Include IncludeConfig `yaml:"include" json:"include"`
+	TargetScopeID string        `yaml:"-" json:"-"`
+	Include       IncludeConfig `yaml:"include" json:"include"`
 
 	// ResolvedSteps is populated by the planner (or sub-step expander)
 	// with the loaded child runbook's flow nodes. The IncludeExecutor uses

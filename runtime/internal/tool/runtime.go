@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 	toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 )
@@ -60,6 +61,33 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 	if !ok || def == nil {
 		return nil, fmt.Errorf("tool runtime: tool not found: %s", toolName)
 	}
+	return r.invokeDefinition(ctx, toolName, toolName, def, action, args, r.profile)
+}
+
+func (r *DefaultToolRuntime) InvokeBound(ctx context.Context, invocation toolpkg.BoundInvocation, args map[string]any) (*toolpkg.ToolResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := toolpkg.ValidateBoundInvocation(invocation); err != nil {
+		return nil, err
+	}
+	definition, err := toolpkg.CloneBoundDefinition(invocation.Definition)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if definition.Runtime.Actions[invocation.Action].Execute.IsSubstitution() {
+		return nil, errkit.New("SCOPE-002", "a bound runbook substitution requires the scoped executor")
+	}
+	// Profiles are already frozen into a bound definition. Neither the legacy
+	// registry nor its mutable profile may reinterpret a scoped invocation.
+	return r.invokeDefinition(ctx, invocation.DefinitionID, invocation.LogicalName,
+		&definition.Runtime, invocation.Action, args, nil)
+}
+
+func (r *DefaultToolRuntime) invokeDefinition(ctx context.Context, cacheKey, toolName string, def *toolpkg.ToolDef, action string, args map[string]any, profile *schema.RuntimeProfile) (*toolpkg.ToolResult, error) {
 	actionDef, ok := def.Actions[action]
 	if !ok || actionDef == nil {
 		return nil, fmt.Errorf("tool runtime: action not found: %s", action)
@@ -72,11 +100,11 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 	case toolpkg.TransportStdio:
 		return (&StdioTransport{}).Invoke(ctx, *def, action, args)
 	case toolpkg.TransportJSONRPC:
-		return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
+		return r.invokePersistent(ctx, cacheKey, *def, action, args, func() toolpkg.ToolTransport {
 			return &JSONRPCTransport{}
 		})
 	case toolpkg.TransportMCP:
-		return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
+		return r.invokePersistent(ctx, cacheKey, *def, action, args, func() toolpkg.ToolTransport {
 			return &MCPTransport{}
 		})
 	case toolpkg.TransportMCPHTTP:
@@ -85,7 +113,7 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 				return nil, err
 			}
 		}
-		return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
+		return r.invokePersistent(ctx, cacheKey, *def, action, args, func() toolpkg.ToolTransport {
 			var gate *TokenGate
 			if def.Auth != nil {
 				// Ratified Rule A: profile MAY override the provider (who acquires
@@ -93,8 +121,8 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 				// definition — a profile never changes what the token is scoped for
 				// or where it may be sent.
 				providerName := def.Auth.Provider
-				if r.profile != nil {
-					if override, ok := r.profile.Tools[toolName]; ok && override != nil && override.Provider != "" {
+				if profile != nil {
+					if override, ok := profile.Tools[toolName]; ok && override != nil && override.Provider != "" {
 						providerName = override.Provider
 					}
 				}
@@ -111,8 +139,8 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 			// PLAN-013 (enforced at plan time) has already verified the override
 			// host is in allowed_hosts, so execution here is safe.
 			effectiveURL := def.URL
-			if r.profile != nil {
-				if override, ok := r.profile.Tools[toolName]; ok && override != nil && override.Endpoint != "" {
+			if profile != nil {
+				if override, ok := profile.Tools[toolName]; ok && override != nil && override.Endpoint != "" {
 					effectiveURL = override.Endpoint
 				}
 			}
@@ -124,7 +152,7 @@ func (r *DefaultToolRuntime) Invoke(ctx context.Context, toolName string, action
 		if adaptErr != nil {
 			return nil, adaptErr
 		}
-		return r.invokePersistent(ctx, toolName, *def, action, adaptedArgs, func() toolpkg.ToolTransport {
+		return r.invokePersistent(ctx, cacheKey, *def, action, adaptedArgs, func() toolpkg.ToolTransport {
 			return newVSCodeMCPTransport()
 		})
 	case toolpkg.TransportNative:

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/flowwalk"
 	"github.com/ormasoftchile/yawr/runtime/pkg/parser"
 	"github.com/ormasoftchile/yawr/runtime/pkg/planner"
@@ -17,6 +18,7 @@ import (
 // StaticHandoffResolverConfig supplies the same parser, catalog/profile-aware
 // planner, and include loader used by the initiating runtime.
 type StaticHandoffResolverConfig struct {
+	Prepare         func(context.Context, string) (*engine.ExecutionPlan, error)
 	Parser          parser.Parser
 	Planner         planner.Planner
 	Loader          flowwalk.Loader
@@ -24,6 +26,7 @@ type StaticHandoffResolverConfig struct {
 }
 
 type staticHandoffResolver struct {
+	prepare         func(context.Context, string) (*engine.ExecutionPlan, error)
 	parser          parser.Parser
 	planner         planner.Planner
 	loader          flowwalk.Loader
@@ -33,11 +36,12 @@ type staticHandoffResolver struct {
 // NewStaticHandoffResolver constructs the production filesystem resolver for
 // V1 static handoff targets.
 func NewStaticHandoffResolver(config StaticHandoffResolverConfig) (HandoffResolver, error) {
-	if config.Parser == nil || config.Planner == nil || config.Loader == nil {
+	if config.Prepare == nil && (config.Parser == nil || config.Planner == nil || config.Loader == nil) {
 		return nil, errors.New("session coordinator: static handoff resolver requires parser, planner, and loader")
 	}
 	return &staticHandoffResolver{
-		parser: config.Parser, planner: config.Planner, loader: config.Loader,
+		prepare: config.Prepare,
+		parser:  config.Parser, planner: config.Planner, loader: config.Loader,
 		maxIncludeDepth: config.MaxIncludeDepth,
 	}, nil
 }
@@ -56,6 +60,23 @@ func (resolver *staticHandoffResolver) ResolveHandoff(
 	}
 	if err := validateStaticHandoffContainment(declaringPath, targetPath); err != nil {
 		return HandoffTarget{}, err
+	}
+	if resolver.prepare != nil {
+		plan, err := resolver.prepare(ctx, targetPath)
+		if err != nil {
+			return HandoffTarget{}, err
+		}
+		if plan == nil || plan.Validation == nil || plan.ToolScopes == nil || filepath.Clean(plan.RunbookPath) != targetPath {
+			return HandoffTarget{}, errors.New("session coordinator: preparation returned an invalid scoped handoff target")
+		}
+		graph, err := BuildExecutionPlanGraph(plan)
+		if err != nil {
+			return HandoffTarget{}, err
+		}
+		return HandoffTarget{Plan: plan, Graph: graph}, nil
+	}
+	if request.SourcePlan.ToolScopes != nil {
+		return HandoffTarget{}, errors.New("session coordinator: scoped handoff requires frozen dependency preparation")
 	}
 	parsed, err := resolver.parser.Parse(ctx, targetPath)
 	if err != nil {

@@ -16,11 +16,9 @@ import (
 )
 
 func TestRunStdioExecutionGraphExamples(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", "examples", "execution-graph"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"dynamic-router", "static-debug", "repeated-dynamic", "nested-failure", "operator-review", "static-eager", "static-lazy"} {
+	root := filepath.Join(findRepoRoot(t), "examples", "execution-graph")
+	for _, name := range []string{"dynamic-router", "static-debug", "repeated-dynamic", "nested-failure", "operator-review", "static-eager", "static-lazy",
+		"lexical-static-and-lazy", "lexical-parallel", "lexical-dynamic", "lexical-dynamic-parallel", "lexical-dynamic-through-tool"} {
 		t.Run(name, func(t *testing.T) {
 			artifacts := t.TempDir()
 			fixture := name
@@ -30,8 +28,15 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 				fixture = "static-lazy"
 				args = append(args, "--debug")
 			}
-			preview := y1Command(t, "preview", "--format", "graphjson", "--recurse", filepath.Join(root, "runbooks", fixture+".runbook.yaml"))
-			preview.Dir = root
+			scenarioRoot := root
+			entrypoint := filepath.Join(root, "runbooks", fixture+".runbook.yaml")
+			lexical := strings.HasPrefix(name, "lexical-")
+			if lexical {
+				scenarioRoot = filepath.Join(findRepoRoot(t), "examples", "dependency-scopes")
+				entrypoint = filepath.Join(scenarioRoot, strings.TrimPrefix(name, "lexical-")+".runbook.yaml")
+			}
+			preview := y1Command(t, "preview", "--format", "graphjson", "--recurse", entrypoint)
+			preview.Dir = scenarioRoot
 			previewBytes, err := preview.Output()
 			if err != nil {
 				t.Fatal(err)
@@ -40,8 +45,8 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 			if err := json.Unmarshal(previewBytes, &initial); err != nil {
 				t.Fatal(err)
 			}
-			cmd := y1Command(t, "run", append(args, filepath.Join(root, "runbooks", fixture+".runbook.yaml"))...)
-			cmd.Dir = root
+			cmd := y1Command(t, "run", append(args, entrypoint)...)
+			cmd.Dir = scenarioRoot
 			stdin, err := cmd.StdinPipe()
 			if err != nil {
 				t.Fatal(err)
@@ -55,6 +60,12 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 			if err := cmd.Start(); err != nil {
 				t.Fatal(err)
 			}
+			defer func() {
+				if cmd.ProcessState == nil {
+					_ = cmd.Process.Kill()
+					_ = cmd.Wait()
+				}
+			}()
 			timer := time.AfterFunc(20*time.Second, func() { _ = cmd.Process.Kill() })
 			defer timer.Stop()
 			defer stdin.Close()
@@ -75,6 +86,7 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 				known[node.ID] = true
 			}
 			childStarts := 0
+			allStarts := 0
 			repeatedIDs := map[string]bool{}
 			prompt := false
 			childDebugPauses := 0
@@ -120,6 +132,9 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 						if err := json.Unmarshal(body, &update); err != nil {
 							t.Fatal(err)
 						}
+						if update.Document.Runbook.ID != initial.Runbook.ID || update.Document.Runbook.Path != initial.Runbook.Path {
+							t.Fatalf("execution graph changed preview root identity: preview=%#v execution=%#v", initial.Runbook, update.Document.Runbook)
+						}
 						next := map[string]bool{}
 						for _, node := range update.Document.Nodes {
 							next[node.ID] = true
@@ -146,6 +161,19 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 						} `json:"payload"`
 					}
 					json.Unmarshal(frame["event"], &event)
+					if event.Kind == "step/started" {
+						allStarts++
+						if lexical && event.Payload.Graph == "" && strings.Contains(event.Payload.Node, "/") {
+							childStarts++
+						}
+						graphID := event.Payload.Graph
+						if graphID == "" {
+							graphID = event.Payload.Node
+						}
+						if lexical && !known[graphID] {
+							t.Fatalf("scoped step started without a visible graph node: %s", event.Payload.Node)
+						}
+					}
 					if event.Kind == "step/started" && event.Payload.Graph != "" {
 						childStarts++
 						if strings.HasSuffix(event.Payload.Node, "/collect_evidence") {
@@ -209,6 +237,15 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 			}
 			if finished != expected {
 				t.Fatalf("status=%q expected=%q exit=%v stderr=%s", finished, expected, waitErr, stderr.String())
+			}
+			if lexical {
+				expectedStarts := map[string]int{
+					"lexical-static-and-lazy": 14, "lexical-parallel": 11, "lexical-dynamic": 15,
+					"lexical-dynamic-parallel": 11, "lexical-dynamic-through-tool": 11,
+				}[name]
+				if allStarts != expectedStarts {
+					t.Fatalf("scoped execution lost canonical steps: got %d, want %d", allStarts, expectedStarts)
+				}
 			}
 			if !strings.HasPrefix(name, "static-") && (childStarts < 3 || retainedFrames < 3) {
 				t.Fatalf("missing nested execution: child starts=%d runbook frames=%d", childStarts, retainedFrames)

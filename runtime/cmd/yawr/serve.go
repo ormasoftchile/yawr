@@ -186,11 +186,13 @@ func runServe(args []string) int {
 	defer shutdown()
 
 	cfg := servepkg.ServerConfig{
-		Addr:              *addr,
-		Engine:            internalengine.New(engineCfg),
-		EngineConfig:      engineCfg,
-		Parser:            parserImpl,
-		Planner:           plannerImpl,
+		Addr:         *addr,
+		Engine:       internalengine.New(engineCfg),
+		EngineConfig: engineCfg,
+		Parser:       parserImpl,
+		Planner:      plannerImpl,
+		PrepareRun: scopedServePreparation(parserImpl, workspaceRoot, mergedRequires, pmExtraToolPaths,
+			expand.Policy{Default: expandDefault}),
 		WorkspaceRoot:     workspaceRoot,
 		PackageMapPath:    *packageMapPath,
 		ProjectRequires:   mergedRequires,

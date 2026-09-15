@@ -8,7 +8,7 @@ import (
 	"time"
 
 	internalexecutor "github.com/ormasoftchile/yawr/runtime/internal/executor"
-	"github.com/ormasoftchile/yawr/runtime/internal/plansnapshot"
+	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/pkgcatalog"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 	tracepkg "github.com/ormasoftchile/yawr/runtime/pkg/trace"
@@ -89,15 +89,19 @@ func buildPinsByPath(pins []schema.LockedDynamicInclude) map[string]schema.Locke
 func (l *PinBasedIncludeLoader) Load(ctx context.Context, absPath string) (*internalexecutor.LoadedRunbook, error) {
 	if pin, ok := l.pinsByPath[absPath]; ok {
 		if len(pin.ExecutableClosure) > 0 {
-			flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+			flow, err := restoreReplayPin(pin, engine.ToolScopesFromContext(ctx))
 			if err != nil {
 				return nil, fmt.Errorf("replay: restore pinned dynamic include %q: %w", pin.QualifiedID, err)
 			}
 			return &internalexecutor.LoadedRunbook{
-				Flow: flow, Inputs: pin.ResolvedInputs, Outputs: pin.ResolvedOutputs,
+				Flow: flow, Inputs: pin.ResolvedInputs, Outputs: pin.ResolvedOutputs, Bindings: pin.ResolvedBindings,
 				Governance: pin.ResolvedGovernance, ID: pin.RunbookID,
 				Name: pin.RunbookName, ContentHash: pin.RunbookContentHash,
+				RootScopeID: pin.TargetScopeID, SourceDigest: pin.FileDigest,
 			}, nil
+		}
+		if engine.ToolScopesFromContext(ctx) != nil {
+			return nil, fmt.Errorf("replay: scoped pin %q has no captured executable closure", pin.QualifiedID)
 		}
 		actual, err := fileDigestSHA256(absPath)
 		if err != nil {
@@ -107,6 +111,9 @@ func (l *PinBasedIncludeLoader) Load(ctx context.Context, absPath string) (*inte
 			l.emitDriftEvent(pin, actual)
 			return nil, fmt.Errorf("replay: pinned dynamic include %q digest changed", pin.QualifiedID)
 		}
+	}
+	if engine.ToolScopesFromContext(ctx) != nil {
+		return nil, fmt.Errorf("replay: scoped source %s is not captured", absPath)
 	}
 	if l.base == nil {
 		return nil, fmt.Errorf("replay: pin-based loader has no base loader for %s", absPath)

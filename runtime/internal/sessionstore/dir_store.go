@@ -1103,6 +1103,9 @@ func (store *DirStore) CommitSegmentRevision(
 	if err := validateSegmentRevisionDispatch(request.Dispatch, request.Resolution, request.WriterEpoch); err != nil {
 		return session.Manifest{}, err
 	}
+	if err := validateScopedSegmentArtifact(request.Resolution, request.ExecutableSnapshot.Data); err != nil {
+		return session.Manifest{}, err
+	}
 	payload := segmentRevisedPayload{
 		SegmentID: request.SegmentID, RunID: request.RunID,
 		ExecutableRevision: request.ExecutableRevision, GraphRevision: request.GraphRevision,
@@ -2856,8 +2859,14 @@ func (store *DirStore) validateReferencedEventBlobs(
 				return err
 			}
 			for _, digest := range []string{payload.ExecutableSnapshotHash, payload.GraphHash} {
-				if _, err := store.ReadBlob(ctx, sessionID, digest); err != nil {
+				data, err := store.ReadBlob(ctx, sessionID, digest)
+				if err != nil {
 					return fmt.Errorf("sessionstore: segment revision blob %s: %w", digest, err)
+				}
+				if digest == payload.ExecutableSnapshotHash {
+					if err := validateScopedSegmentArtifact(payload.Resolution, data); err != nil {
+						return err
+					}
 				}
 			}
 		case session.EventTransitionPrepared:
@@ -3510,8 +3519,10 @@ func validateBlob(blob session.JSONBlob) error {
 }
 
 func validateSegmentResolution(resolution engine.DynamicIncludeResolutionState, writerEpoch uint64) error {
-	if resolution.SchemaVersion != engine.DynamicIncludeResolutionStateSchemaV1 ||
-		!validDigest(resolution.ResolutionID) || resolution.WriterEpoch != writerEpoch ||
+	if err := engine.ValidateDynamicIncludeResolutionVersion(resolution); err != nil {
+		return err
+	}
+	if !validDigest(resolution.ResolutionID) || resolution.WriterEpoch != writerEpoch ||
 		resolution.QualifiedNodeID == "" || resolution.StepID == "" || resolution.Invocation < 1 ||
 		resolution.Revision < 1 ||
 		resolution.QualifiedNodeID != engine.DebugNodeID(resolution.CallPath, resolution.StepID) ||
@@ -3529,8 +3540,10 @@ func validateSegmentResolution(resolution engine.DynamicIncludeResolutionState, 
 	if _, err := time.Parse(time.RFC3339Nano, resolution.CommittedAt); err != nil {
 		return errors.New("sessionstore: invalid segment revision commit time")
 	}
-	if err := plansnapshot.ValidateDynamicIncludePin(resolution.Pin); err != nil {
-		return errors.New("sessionstore: invalid segment revision pin")
+	if resolution.SchemaVersion == engine.DynamicIncludeResolutionStateSchemaV1 {
+		if err := plansnapshot.ValidateDynamicIncludePin(resolution.Pin); err != nil {
+			return errors.New("sessionstore: invalid segment revision pin")
+		}
 	}
 	return nil
 }

@@ -1,0 +1,4 @@
+apiVersion: yawr.tool-package/v1
+meta: {name: scope.left, version: "1.0.0"}
+exports:
+  tools: [{id: query, path: query.tool.yaml}]

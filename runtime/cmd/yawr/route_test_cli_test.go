@@ -10,12 +10,10 @@ import (
 
 	"github.com/ormasoftchile/yawr/runtime/internal/adapter"
 	internalparser "github.com/ormasoftchile/yawr/runtime/internal/parser"
-	internalplanner "github.com/ormasoftchile/yawr/runtime/internal/planner"
 	internaltool "github.com/ormasoftchile/yawr/runtime/internal/tool"
 	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/expand"
 	"github.com/ormasoftchile/yawr/runtime/pkg/pkgcatalog"
-	plannerpkg "github.com/ormasoftchile/yawr/runtime/pkg/planner"
 	"github.com/ormasoftchile/yawr/runtime/pkg/platform"
 	"github.com/ormasoftchile/yawr/runtime/pkg/preview/graphdoc"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
@@ -58,30 +56,7 @@ flow:
 	if err := os.WriteFile(runbookPath, []byte(runbookSource), 0o600); err != nil {
 		t.Fatalf("write runbook: %v", err)
 	}
-	parserImpl, err := internalparser.New(platform.Real())
-	if err != nil {
-		t.Fatalf("new parser: %v", err)
-	}
-	parsed, err := parserImpl.Parse(context.Background(), runbookPath)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	document, err := (&graphdoc.Builder{Loader: &cliLoader{p: parserImpl}, Recurse: true}).Build(context.Background(), parsed)
-	if err != nil {
-		t.Fatalf("graph document: %v", err)
-	}
-	registry, err := newToolRegistry(dir)
-	if err != nil {
-		t.Fatalf("tool registry: %v", err)
-	}
-	plan, err := internalplanner.New(plannerpkg.Config{Loader: &fileRunbookLoader{parser: parserImpl}, Tools: registry, ExpandPolicy: expand.Policy{Default: expand.ModeEager}}).Plan(context.Background(), parsed)
-	if err != nil {
-		t.Fatalf("plan: %v", err)
-	}
-	planHash, err := routeTestPlanHash(document.Hash, plan, buildRouteTestCLICatalog(t, runbookPath, parsed.Runbook.Requires), nil)
-	if err != nil {
-		t.Fatalf("route test hash: %v", err)
-	}
+	planHash := buildScopedRouteTestHash(t, runbookPath)
 	artifact := fmt.Sprintf(`apiVersion: yawr.route-test/v1
 runbook: %q
 plan_hash: %s
@@ -121,30 +96,7 @@ flow:
 	if err := os.WriteFile(runbookPath, []byte(runbookSource), 0o600); err != nil {
 		t.Fatalf("write runbook: %v", err)
 	}
-	parserImpl, err := internalparser.New(platform.Real())
-	if err != nil {
-		t.Fatalf("new parser: %v", err)
-	}
-	parsed, err := parserImpl.Parse(context.Background(), runbookPath)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	document, err := (&graphdoc.Builder{Loader: &cliLoader{p: parserImpl}, Recurse: true}).Build(context.Background(), parsed)
-	if err != nil {
-		t.Fatalf("graph document: %v", err)
-	}
-	registry, err := newToolRegistry(dir)
-	if err != nil {
-		t.Fatalf("tool registry: %v", err)
-	}
-	plan, err := internalplanner.New(plannerpkg.Config{Loader: &fileRunbookLoader{parser: parserImpl}, Tools: registry, ExpandPolicy: expand.Policy{Default: expand.ModeEager}}).Plan(context.Background(), parsed)
-	if err != nil {
-		t.Fatalf("plan: %v", err)
-	}
-	planHash, err := routeTestPlanHash(document.Hash, plan, buildRouteTestCLICatalog(t, runbookPath, parsed.Runbook.Requires), nil)
-	if err != nil {
-		t.Fatalf("route test hash: %v", err)
-	}
+	planHash := buildScopedRouteTestHash(t, runbookPath)
 	artifact := fmt.Sprintf(`apiVersion: yawr.route-test/v1
 runbook: %q
 plan_hash: %s
@@ -201,6 +153,42 @@ target: { step: target, phase: before, invocation: 1, attempt: 1 }
 	if runLast != exitValidation || !strings.Contains(stderr, "plan changed") {
 		t.Fatalf("exit=%d stderr=%q", runLast, stderr)
 	}
+}
+
+func buildScopedRouteTestHash(t *testing.T, runbookPath string) string {
+	t.Helper()
+	ctx := context.Background()
+	parser, err := internalparser.New(platform.Real())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, _, err := prepareScopedCLI(ctx, parser, runbookPath, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	displayPath, err := filepath.Abs(runbookPath)
+	if err != nil || prepared.Root.Source != displayPath {
+		t.Fatalf("preparation changed requested source display identity: got=%q want=%q error=%v", prepared.Root.Source, displayPath, err)
+	}
+	document, err := (&graphdoc.Builder{Loader: prepared.Loader, Recurse: true}).Build(ctx, prepared.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := prepared.Plan(ctx, expand.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ToolScopes == nil || len(plan.Tools) != 0 {
+		t.Fatal("route artifact requires a scoped execution plan")
+	}
+	if plan.RunbookPath != displayPath {
+		t.Fatalf("scoped plan changed requested source display identity: got=%q want=%q", plan.RunbookPath, displayPath)
+	}
+	hash, err := routeTestPlanHash(document.Hash, plan, prepared.Catalog, prepared.Profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hash
 }
 
 func buildRouteTestCLICatalog(

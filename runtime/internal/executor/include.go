@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -27,14 +28,16 @@ const defaultMaxIncludeDepth = 10
 
 // LoadedRunbook is the execution payload for one deferred include.
 type LoadedRunbook struct {
-	Bindings    []schema.Binding
-	Flow        []schema.FlowNode
-	Inputs      map[string]*schema.Input
-	Outputs     map[string]*schema.Output
-	Governance  *schema.GovernanceConfig
-	ID          string
-	Name        string
-	ContentHash string
+	Bindings     []schema.Binding
+	Flow         []schema.FlowNode
+	Inputs       map[string]*schema.Input
+	Outputs      map[string]*schema.Output
+	Governance   *schema.GovernanceConfig
+	ID           string
+	Name         string
+	ContentHash  string
+	RootScopeID  string
+	SourceDigest string
 }
 
 // LazyRunbookLoader resolves a deferred include's child runbook at
@@ -44,6 +47,10 @@ type LazyRunbookLoader interface {
 	// absolute path. Errors are surfaced to the engine as step
 	// failures (e.g. broken include path, parse error, schema error).
 	Load(ctx context.Context, absPath string) (*LoadedRunbook, error)
+}
+
+type ScopedLazyRunbookLoader interface {
+	LoadScoped(context.Context, string, string) (*LoadedRunbook, error)
 }
 
 // IncludeExecutor runs an include step's child runbook via SubStepRunner.
@@ -114,6 +121,9 @@ func (e *IncludeExecutor) MaterializeLazyIncludes(ctx context.Context, plan *eng
 	if plan == nil {
 		return errors.New("include executor: execution plan is required")
 	}
+	if plan.ToolScopes != nil {
+		ctx = engine.WithToolScopes(ctx, plan.ToolScopes)
+	}
 	stack := make(map[string]bool)
 	for index := range plan.Steps {
 		if err := e.materializeLazySpec(ctx, plan.Steps[index].Spec, plan.Steps[index].ID, stack); err != nil {
@@ -135,23 +145,33 @@ func (e *IncludeExecutor) materializeLazySpec(
 			return nil
 		}
 		if typed.LazyRunbookPath != "" {
-			loader, ok := e.loader.(LazyRunbookSnapshotLoader)
-			if !ok {
-				return fmt.Errorf("include executor: durable lazy include %s requires a snapshot loader", path)
-			}
 			absolutePath := filepath.Clean(typed.LazyRunbookPath)
 			if stack[absolutePath] {
 				return fmt.Errorf("include executor: lazy include cycle at %s", absolutePath)
 			}
-			source, err := os.ReadFile(absolutePath)
-			if err != nil {
-				return fmt.Errorf("include executor: capture lazy include %s: %w", absolutePath, err)
+			var loaded *LoadedRunbook
+			var err error
+			var digest string
+			if engine.ToolScopesFromContext(ctx) != nil || typed.TargetScopeID != "" {
+				loaded, err = e.loadScopedRunbook(ctx, typed)
+				if loaded != nil {
+					digest = loaded.SourceDigest
+				}
+			} else {
+				loader, ok := e.loader.(LazyRunbookSnapshotLoader)
+				if !ok {
+					return fmt.Errorf("include executor: durable lazy include %s requires a snapshot loader", path)
+				}
+				source, readErr := os.ReadFile(absolutePath)
+				if readErr != nil {
+					return fmt.Errorf("include executor: capture lazy include %s: %w", absolutePath, readErr)
+				}
+				digest = fmt.Sprintf("sha256:%x", sha256.Sum256(source))
+				if typed.LazyRunbookDigest != "" && typed.LazyRunbookDigest != digest {
+					return fmt.Errorf("include executor: lazy include %s digest changed", absolutePath)
+				}
+				loaded, err = loader.LoadSnapshot(ctx, absolutePath, source)
 			}
-			digest := fmt.Sprintf("sha256:%x", sha256.Sum256(source))
-			if typed.LazyRunbookDigest != "" && typed.LazyRunbookDigest != digest {
-				return fmt.Errorf("include executor: lazy include %s digest changed", absolutePath)
-			}
-			loaded, err := loader.LoadSnapshot(ctx, absolutePath, source)
 			if err != nil {
 				return fmt.Errorf("include executor: parse captured lazy include %s: %w", absolutePath, err)
 			}
@@ -408,6 +428,7 @@ func (e *IncludeExecutor) Execute(ctx context.Context, step engine.ResolvedStep,
 		Kind:              "include",
 		IncludeAlias:      step.IncludeAlias,
 		RunbookPath:       childRunbookPath,
+		RootScopeID:       spec.TargetScopeID,
 		NestDepth:         step.NestDepth + 1,
 	}, childFlow, childVars)
 	if err != nil {
@@ -426,9 +447,13 @@ func (e *IncludeExecutor) Execute(ctx context.Context, step engine.ResolvedStep,
 }
 
 func (e *IncludeExecutor) loadLazyRunbook(ctx context.Context, spec *schema.IncludeSpec) (*LoadedRunbook, error) {
+	if engine.ToolScopesFromContext(ctx) != nil || spec.TargetScopeID != "" {
+		return e.loadScopedRunbook(ctx, spec)
+	}
 	if spec.LazyRunbookDigest == "" {
 		return e.loader.Load(ctx, spec.LazyRunbookPath)
 	}
+
 	source, err := os.ReadFile(spec.LazyRunbookPath)
 	if err != nil {
 		return nil, err
@@ -526,6 +551,17 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 		}
 	}
 
+	if resolved == nil {
+		return nil, errors.New("dynamic include: resolver returned no captured runbook")
+	}
+	scopes := engine.ToolScopesFromContext(ctx)
+	if scopes != nil {
+		if !scopes.HasScope(step.LexicalScopeID) || !scopes.HasScope(resolved.TargetScopeID) {
+			return nil, errkit.New("SCOPE-002", "dynamic include has no frozen caller or target scope")
+		}
+	} else if resolved.TargetScopeID != "" {
+		return nil, errkit.New("SCOPE-002", "scoped dynamic include has no immutable scope set")
+	}
 	chain := includeChainFromCtx(ctx)
 	if !found {
 		if err := e.materializeLazyFlow(ctx, resolved.Flow, "dynamic:"+step.ID, make(map[string]bool)); err != nil {
@@ -559,11 +595,18 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 	}
 	pin := durableResolution.Pin
 	if !found {
-		var tools map[string]*schema.ToolDef
-		if e.presentationTools != nil {
-			tools = e.presentationTools(protectedChildCtx, resolved.Flow)
+		var closure json.RawMessage
+		var closureErr error
+		invocation := schema.InvocationForRunbook(resolved.ChildBindings, resolved.ChildOutputs, resolved.Flow)
+		if scopes != nil {
+			closure, closureErr = plansnapshot.EncodeScopedInvocationFlowClosure(resolved.Flow, invocation, scopes, resolved.TargetScopeID)
+		} else {
+			var tools map[string]*schema.ToolDef
+			if e.presentationTools != nil {
+				tools = e.presentationTools(protectedChildCtx, resolved.Flow)
+			}
+			closure, closureErr = plansnapshot.EncodeInvocationFlowClosure(resolved.Flow, invocation, tools)
 		}
-		closure, closureErr := plansnapshot.EncodeInvocationFlowClosure(resolved.Flow, schema.InvocationForRunbook(resolved.ChildBindings, resolved.ChildOutputs, resolved.Flow), tools)
 		if closureErr != nil {
 			return nil, fmt.Errorf("dynamic include: encode executable closure for step %s: %w", step.ID, closureErr)
 		}
@@ -576,6 +619,13 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 			ExecutableClosure: closure, ResolvedInputs: resolved.ChildInputs, ResolvedBindings: resolved.ChildBindings,
 			ResolvedOutputs:    resolved.ChildOutputs,
 			ResolvedGovernance: resolved.ChildGovernance,
+		}
+		if scopes != nil {
+			pin.SchemaVersion = "yawr.dynamic-include-pin/v2"
+			pin.TargetScopeID = resolved.TargetScopeID
+			if err := plansnapshot.ValidateDynamicIncludePin(pin, scopes); err != nil {
+				return nil, err
+			}
 		}
 		committed, commitErr := engine.CommitDynamicIncludeResolution(protectedChildCtx, pin)
 		if commitErr != nil {
@@ -631,6 +681,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 	}
 	if pinRecorder != nil {
 		pinRecorder(DynamicIncludePin{
+			SchemaVersion: pin.SchemaVersion, TargetScopeID: pin.TargetScopeID,
 			StepID: pin.StepID, QualifiedNodeID: pin.QualifiedNodeID,
 			Invocation: pin.Invocation, Revision: pin.Revision,
 			StructuralPath: append([]schema.DynamicIncludeFrameIdentity(nil), pin.StructuralPath...),
@@ -648,7 +699,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 	// compiled policy in ctx so child CLI steps enforce deny_commands.
 	extendedChain := append(append([]string{}, chain...), resolved.QualifiedID)
 	childCtx := withIncludeChain(protectedChildCtx, extendedChain)
-	if pin.Revision > 0 && pin.QualifiedNodeID != "" {
+	if scopes == nil && pin.Revision > 0 && pin.QualifiedNodeID != "" {
 		tools, restoreErr := plansnapshot.RestoreFlowTools(pin.ExecutableClosure)
 		if restoreErr != nil {
 			return nil, restoreErr
@@ -666,6 +717,7 @@ func (e *IncludeExecutor) executeDynamic(ctx context.Context, step engine.Resolv
 		Kind:              "include",
 		IncludeAlias:      step.IncludeAlias,
 		RunbookPath:       resolved.AbsPath,
+		RootScopeID:       resolved.TargetScopeID,
 		NestDepth:         step.NestDepth + 1,
 	}, resolved.Flow, childVars)
 	if err != nil {
@@ -686,18 +738,31 @@ func (e *IncludeExecutor) loadPinnedDynamicInclude(
 	pin schema.LockedDynamicInclude,
 ) (*DynamicIncludeResult, error) {
 	if len(pin.ExecutableClosure) > 0 {
-		flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		var flow []schema.FlowNode
+		var err error
+		if scopes := engine.ToolScopesFromContext(ctx); scopes != nil {
+			if err := plansnapshot.ValidateDynamicIncludePin(pin, scopes); err != nil {
+				return nil, err
+			}
+			flow, err = plansnapshot.RestoreScopedFlowClosure(pin.ExecutableClosure, scopes, pin.TargetScopeID)
+		} else {
+			flow, err = plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("dynamic include: restore pinned runbook %q: %w", pin.QualifiedID, err)
 		}
 		return &DynamicIncludeResult{
-			Flow: flow, QualifiedID: pin.QualifiedID, AbsPath: pin.AbsPath,
+			TargetScopeID: pin.TargetScopeID,
+			Flow:          flow, QualifiedID: pin.QualifiedID, AbsPath: pin.AbsPath,
 			RunbookID: pin.RunbookID, RunbookName: pin.RunbookName, ContentHash: pin.RunbookContentHash,
 			PackageName: pin.PackageName, PackageVersion: pin.PackageVersion,
 			FileDigest: pin.FileDigest, PackageDigest: pin.PackageDigest,
 			ChildInputs: pin.ResolvedInputs, ChildOutputs: pin.ResolvedOutputs, ChildBindings: pin.ResolvedBindings,
 			ChildGovernance: pin.ResolvedGovernance,
 		}, nil
+	}
+	if engine.ToolScopesFromContext(ctx) != nil || pin.TargetScopeID != "" || pin.SchemaVersion != "" {
+		return nil, errkit.New("SCOPE-002", "scoped dynamic resolution has no captured executable closure")
 	}
 	if e.loader == nil {
 		return nil, errors.New("dynamic include: durable resolution requires a runbook loader")

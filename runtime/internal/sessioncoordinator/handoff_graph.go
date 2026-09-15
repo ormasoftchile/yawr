@@ -121,7 +121,10 @@ func decodeHandoffGraph(plan *engine.ExecutionPlan, encoded json.RawMessage) (gr
 	if err := validateHandoffGraphContentHash(document); err != nil {
 		return graphjson.Document{}, err
 	}
-	if len(plan.Metadata.DynamicIncludes) == 0 {
+	if plan.ToolScopes == nil && len(plan.Metadata.DynamicIncludes) == 0 {
+		// Legacy plans have one graph node per flattened step. Scoped plans
+		// also project captured tool invocations; exact canonical comparison
+		// above validates their complete graph, including runtime identities.
 		if err := validateHandoffGraphPlanEquivalence(plan, document); err != nil {
 			return graphjson.Document{}, err
 		}
@@ -191,19 +194,20 @@ func graphDocumentFromHandoffGraph(document graphjson.Document) (*graphdoc.Docum
 		}
 	}
 	type nodeData struct {
-		ID         string                `json:"id"`
-		StepID     string                `json:"step_id"`
-		CallPath   []string              `json:"call_path"`
-		Kind       string                `json:"kind"`
-		Title      string                `json:"title"`
-		GroupID    string                `json:"group_id"`
-		FrameID    string                `json:"frame_id"`
-		Order      int                   `json:"order"`
-		Dynamic    bool                  `json:"dynamic"`
-		Concurrent bool                  `json:"concurrent"`
-		ToolName   string                `json:"tool_name"`
-		ToolAction string                `json:"tool_action"`
-		Details    *graphdoc.StepDetails `json:"details"`
+		RuntimeNodeID string                `json:"runtime_node_id"`
+		ID            string                `json:"id"`
+		StepID        string                `json:"step_id"`
+		CallPath      []string              `json:"call_path"`
+		Kind          string                `json:"kind"`
+		Title         string                `json:"title"`
+		GroupID       string                `json:"group_id"`
+		FrameID       string                `json:"frame_id"`
+		Order         int                   `json:"order"`
+		Dynamic       bool                  `json:"dynamic"`
+		Concurrent    bool                  `json:"concurrent"`
+		ToolName      string                `json:"tool_name"`
+		ToolAction    string                `json:"tool_action"`
+		Details       *graphdoc.StepDetails `json:"details"`
 	}
 	dataByNode := make(map[string]nodeData, len(document.Nodes))
 	rawNodeID := make(map[string]string, len(document.Nodes))
@@ -266,7 +270,8 @@ func graphDocumentFromHandoffGraph(document graphjson.Document) (*graphdoc.Docum
 		}
 		nodes[index] = graphdoc.Node{
 			ID: data.StepID, StepID: data.StepID, CallPath: data.CallPath,
-			Kind: data.Kind, Title: data.Title, FrameID: rawFrame, GroupID: rawGroup,
+			RuntimeNodeID: data.RuntimeNodeID,
+			Kind:          data.Kind, Title: data.Title, FrameID: rawFrame, GroupID: rawGroup,
 			Order: data.Order, Dynamic: data.Dynamic, Concurrent: data.Concurrent,
 			ToolName: data.ToolName, ToolAction: data.ToolAction, Details: data.Details,
 		}
@@ -783,6 +788,14 @@ func includeDepth(callPath []engine.DebugCallFrame) int {
 }
 
 func handoffPlanStepCallPath(plan *engine.ExecutionPlan, stepIndex int) ([]engine.DebugCallFrame, error) {
+	return handoffStepCallPath(plan, stepIndex, false)
+}
+
+func handoffRuntimeStepCallPath(plan *engine.ExecutionPlan, stepIndex int) ([]engine.DebugCallFrame, error) {
+	return handoffStepCallPath(plan, stepIndex, true)
+}
+
+func handoffStepCallPath(plan *engine.ExecutionPlan, stepIndex int, runtimePath bool) ([]engine.DebugCallFrame, error) {
 	if plan == nil || stepIndex < 0 || stepIndex >= len(plan.Steps) {
 		return nil, errors.New("session coordinator: invalid target plan step index")
 	}
@@ -810,7 +823,7 @@ func handoffPlanStepCallPath(plan *engine.ExecutionPlan, stepIndex int) ([]engin
 		}
 		seen[parentIndex] = true
 		parent := &plan.Steps[parentIndex]
-		if parent.Kind != "parallel" && parent.Kind != "compensate" {
+		if runtimePath || parent.Kind != "parallel" && parent.Kind != "compensate" {
 			frame := engine.DebugCallFrame{StepID: parent.ID}
 			if parent.Kind == "include" {
 				if include, ok := parent.Spec.(*schema.IncludeSpec); ok && include != nil {

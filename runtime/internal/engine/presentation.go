@@ -14,6 +14,13 @@ func attachToolPresentation(ctx context.Context, payload map[string]any) {
 	if b == nil || b.ToolID == "" {
 		return
 	}
+	if b.ScopeID != "" {
+		payload["tool_binding"] = map[string]string{
+			"schema_version": "yawr.tool-binding-evidence/v1",
+			"scope_id":       b.ScopeID, "binding_id": b.BindingID, "definition_id": b.DefinitionID,
+			"logical_name": b.ToolID, "action": b.Action,
+		}
+	}
 	e := presentation.ForAction(b.ToolID, b.Action, "frozen", b.SnapshotDigest, b.Definition)
 	if b.SnapshotDigest == "" {
 		e.Origin = "current"

@@ -35,6 +35,7 @@ type SubStepParent struct {
 	BranchLabel       string // for "branch" kind: the matched arm's label
 	IncludeAlias      string // for "include" kind: the alias under which the runbook was imported
 	RunbookPath       string // immutable declaring runbook path for include children
+	RootScopeID       string // immutable lexical owner of the child flow
 	IterationIndex    int    // 1-based for iterate frames; zero outside iteration
 	NestDepth         int    // visual nesting depth to apply to child ResolvedSteps
 }

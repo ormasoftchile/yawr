@@ -20,6 +20,7 @@ test('buildStdioRunArgs carries package map and sorted input values', () => {
     [
       'run',
       '--stdio',
+      '--require-capabilities', 'yawr.lexical-tool-scopes/v1',
       '--package-map', 'C:\\work\\package-map.yaml',
       '--var', 'environment=prod',
       '--var', 'region=westus',
@@ -31,7 +32,7 @@ test('buildStdioRunArgs carries package map and sorted input values', () => {
 test('buildStdioRunArgs opts debug runs into the startup handshake', () => {
   assert.deepEqual(
     buildStdioRunArgs('C:\\work\\incident.runbook.yaml', {}, undefined, true),
-    ['run', '--stdio', '--debug', 'C:\\work\\incident.runbook.yaml'],
+    ['run', '--stdio', '--require-capabilities', 'yawr.lexical-tool-scopes/v1', '--debug', 'C:\\work\\incident.runbook.yaml'],
   );
 });
 
@@ -44,7 +45,7 @@ test('buildStdioRunArgs omits secret inputs from process arguments', () => {
       false,
       new Set(['access_token']),
     ),
-    ['run', '--stdio', '--configure', '--var', 'environment=prod', 'C:\\work\\incident.runbook.yaml'],
+    ['run', '--stdio', '--require-capabilities', 'yawr.lexical-tool-scopes/v1', '--configure', '--var', 'environment=prod', 'C:\\work\\incident.runbook.yaml'],
   );
 });
 
@@ -61,6 +62,7 @@ test('buildStdioRunArgs launches a saved route test without input overrides or d
     [
       'run',
       '--stdio',
+      '--require-capabilities', 'yawr.lexical-tool-scopes/v1',
       '--package-map', 'C:\\work\\package-map.yaml',
       '--route-test', 'C:\\work\\.yawr\\route-tests\\failover.route-test.yaml',
       'C:\\work\\incident.runbook.yaml',

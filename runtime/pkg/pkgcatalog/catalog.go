@@ -172,6 +172,12 @@ func (c *Catalog) ByBare(name string) []*Entry {
 // BindFile and is intentionally excluded here.
 type BuildOptions struct {
 	Source *Source
+	// RequirementDocuments opts into multi-file dependency aggregation. Nil
+	// retains the legacy project/root-only catalog contract.
+	RequirementDocuments []RequirementDocument
+	// LexicalBindings defers bare-name ambiguity to a file binding site.
+	// Qualified identity collisions remain fatal.
+	LexicalBindings bool
 	// WorkspaceRoot is the workspace root directory (absolute).
 	WorkspaceRoot string
 	// Builtins supplies tier-0 entries (host-compiled built-in registry).
@@ -221,22 +227,41 @@ func Build(opts BuildOptions) (*Catalog, []error) {
 
 	// Tier 1: requires: (project-level, then runbook-level; project entries
 	// precede runbook entries for the same run).
-	merged, scopeByName, sourcesByName, resolvedByName, mergeErrs := mergeRequirements(
-		opts.ProjectRequires, opts.RunbookRequires, opts.RunbookPath, opts.WorkspaceRoot,
-	)
-	errs = append(errs, mergeErrs...)
-	for _, req := range merged {
-		kind := pkgpath.KindRequiresProject
-		if scopeByName[req.Package] == scopeRunbook {
-			kind = pkgpath.KindRequiresRunbook
+	if opts.RequirementDocuments != nil {
+		documents := append([]RequirementDocument(nil), opts.RequirementDocuments...)
+		if len(opts.RunbookRequires) > 0 {
+			documents = append(documents, RequirementDocument{Path: opts.RunbookPath, Requirements: opts.RunbookRequires})
 		}
-		pkgErrs := c.loadPackage(req, kind, opts, sourcesByName[req.Package], resolvedByName[req.Package])
-		errs = append(errs, pkgErrs...)
+		requirements, mergeErrs := ResolveRequirements(opts, documents)
+		errs = append(errs, mergeErrs...)
+		for _, resolution := range requirements {
+			sites := make([]string, len(resolution.Declarations))
+			for index, site := range resolution.Declarations {
+				sites[index] = site.String()
+			}
+			fileOpts := opts
+			fileOpts.RunbookPath = resolution.owner
+			errs = append(errs, c.loadPackage(&resolution.Requirement, resolution.kind, fileOpts, sites, resolution.pinned)...)
+		}
+	} else {
+		merged, scopeByName, sourcesByName, resolvedByName, mergeErrs := mergeRequirements(
+			opts.ProjectRequires, opts.RunbookRequires, opts.RunbookPath, opts.WorkspaceRoot,
+		)
+		errs = append(errs, mergeErrs...)
+		for _, req := range merged {
+			kind := pkgpath.KindRequiresProject
+			if scopeByName[req.Package] == scopeRunbook {
+				kind = pkgpath.KindRequiresRunbook
+			}
+			pkgErrs := c.loadPackage(req, kind, opts, sourcesByName[req.Package], resolvedByName[req.Package])
+			errs = append(errs, pkgErrs...)
+		}
 	}
 
 	// Tier 2: project tool-paths (declaration order), then <workspace>/tools/.
 	dirs := append([]string(nil), opts.ProjectToolPaths...)
 	dirs = append(dirs, "tools")
+	scannedPaths := make(map[string]bool)
 	for _, d := range dirs {
 		abs := d
 		if !filepath.IsAbs(abs) {
@@ -248,6 +273,11 @@ func Build(opts BuildOptions) (*Catalog, []error) {
 			continue
 		}
 		for _, e := range found {
+			key := pkgpath.NormalizeForComparison(e.SourcePath, os.PathSeparator == '\\')
+			if opts.LexicalBindings && scannedPaths[key] {
+				continue
+			}
+			scannedPaths[key] = true
 			e.Tier = TierProject
 			c.add(e)
 		}
@@ -255,14 +285,35 @@ func Build(opts BuildOptions) (*Catalog, []error) {
 
 	// Tier 3: dynamic (extensions, then MCP), in caller-supplied order.
 	for _, e := range opts.Dynamic {
+		if opts.LexicalBindings {
+			if e == nil {
+				errs = append(errs, errkit.New("PKG-004", "dynamic catalog entry is missing"))
+				continue
+			}
+			copy := *e
+			e = &copy
+		}
 		e.Tier = TierDynamic
 		e.Bare = "" // tier 3 entries are mandatory-qualified; never bare.
 		c.add(e)
 	}
 
-	// Same-tier bare-name collisions are always a hard error (PKG-006),
-	// regardless of which tier they occur in.
-	errs = append(errs, c.detectSameTierCollisions()...)
+	// Legacy plans reject bare collisions globally; scoped preflight rejects
+	// ambiguity at the binding site instead.
+	if opts.LexicalBindings {
+		seen := map[string]bool{}
+		for _, entry := range c.entries {
+			if entry.Tier != TierPackage && entry.Tier != TierDynamic {
+				continue
+			}
+			if seen[entry.Qualified] {
+				errs = append(errs, errkit.New("PKG-006", fmt.Sprintf("qualified tool identity %q is duplicated", entry.Qualified)))
+			}
+			seen[entry.Qualified] = true
+		}
+	} else {
+		errs = append(errs, c.detectSameTierCollisions()...)
+	}
 
 	c.frozen = true
 	return c, errs
@@ -510,8 +561,8 @@ func (c *Catalog) loadPackage(req *schema.PackageRequirement, kind pkgpath.Kind,
 		resolved = pinned.path
 		external = pinned.external
 		if pinned.identity != nil {
-			current, statErr := os.Stat(resolved)
-			if statErr != nil || !os.SameFile(pinned.identity, current) {
+			current, statErr := opts.Source.stat(resolved)
+			if statErr != nil || !sameSourceIdentity(pinned.identity, current) {
 				return []error{errkit.New("PKG-008", fmt.Sprintf(
 					"package %q: resolved path identity changed during catalog construction", req.Package))}
 			}
