@@ -50,6 +50,18 @@ func frozenGraphDetails(index int, plan *engine.ExecutionPlan) *graphdoc.StepDet
 // InspectionDocument is a read-only projection. It never finalizes or rewrites
 // the plan and never reloads current source definitions.
 func InspectionDocument(plan *engine.ExecutionPlan, digest string, state ...engine.RunState) (*graphdoc.Document, error) {
+	return inspectionDocument(plan, digest, nil, state...)
+}
+
+// LiveExecutionGraph projects frozen definitions and all resolved invocations,
+// without rereading source or mutating the running plan.
+func LiveExecutionGraph(state engine.RunState, digest string) (*graphdoc.Document, []ExecutionGraphBinding, error) {
+	bindings := []ExecutionGraphBinding{}
+	doc, err := inspectionDocument(state.Plan, digest, &bindings, state)
+	return doc, bindings, err
+}
+
+func inspectionDocument(plan *engine.ExecutionPlan, digest string, bindings *[]ExecutionGraphBinding, state ...engine.RunState) (*graphdoc.Document, error) {
 	if len(state) > 0 && len(state[0].DynamicIncludes) > 0 {
 		checkpoint := state[0]
 		checkpoint.Plan = plan
@@ -59,7 +71,7 @@ func InspectionDocument(plan *engine.ExecutionPlan, digest string, state ...engi
 			return nil, err
 		}
 	}
-	encoded, err := executionPlanGraph(plan, nil)
+	encoded, err := executionPlanGraphWithBindings(plan, nil, bindings)
 	if err != nil {
 		return nil, err
 	}

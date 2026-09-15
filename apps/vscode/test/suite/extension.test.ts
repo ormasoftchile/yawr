@@ -13,7 +13,8 @@
 // API integration (vscode.lm.tools / invokeTool) is implemented.
 
 import * as assert from 'assert';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
+import { cp } from 'fs/promises';
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import { PassThrough } from 'stream';
@@ -1024,6 +1025,132 @@ suite('Yawr extension smoke tests', () => {
     } finally {
       panel.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
+    }
+  });
+
+  test('real included-runbook execution is paced and every preceding runbook remains navigable', async function () {
+    this.timeout(120_000);
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    const workspace = vscode.workspace.workspaceFolders?.[0];
+    const core = path.resolve(__dirname, '..', '..', '..', '..', '..', 'runtime');
+    assert.ok(workspace);
+    const root = path.join(workspace.uri.fsPath, ...testStatePath, 'execution-graph');
+    await cp(path.join(core, 'examples', 'execution-graph'), root, {
+      recursive: true, filter: source => !source.includes(`${path.sep}.runbook`),
+    });
+    for (const name of ['dynamic-router', 'repeated-dynamic', 'static-eager', 'static-lazy']) {
+      const uri = vscode.Uri.file(path.join(root, 'runbooks', `${name}.runbook.yaml`));
+      const config = vscode.workspace.getConfiguration('yawr', uri);
+      const previous = config.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue;
+      await config.update('preview.minimumStepDisplayMs', 500, vscode.ConfigurationTarget.Workspace);
+      const { stdout: graph } = await execFileAsync(sourceYawrBinaryPath,
+        ['preview', '--format', 'graphjson', '--recurse', uri.fsPath], { cwd: root });
+      let wire = '';
+      let stderr = '';
+      const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.test.openDirectGraphPanel',
+        uri.fsPath, { documentLoader: async () => JSON.parse(graph),
+          spawnRun: (_binary: string, args: string[], options: Parameters<typeof spawn>[2]) => {
+            const child = spawn(sourceYawrBinaryPath, args, options);
+            child.stdout!.on('data', bytes => { wire += bytes; });
+            child.stderr!.on('data', bytes => { stderr += bytes; });
+            return child;
+          } });
+      assert.ok(panel);
+      let latestUI: unknown;
+      const stateObserver = panel.webview.onDidReceiveMessage(value => { if (value.type === 'ui.state') latestUI = value; });
+      const message = <T,>(type: string): Promise<T> => new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { subscription.dispose(); reject(new Error(`Missing ${type}`)); }, 45_000);
+        const subscription = panel.webview.onDidReceiveMessage(value => {
+          if (value.type !== type) return;
+          clearTimeout(timeout); subscription.dispose(); resolve(value);
+        });
+      });
+      type Visibility = { canonicalIDs: string[]; selectedID?: string; inspectedOccurrence?: string; runStatus: string; currentMarkerCount: number;
+        runbooks: Array<{ id: string; nodeIDs: string[] }>; executionHistory: Array<{ nodeID: string; occurrenceID: string }> };
+      const inspect = async () => {
+        const response = message<Visibility>('graph.visibility');
+        await panel.webview.postMessage({ type: 'test.action', action: 'inspect-graph-visibility' });
+        return response;
+      };
+      try {
+        await message('ui.state');
+        const ready = message('execution.transition-sampling');
+        const observation = message<{ samples: Array<{ at: number; currentIDs: string[] }> }>('execution.transition-samples');
+        await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition', value: 'include-pacing' });
+        await ready;
+        await panel.webview.postMessage({ type: 'test.action', action: 'run' });
+        const { samples } = await observation;
+        assert.ok(wire.trim(), `runtime ${sourceYawrBinaryPath} did not start: ${stderr}; ${JSON.stringify(latestUI)}`);
+        const frames = wire.trim().split(/\r?\n/).map(line => JSON.parse(line));
+        assert.equal(frames.find(frame => frame.type === 'run.finished')?.status, 'completed', wire);
+        const state = await inspect();
+        const expected = frames.filter(frame => frame.event?.kind === 'step/started')
+          .map(frame => frame.event.payload.graph_node_id ?? frame.event.payload.qualified_node_id)
+          .filter(id => state.canonicalIDs.includes(id));
+        const children = frames.filter(frame => frame.event?.kind === 'step/started' && frame.event.payload.graph_node_id);
+        assert.ok(name.startsWith('static-') ? expected.length >= 7 : children.length >= 5,
+          'the real runtime must execute both included runbooks');
+        for (const frame of children) assert.ok(state.canonicalIDs.includes(frame.event.payload.graph_node_id));
+        const start = samples.findIndex(sample => sample.currentIDs.length > 0);
+        assert.ok(start >= 0);
+        const playback = samples.slice(start);
+        const end = playback.findIndex(sample => sample.currentIDs.length === 0);
+        assert.ok(end > 0, 'visual completion must include the final dwell');
+        assert.ok(playback.slice(0, end).every(sample => sample.currentIDs.length === 1), 'no transient missing CURRENT');
+        assert.ok(playback.slice(end).every(sample => sample.currentIDs.length === 0), 'no second CURRENT stream');
+        const changes = playback.slice(0, end + 1).filter((sample, index) =>
+          index === 0 || sample.currentIDs[0] !== playback[index - 1].currentIDs[0]);
+        assert.deepEqual(changes.map(sample => sample.currentIDs[0]), [...expected, undefined]);
+        for (let index = 1; index < changes.length; index++) assert.ok(
+          changes[index].at - changes[index - 1].at >= 465,
+          `${name}: ${changes[index - 1].currentIDs[0]} displayed for ${changes[index].at - changes[index - 1].at}ms`);
+        assert.deepEqual(state.executionHistory.map(item => item.nodeID), expected);
+        assert.equal(state.runbooks.length, name === 'repeated-dynamic' ? 5 : 3);
+        if (name === 'repeated-dynamic') {
+          const repeated = children.filter(frame => frame.event.payload.qualified_node_id.endsWith('/collect_evidence'));
+          assert.equal(repeated.length, 2);
+          assert.notEqual(repeated[0].event.payload.graph_node_id, repeated[1].event.payload.graph_node_id,
+            'the same child called twice must have two distinct retained graph identities');
+          const firstRepeated = state.executionHistory.findIndex(entry =>
+            state.executionHistory.filter(other => other.nodeID === entry.nodeID).length > 1);
+          assert.ok(firstRepeated >= 0, 'the include site must have multiple recorded occurrences');
+          await panel.webview.postMessage({ type: 'test.action', action: 'select-history', value: String(firstRepeated) });
+          let selected = await inspect();
+          for (let attempt = 0; attempt < 20 && selected.inspectedOccurrence !== state.executionHistory[firstRepeated].occurrenceID; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 25));
+            selected = await inspect();
+          }
+          assert.equal(selected.inspectedOccurrence, state.executionHistory[firstRepeated].occurrenceID,
+            'history must inspect the requested occurrence, not silently select the latest visit');
+        }
+        for (const runbook of state.runbooks) {
+          assert.ok(runbook.nodeIDs.length);
+          await panel.webview.postMessage({ type: 'test.action', action: 'select-runbook', value: runbook.id });
+          let selected = await inspect();
+          for (let attempt = 0; attempt < 20 && selected.selectedID !== runbook.nodeIDs[0]; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 25));
+            selected = await inspect();
+          }
+          assert.equal(selected.selectedID, runbook.nodeIDs[0], 'the actual runbook selector must navigate after completion');
+          assert.equal(selected.currentMarkerCount, 0, 'inspection must not restart playback');
+        }
+        await panel.webview.postMessage({ type: 'test.action', action: 'reset' });
+        let reset = await inspect();
+        for (let attempt = 0; attempt < 20 && reset.runStatus !== 'idle'; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 25));
+          reset = await inspect();
+        }
+        assert.equal(reset.runStatus, 'idle');
+        assert.equal(reset.runbooks.length, JSON.parse(graph).frames.length,
+          'Reset must restore exactly the original source graph without old dynamic invocations');
+        assert.equal(reset.executionHistory.length, 0);
+      } finally {
+        stateObserver.dispose();
+        panel.dispose();
+        await config.update('preview.minimumStepDisplayMs', previous, vscode.ConfigurationTarget.Workspace);
+      }
     }
   });
 

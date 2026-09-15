@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -97,7 +98,7 @@ func runWithMode(args []string, mode engine.RunMode) int {
 	if *requiredCapabilities != "" {
 		for _, capability := range strings.Split(*requiredCapabilities, ",") {
 			switch capability {
-			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1":
+			case "yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1", "yawr.run-graph/v1":
 			case "yawr.file-only-subprocess/v1":
 				if !toolpkg.FileOnlySubprocessAvailable() {
 					fmt.Fprintln(os.Stderr, "run: unsupported-capability:", capability)
@@ -687,6 +688,15 @@ func runWithMode(args []string, mode engine.RunMode) int {
 		return exitRuntime
 	}
 	if protocol != nil {
+		if slices.Contains(strings.Split(*requiredCapabilities, ","), "yawr.run-graph/v1") {
+			store, ok := ecfg.Store.(engine.DurableRunStore)
+			if !ok {
+				fmt.Fprintln(os.Stderr, "execution graph requires a durable run store")
+				_ = handle.Cancel(ctx, "execution graph store unavailable")
+				return exitRuntime
+			}
+			protocol.graphStore = store
+		}
 		state := handle.State()
 		protection, complete := stdioDeclaredProtection(ctx, ecfg.Executors, state.Plan, state.Vars)
 		if !complete && !internaldebugprotect.HasSink(ctx) {

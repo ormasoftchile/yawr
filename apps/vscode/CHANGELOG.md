@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.16
+
+- Reveals dynamic child and grandchild runbooks during normal graphical runs,
+  using bounded, verified graph updates from frozen runtime definitions.
+- Preserves distinct repeated invocations, post-run runbook navigation,
+  chronological execution history and observed return edges.
+- Keeps the pacing queue as the sole CURRENT owner. Graph growth anchors the
+  existing current location; success still drains playback and urgent states
+  bypass it immediately.
+- Bundles the matching `yawr.run-graph/v1` runtime. VS Code 1.136.2 remains
+  supported. Adds self-contained examples and real-runtime/editor regressions.
+
 ## 0.2.15
 
 - Uses the current XTS `xts.openViewByPath(relativePath, args)` command, preserving

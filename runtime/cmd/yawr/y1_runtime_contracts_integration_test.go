@@ -43,6 +43,8 @@ func TestY1RuntimeContractsHelper(t *testing.T) {
 	switch args[0] {
 	case "run":
 		os.Exit(runRun(args[1:]))
+	case "preview":
+		os.Exit(runPreview(args[1:]))
 	case "serve":
 		os.Exit(runServe(args[1:]))
 	case "counter":

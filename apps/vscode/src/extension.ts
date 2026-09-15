@@ -22,6 +22,7 @@ import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import { randomBytes, randomUUID } from 'crypto';
+import { mergeExecutionGraph } from './executionGraph';
 import { configureBundledRuntime, resolveBinary } from './binaryResolver';
 import { registerPresentationEditor, setPresentationEntrypoint } from './presentationEditor';
 import { registerAuthoringEditor } from './authoringEditor';
@@ -922,6 +923,8 @@ async function openDirectGraphPanelForRunbook(
     return interval;
   };
   let currentDocument: GraphDocument | undefined;
+  let sourceDocument: GraphDocument | undefined;
+  let retainExecutionGraph = false;
   let currentProjectRoot: string | undefined;
   let currentRunbookRelative: string | undefined;
   let currentPlanHash: string | undefined;
@@ -1429,6 +1432,7 @@ async function openDirectGraphPanelForRunbook(
       currentRunbookRelative = runbookRelative;
       currentPlanHash = planHash;
       currentDocument = document;
+      sourceDocument = document;
       if (planWarning) output?.appendLine(planWarning);
       for (const warning of loadedRouteTests.warnings) output?.appendLine(`[yawr route test] WARNING: ${warning}`);
       publish({
@@ -1461,14 +1465,14 @@ async function openDirectGraphPanelForRunbook(
     void startRun(productionRun.inputs, undefined);
   };
   const requestReload = () => {
-    if (runStarting || runSession || investigationClient || investigationDescriptor) {
+    if (runStarting || runSession || investigationClient || investigationDescriptor || retainExecutionGraph) {
       reloadPending = true;
       return;
     }
     void reload();
   };
   const applyDeferredReload = () => {
-    if (!reloadPending || disposed) return;
+    if (!reloadPending || disposed || retainExecutionGraph) return;
     reloadPending = false;
     void reload();
   };
@@ -1534,6 +1538,7 @@ async function openDirectGraphPanelForRunbook(
     let inputs: Record<string, string>;
     let debug;
     try {
+      if (sourceDocument) currentDocument = sourceDocument;
       if (!currentDocument) throw new Error('The runbook graph is not loaded.');
       inputs = routeTestPath ? {} : directRunInputs(rawInputs);
       debug = routeTestPath ? undefined : parseDirectDebugConfig(rawDebug);
@@ -1581,7 +1586,7 @@ async function openDirectGraphPanelForRunbook(
       if (!startupIsActive()) return;
       const privateInputNames = routeTestPath ? new Set<string>() : directSecretInputNames(currentDocument!);
       const args = buildStdioRunArgs(runbookPath, inputs, packageMap.path, debug !== undefined, privateInputNames, routeTestPath,
-        currentDocument !== undefined && usesTypedResults(currentDocument));
+        currentDocument !== undefined && usesTypedResults(currentDocument), true);
       const spawnOptions: Parameters<typeof spawn>[2] = {
         cwd: projectRoot,
         env: {
@@ -1613,6 +1618,11 @@ async function openDirectGraphPanelForRunbook(
       session = new DirectRunSession(child as RunChildProcess, {
         onFrame: (frame) => {
           if (!startupIsActive()) return;
+          if (frame.type === 'run.graph' && currentDocument) {
+            currentDocument = mergeExecutionGraph(currentDocument, frame.document as GraphDocument, frame.nodeIDs as string[]);
+            setPresentationEntrypoint(projectRoot, runbookPath, currentDocument.frames.map(frame => frame.runbook_path));
+            retainExecutionGraph = true;
+          }
           if (productionRun) productionFrames.push({ ...frame });
           if (frame.type === 'run.started') {
             invalidateHostActionRun();
@@ -1928,6 +1938,8 @@ async function openDirectGraphPanelForRunbook(
       runBridge?.dispose();
       runBridge = undefined;
       activeRouteTest = undefined;
+      retainExecutionGraph = false;
+      if (sourceDocument) currentDocument = sourceDocument;
       applyDeferredReload();
       return;
     }

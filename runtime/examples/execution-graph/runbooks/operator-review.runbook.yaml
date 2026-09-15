@@ -1,0 +1,11 @@
+apiVersion: yawr.runbook/v1
+id: graph-operator-review
+name: Dynamic review waits for an operator
+flow:
+  - step:
+      id: investigate
+      type: include
+      include:
+        runbook_ref: graph-demo/operator
+        resolve_from: catalog
+  - step: {id: parent_continues, type: noop, title: Operator answered - back in parent}

@@ -40,9 +40,10 @@ mid-run changes apply to the next run/session.
 
 Ordinary live steps are displayed in event order for at least that interval.
 Only the visual queue head owns the graph's Current marker and progress glow.
-Runtime-only wrappers and dynamic identities absent from the graph remain in
-runtime/inspector evidence, but do not consume graph dwell intervals or redirect
-the marker to live activity. Known graph aliases are canonicalized before queueing.
+Runtime-only wrappers remain in runtime/inspector evidence, but do not consume
+graph dwell intervals or redirect the marker to live activity. Resolved dynamic
+runbooks are added before their child events are displayed. Known graph aliases
+are canonicalized before queueing.
 Successful runtime completion does not discard queued visuals: playback continues
 through every ordinary step, including Results, and the final step's full interval.
 Runtime status and Results processing/persistence update immediately; automatic
@@ -79,6 +80,37 @@ so status updates cannot repeatedly collapse/expand groups and move the graph.
 Reset restores the saved workflow-view preference. Routine advances preserve
 selection and zoom; an offscreen current node receives only the minimum smooth
 pan needed to reveal it. Explicit Locate, route-view and Fit controls still work.
+
+### Included runbooks and execution history
+
+Static includes are recursively visible, including when execution uses lazy
+expansion. Dynamic catalog includes publish frozen execution graphs as their
+targets resolve; the editor never reconstructs an executed child from current
+source files. Child and grandchild nodes join the existing graph without
+resetting CURRENT playback. Repeated dynamic invocations have distinct retained
+nodes and runbook frames, even when they call the same file.
+
+The inspector's **Runbooks in this run** selector navigates to any retained
+runbook. **Execution history** preserves the observed step order, including
+calls, returns and repeated visits. Dashed **Return** edges show observed
+completed child-to-parent transitions; they are not scheduling dependencies.
+Inspecting history does not move CURRENT or restart playback.
+
+History remains available after success, failure or cancellation until Reset,
+a new run, or panel disposal. Source edits do not replace a retained dynamic
+execution graph; deferred refresh applies on Reset. This is not durable
+cross-editor-restart recovery (investigation sessions provide that separately).
+
+Normal graphical runs require the additive `yawr.run-graph/v1` runtime
+capability. The VSIX bundles the matching runtime; no package-map or binary-path
+setup is needed for the self-contained
+[execution graph examples](../../runtime/examples/execution-graph/README.md).
+An explicitly configured older runtime fails with an unsupported-capability
+error rather than silently hiding executed children.
+
+Debugger Step Into remains limited to static includes. Dynamic debugger
+stepping has a separate runtime protection limitation documented with the
+examples; automatic graphical execution of dynamic includes is supported.
 
 There is no execution-log strip above the graph. **Execution activity** in the
 inspector retains runtime paths, concurrent lanes, timing and Locate controls.

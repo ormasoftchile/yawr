@@ -2,6 +2,7 @@ import { sanitizeEventFrame } from './presentationProjection';
 import { parseDisplayJSON } from './displayPresentationJSON';
 import { ResultsAssembly } from './typedResults';
 import { visitJSONWire } from './authoringProtocol';
+import { ExecutionGraphAssembly } from './executionGraphAssembly';
 export const STDIO_PROTOCOL_VERSION = 'yawr.stdio/v1' as const;
 const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024;
 
@@ -42,9 +43,14 @@ export function buildStdioRunArgs(
   privateInputNames: ReadonlySet<string> = new Set(),
   routeTestPath?: string,
   typedResults = false,
+  executionGraph = false,
 ): string[] {
   const args = ['run', '--stdio'];
-  if (typedResults) args.push('--require-capabilities', 'yawr.typed-results/v1,yawr.run-results-chunks/v1');
+  const capabilities = [
+    ...(typedResults ? ['yawr.typed-results/v1', 'yawr.run-results-chunks/v1'] : []),
+    ...(executionGraph ? ['yawr.run-graph/v1'] : []),
+  ];
+  if (capabilities.length) args.push('--require-capabilities', capabilities.join(','));
   if (routeTestPath) {
     // The reviewed artifact is authoritative; never mix live input or debug
     // configuration into a zero-dispatch route test.
@@ -75,6 +81,7 @@ export class DirectRunSession {
   private disposed = false;
   private finalized = false;
   private results?: ResultsAssembly;
+  private graph = new ExecutionGraphAssembly();
 
   constructor(
     private readonly child: RunChildProcess,
@@ -229,7 +236,25 @@ export class DirectRunSession {
       this.results?.acceptChunk(frame);
       return;
     }
+    if (frame.type === 'run.graph.chunk') {
+      try {
+        if (invalidIdentity || wireError) throw new Error('invalid execution graph wire identity');
+        const update = this.graph.accept(frame);
+        if (update) this.callbacks.onFrame({
+          type: 'run.graph', version: STDIO_PROTOCOL_VERSION, runID: this.runID, ...update,
+        });
+      } catch (error) {
+        this.protocolFailure(error instanceof Error ? error.message : 'invalid execution graph');
+      }
+      return;
+    }
+    if (frame.type === 'run.graph') {
+      this.protocolFailure('execution graphs must arrive as verified chunks');
+      return;
+    }
     if (frame.type === 'run.finished') {
+      try { this.graph.complete(); }
+      catch (error) { this.protocolFailure(error instanceof Error ? error.message : 'incomplete execution graph'); return; }
       if (invalidDecoration) this.results?.rejectWire();
       frame.resultsAvailability = this.results?.complete(frame) ?? { state: 'unavailable', reason: 'no-active-run' };
       // Only the validated canonical document crosses into the webview.

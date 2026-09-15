@@ -13,6 +13,7 @@ import (
 
 	internalgovernance "github.com/ormasoftchile/yawr/runtime/internal/governance"
 	"github.com/ormasoftchile/yawr/runtime/internal/serve"
+	"github.com/ormasoftchile/yawr/runtime/internal/sessioncoordinator"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/governance"
 	"github.com/ormasoftchile/yawr/runtime/pkg/preview/runstate"
@@ -23,11 +24,15 @@ const maxStdioCommandBytes = 1024 * 1024
 const maxStdioFrameBytes = 1024 * 1024
 
 type stdioProtocol struct {
-	reader       *bufio.Reader
-	inputCloser  io.Closer
-	encoder      *json.Encoder
-	writeMu      sync.Mutex
-	terminalSent bool
+	graphMu       sync.Mutex
+	graphStore    engine.DurableRunStore
+	graphRevision int
+	graphBindings []sessioncoordinator.ExecutionGraphBinding
+	reader        *bufio.Reader
+	inputCloser   io.Closer
+	encoder       *json.Encoder
+	writeMu       sync.Mutex
+	terminalSent  bool
 
 	mu       sync.RWMutex
 	runID    string
@@ -287,7 +292,7 @@ func sanitizeStdioEventPayload(value any, secrets []string, redactor *internalgo
 	safe := make(map[string]any, len(payload))
 	for key, item := range payload {
 		switch key {
-		case "run_id", "step_id", "node_id", "parent_step_id", "parent_kind", "include_alias", "branch_label",
+		case "run_id", "step_id", "node_id", "graph_node_id", "parent_step_id", "parent_kind", "include_alias", "branch_label",
 			"kind", "status", "phase", "stream", "sequence", "invocation", "attempt", "duration_ms",
 			"index", "total", "iteration", "dispatched", "call_path":
 			safe[key] = item
@@ -723,12 +728,26 @@ func (p *stdioProtocol) forwardInteractions(
 			}
 			switch interaction := frame.(type) {
 			case serve.PendingInteraction:
-				if err := p.send(map[string]any{
+				p.graphMu.Lock()
+				if p.graphStore != nil {
+					state := p.handle.State()
+					if err := p.publishExecutionGraph(state); err != nil {
+						p.graphMu.Unlock()
+						p.handleOutputFailure(err)
+						return
+					}
+					if retained := state.Interactions[interaction.TurnID]; retained != nil {
+						interaction.NodeID = p.graphNodeID(interaction.NodeID, executionFramePath(state, retained.FrameID))
+					}
+				}
+				err := p.send(map[string]any{
 					"type":        "interaction.pending",
 					"runID":       runID,
 					"turnID":      interaction.TurnID,
 					"interaction": serve.PreviewInteractionFrame(interaction),
-				}); err != nil {
+				})
+				p.graphMu.Unlock()
+				if err != nil {
 					p.handleOutputFailure(err)
 					return
 				}
@@ -757,11 +776,7 @@ func (p *stdioProtocol) forwardEvents(ctx context.Context, runID string, events 
 				return
 			}
 			event.Payload = runstate.PreviewEventPayload(event.Payload)
-			if err := p.send(map[string]any{
-				"type":  "run.event",
-				"runID": runID,
-				"event": event,
-			}); err != nil {
+			if err := p.sendGraphEvent(runID, event); err != nil {
 				p.handleOutputFailure(err)
 				return
 			}

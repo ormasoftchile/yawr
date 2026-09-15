@@ -7,6 +7,9 @@ export interface GraphPlaybackSample {
   documentID?: string;
   graphTitle?: string;
   visibility?: string;
+  nodes?: string[];
+  runbooks?: string[];
+  history?: string[];
 }
 
 export async function connectGraphObserver(port: string) {
@@ -68,7 +71,10 @@ export async function connectGraphObserver(port: string) {
               status: app.dataset.runStatus, results: app.dataset.resultsState,
               documentID: ${JSON.stringify(`${context.sessionId ?? 'root'}:${context.id}`)},
               graphTitle: document.querySelector('.identity strong')?.textContent,
-              visibility: document.visibilityState
+              visibility: document.visibilityState,
+              nodes: Array.from(document.querySelectorAll('.react-flow__node-yawrStep')).map(node => node.dataset.id),
+              runbooks: Array.from(document.querySelectorAll('select[aria-label="Inspect runbook"] option')).slice(1).map(node => node.value),
+              history: Array.from(document.querySelectorAll('select[aria-label="Inspect executed step"] option')).slice(1).map(node => node.textContent)
             }));
           };
           sample();

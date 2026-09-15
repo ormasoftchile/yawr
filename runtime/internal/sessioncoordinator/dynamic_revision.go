@@ -368,6 +368,21 @@ func executionPlanGraph(
 	plan *engine.ExecutionPlan,
 	resolutions []*engine.DynamicIncludeResolutionState,
 ) (json.RawMessage, error) {
+	return executionPlanGraphWithBindings(plan, resolutions, nil)
+}
+
+// ExecutionGraphBinding identifies a node in one retained dynamic invocation.
+type ExecutionGraphBinding struct {
+	NodeID          string                               `json:"nodeID"`
+	QualifiedNodeID string                               `json:"qualifiedNodeID"`
+	StructuralPath  []schema.DynamicIncludeFrameIdentity `json:"structuralPath"`
+}
+
+func executionPlanGraphWithBindings(
+	plan *engine.ExecutionPlan,
+	resolutions []*engine.DynamicIncludeResolutionState,
+	bindings *[]ExecutionGraphBinding,
+) (json.RawMessage, error) {
 	if plan == nil || len(plan.Metadata.DynamicIncludes) == 0 {
 		return executionPlanGraphCurrentVersion(plan, resolutions)
 	}
@@ -417,6 +432,22 @@ func executionPlanGraph(
 		}
 		if err := appendDynamicOccurrenceGraph(&cumulative, current, pin, parent, occurrenceNodes); err != nil {
 			return nil, err
+		}
+		if bindings != nil {
+			structuralPath := append([]schema.DynamicIncludeFrameIdentity(nil), pin.StructuralPath...)
+			structuralPath = append(structuralPath, schema.DynamicIncludeFrameIdentity{
+				QualifiedNodeID: pin.QualifiedNodeID, Kind: "include", Invocation: pin.Invocation,
+			})
+			ids := make([]string, 0, len(occurrenceNodes[pin.Revision]))
+			for id := range occurrenceNodes[pin.Revision] {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				*bindings = append(*bindings, ExecutionGraphBinding{
+					NodeID: occurrenceNodes[pin.Revision][id], QualifiedNodeID: id, StructuralPath: structuralPath,
+				})
+			}
 		}
 	}
 	canonical, err := graphDocumentFromHandoffGraph(cumulative)

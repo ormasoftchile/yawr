@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { copyFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { connectGraphObserver } from './graphPlaybackObserver';
 
@@ -38,6 +38,74 @@ async function directoryEntries(path: string): Promise<string[]> {
 }
 
 suite('Installed VSIX production surface', () => {
+  test('dynamic included runbooks form one paced CURRENT stream and retain the complete return history', async function () {
+    this.timeout(60_000);
+    assert.equal(vscode.version, '1.136.2');
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    const root = process.env.YAWR_TEST_STATE_ROOT;
+    const core = join(__dirname, '..', '..', '..', '..', '..', 'runtime');
+    const port = process.env.YAWR_TEST_CDP_PORT;
+    assert.ok(root && core && port, 'the installed harness must supply its isolated environment');
+    const destination = join(root, 'workspace', 'execution-graph');
+    await cp(join(core, 'examples', 'execution-graph'), destination, {
+      recursive: true, filter: source => !source.includes(`${require('node:path').sep}.runbook`),
+    });
+    const uri = vscode.Uri.file(join(destination, 'runbooks', 'dynamic-router.runbook.yaml'));
+    const config = vscode.workspace.getConfiguration('yawr', uri);
+    const previous = config.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue;
+    const observer = await connectGraphObserver(port);
+    let panel: vscode.WebviewPanel | undefined;
+    try {
+      await config.update('preview.minimumStepDisplayMs', 500, vscode.ConfigurationTarget.Workspace);
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+      panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.previewGraph');
+      await observer.waitForGraph();
+      const observation = observer.observe();
+      const result = await vscode.commands.executeCommand<{
+        frames: Array<{ type: string; event?: { kind: string; payload: Record<string, unknown> } }>;
+        finished: { status: string }; stderr: string;
+      }>('yawr.runCurrentRunbook');
+      const returnedAt = Date.now();
+      const samples = await observation;
+      await writeFile(join(root, 'included-runbooks-500ms.json'), JSON.stringify({ samples, returnedAt, result }, null, 2));
+      if (process.env.YAWR_TEST_EVIDENCE_DIR) {
+        await mkdir(process.env.YAWR_TEST_EVIDENCE_DIR, { recursive: true });
+        await copyFile(join(root, 'included-runbooks-500ms.json'), join(process.env.YAWR_TEST_EVIDENCE_DIR, 'included-runbooks-500ms.json'));
+      }
+      assert.equal(result?.finished.status, 'completed', result?.stderr);
+      assert.ok(result.frames.some(frame => frame.type === 'run.graph'), 'real runtime graph updates must reach the extension');
+      const expected = result.frames.filter(frame => frame.event?.kind === 'step/started').map(frame =>
+        String(frame.event!.payload.graph_node_id ?? frame.event!.payload.qualified_node_id));
+      assert.equal(expected.length, 9, 'the shared router example has nine executed steps');
+      const first = samples.findIndex(sample => sample.ids.length > 0);
+      assert.ok(first >= 0, 'the run must display current steps');
+      const playback = samples.slice(first);
+      const end = playback.findIndex(sample => sample.ids.length === 0);
+      assert.ok(end > 0, 'playback must drain after the final Results dwell');
+      assert.ok(playback.slice(0, end).every(sample => sample.ids.length === 1), 'graph growth must never remove CURRENT');
+      assert.ok(playback.slice(end).every(sample => sample.ids.length === 0), 'there must be no replay');
+      const changes = playback.slice(0, end + 1).filter((sample, index) =>
+        index === 0 || sample.ids[0] !== playback[index - 1].ids[0]);
+      assert.deepEqual(changes.map(sample => sample.ids[0]), [...expected, undefined]);
+      for (let index = 1; index < changes.length; index++) {
+        assert.ok(changes[index].at - changes[index - 1].at >= 465,
+          `included step ${changes[index - 1].ids[0]} dwell was ${changes[index].at - changes[index - 1].at}ms`);
+      }
+      const final = playback.at(-1)!;
+      assert.equal(final.runbooks?.length, 3, 'root, child and grandchild must remain navigable after completion');
+      assert.equal(final.history?.length, 9, 'execution history must retain child entry and parent return');
+      for (const id of expected) assert.ok(final.nodes?.includes(id), `completed graph lost ${id}`);
+      assert.ok(returnedAt < changes.at(-2)!.at, 'runtime completion must not wait for visual playback');
+      console.log(`Installed included-runbook CURRENT dwells: ${changes.slice(1).map((sample, index) => sample.at - changes[index].at).join(', ')}ms`);
+    } finally {
+      await observer.close();
+      panel?.dispose();
+      await config.update('preview.minimumStepDisplayMs', previous, vscode.ConfigurationTarget.Workspace);
+    }
+  });
+
   for (const configuredInterval of [undefined, 500]) test(`one canonical CURRENT stream covers the entire installed runtime run and completion backlog at ${configuredInterval ?? 'default 200'}ms`, async function () {
     this.timeout(60_000);
     assert.strictEqual(vscode.version, '1.136.2', 'compatibility requires the actual minimum supported host');
@@ -436,7 +504,7 @@ flow:
       'run',
       '--stdio',
       '--require-capabilities',
-      'yawr.typed-results/v1,yawr.run-results-chunks/v1',
+      'yawr.typed-results/v1,yawr.run-results-chunks/v1,yawr.run-graph/v1',
       '--package-map',
       workspaceMap,
       runbookDocument.fileName,
