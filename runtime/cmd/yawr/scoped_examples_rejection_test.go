@@ -20,7 +20,9 @@ func TestScopedExampleRejectionsPrecedeEveryDispatch(t *testing.T) {
 		{"conflicting-requirements", "PKG-002"},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			command := y1Command(t, "run", "--stdio", "--run-dir", t.TempDir(),
+			artifacts := t.TempDir()
+			command := y1Command(t, "run", "--stdio", "--run-dir", filepath.Join(artifacts, "runs"),
+				"--trace", filepath.Join(artifacts, "trace.jsonl"),
 				filepath.Join(root, "rejections", fixture.name+".runbook.yaml"))
 			command.Dir = root
 			var stderr bytes.Buffer
