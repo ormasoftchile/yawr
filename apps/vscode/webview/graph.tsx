@@ -64,6 +64,7 @@ import {
 import type { RouteTestArtifact } from '../src/routeTestTypes';
 import { sessionGraphTopologyKey, type SessionGraphViewState } from '../src/sessionCompositeGraph';
 import { parseHostActionResponse, type HostActionResponseEnvelope } from '../src/hostActionWebviewProtocol';
+import { matchesXtsViewCheck, type XtsViewCheck } from '../src/xtsViewVerification';
 import {
   collectorInputType,
   formatCollectorReviewValue as collectorReviewValue,
@@ -118,7 +119,8 @@ type HostMessage =
       answer?: Record<string, unknown>;
       artifact?: RouteTestArtifact;
     }
-  | HostActionResponseEnvelope;
+  | HostActionResponseEnvelope
+  | XtsViewCheck;
 
 interface StdioFrame {
   type: string;
@@ -739,11 +741,15 @@ function InteractionPane({
   onSubmit,
   onConfirmHostAction,
   xtsOpened,
+  xtsViewCheck,
+  onVerifyXtsView,
 }: {
   interaction: PendingInteraction;
   onSubmit(answer: Record<string, unknown>): void;
   onConfirmHostAction(interaction: PendingInteraction): void;
   xtsOpened: boolean;
+  xtsViewCheck?: XtsViewCheck;
+  onVerifyXtsView(status: 'opened' | 'failed'): void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [values, setValues] = useState<Record<string, unknown>>(() => {
@@ -754,6 +760,7 @@ function InteractionPane({
     return initial;
   });
   const [submitting, setSubmitting] = useState(false);
+  const [verificationSubmitted, setVerificationSubmitted] = useState(false);
   const [validationError, setValidationError] = useState<string>();
   const [collectorReview, setCollectorReview] = useState<Record<string, unknown>>();
   const choiceMax = interaction.kind === 'choice' && interaction.multiple &&
@@ -776,7 +783,20 @@ function InteractionPane({
         <h2>{interaction.title ?? interaction.stepID}</h2>
         {interaction.prompt ? <p>{interaction.prompt}</p> : null}
         {isXts ? <p>VS Code will switch to XTS. Review the view, then return here to record your findings.</p> : null}
-        <button
+        {xtsViewCheck ? <>
+          <p>XTS launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded
+            with the requested environment and parameters. Do not confirm a startup, authentication, or loading error.</p>
+          <dl>
+            <dt>View</dt><dd>{String(interaction.host_action?.request.view_path ?? '')}</dd>
+            <dt>Environment</dt><dd>{String(interaction.host_action?.request.environment ?? '')}</dd>
+            {Object.entries(recordValue(interaction.host_action?.request.parameters) ?? {}).map(([name, value]) =>
+              <React.Fragment key={name}><dt>{name}</dt><dd>{String(value)}</dd></React.Fragment>)}
+          </dl>
+          <button type="button" className="primary" disabled={verificationSubmitted}
+            onClick={() => { setVerificationSubmitted(true); onVerifyXtsView('opened'); }}>XTS view is ready</button>
+          <button type="button" className="danger" disabled={verificationSubmitted}
+            onClick={() => { setVerificationSubmitted(true); onVerifyXtsView('failed'); }}>XTS failed to open</button>
+        </> : <button
           type="button"
           className="primary"
           disabled={submitting}
@@ -786,7 +806,7 @@ function InteractionPane({
           }}
         >
           {submitting ? 'Opening XTS...' : <span>Open XTS</span>}
-        </button>
+        </button>}
       </section>
     );
   }
@@ -1640,6 +1660,8 @@ function GraphView({
   onSaveRouteTest,
   onRunRouteTest,
   xtsOpened,
+  xtsViewCheck,
+  onVerifyXtsView,
 }: {
   document: GraphDocument;
   results?: ResultsAvailability;
@@ -1686,6 +1708,8 @@ function GraphView({
   onSaveRouteTest(artifact: RouteTestArtifact): void;
   onRunRouteTest(artifact: RouteTestArtifact): void;
   xtsOpened: boolean;
+  xtsViewCheck?: XtsViewCheck;
+  onVerifyXtsView(status: 'opened' | 'failed'): void;
 }) {
   const runtimeNodes = useMemo(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document), [observedRuntimeNodes, runStatus, document]);
   const [selectedId, setSelectedId] = useState<string>();
@@ -2505,6 +2529,8 @@ function GraphView({
               onSubmit={onSubmitInteraction}
               onConfirmHostAction={onConfirmHostAction}
               xtsOpened={xtsOpened}
+              xtsViewCheck={xtsViewCheck}
+              onVerifyXtsView={onVerifyXtsView}
             />
           ) : currentRouteTestEditor && routeTarget && routeTestContext ? (
             <RouteTestPane
@@ -2669,6 +2695,7 @@ function App() {
   const [routeTestRunning, setRouteTestRunning] = useState(false);
   const [routeTestError, setRouteTestError] = useState<string>();
   const [xtsOpened, setXtsOpened] = useState(false);
+  const [xtsViewCheck, setXtsViewCheck] = useState<XtsViewCheck>();
   const pendingRef = useRef<PendingInteraction>();
   const resolvedTurnsRef = useRef(new Set<string>());
   const runIDRef = useRef<string>();
@@ -2700,6 +2727,7 @@ function App() {
   const clearActiveRun = (preserveVisualPlayback = false) => {
     if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
     hostRequestRef.current = undefined;
+    setXtsViewCheck(undefined);
     pendingRef.current = undefined;
     runIDRef.current = undefined;
     setXtsOpened(false);
@@ -2985,6 +3013,17 @@ function App() {
         setRouteTestError(undefined);
       } else if (message.type === 'route-test.error') {
         setRouteTestError(message.message);
+      } else if (message.type === 'yawr.xts.verify-view') {
+        const hostRequest = hostRequestRef.current;
+        const interaction = pendingRef.current;
+        if (!hostRequest || !interaction || interaction.kind !== 'host_action' ||
+            interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID ||
+            runIDRef.current !== hostRequest.runID) return;
+        if (matchesXtsViewCheck(message, {
+          capability: hostRequest.capability, runId: hostRequest.runID, turnId: hostRequest.turnID,
+          correlationId: hostRequest.correlationID, previewSessionId: hostSessionRef.current,
+          requestId: hostRequest.requestID,
+        })) setXtsViewCheck(message);
       } else if (message.type === 'yawr.host-action.ack' || message.type === 'yawr.host-action.cancel') {
         const response = parseHostActionResponse(message);
         if (!response) return;
@@ -3003,6 +3042,7 @@ function App() {
           response.capability !== hostRequest.capability
         )) return;
         if (runIDRef.current !== hostRequest.runID) return;
+        setXtsViewCheck(undefined);
         if (response.type === 'yawr.host-action.ack' && response.status === 'completed' && response.result?.status === 'opened') {
           setXtsOpened(true);
         }
@@ -3393,7 +3433,7 @@ function App() {
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
+  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, xtsViewCheck, testMode]);
 
   if (loading) return <div className="state" role="status">Loading runbook...</div>;
   if (error) return <div className="state error" role="alert">{error}</div>;
@@ -3454,6 +3494,13 @@ function App() {
         vscode.postMessage({ type: 'route-test.run', artifact });
       }}
       xtsOpened={xtsOpened}
+      xtsViewCheck={xtsViewCheck}
+      onVerifyXtsView={(status) => {
+        if (!xtsViewCheck || xtsViewCheck.runId !== runIDRef.current ||
+            xtsViewCheck.turnId !== pendingRef.current?.turnID ||
+            xtsViewCheck.requestId !== hostRequestRef.current?.requestID) return;
+        vscode.postMessage({ ...xtsViewCheck, type: 'yawr.xts.view-verified', status });
+      }}
     />
   );
 }

@@ -37502,6 +37502,13 @@
     return value;
   }
 
+  // src/xtsViewVerification.ts
+  function matchesXtsViewCheck(value, expected) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    const candidate = value;
+    return candidate.type === "yawr.xts.verify-view" && Object.keys(candidate).length === 7 && ["capability", "runId", "turnId", "correlationId", "previewSessionId", "requestId"].every((key) => candidate[key] === expected[key]);
+  }
+
   // src/collectorFieldValues.ts
   function fieldLabel(field2) {
     return field2.label ?? field2.display_name ?? field2.name;
@@ -38290,7 +38297,9 @@
     interaction,
     onSubmit,
     onConfirmHostAction,
-    xtsOpened
+    xtsOpened,
+    xtsViewCheck,
+    onVerifyXtsView
   }) {
     const [selected, setSelected] = (0, import_react15.useState)([]);
     const [values, setValues] = (0, import_react15.useState)(() => {
@@ -38301,6 +38310,7 @@
       return initial;
     });
     const [submitting, setSubmitting] = (0, import_react15.useState)(false);
+    const [verificationSubmitted, setVerificationSubmitted] = (0, import_react15.useState)(false);
     const [validationError, setValidationError] = (0, import_react15.useState)();
     const [collectorReview, setCollectorReview] = (0, import_react15.useState)();
     const choiceMax = interaction.kind === "choice" && interaction.multiple && typeof interaction.max === "number" && Number.isInteger(interaction.max) && interaction.max >= 0 ? interaction.max : void 0;
@@ -38312,7 +38322,31 @@
     if (interaction.kind === "host_action") {
       const isXts = interaction.host_action?.capability === "xts.open-view";
       if (!isXts) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "interaction-wait", role: "status" }, "Opening host view...");
-      return /* @__PURE__ */ import_react15.default.createElement("section", { className: "interaction-pane host-action-pane", "aria-label": isXts ? "Open XTS view" : "Open host view" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")), /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, isXts ? "Actual run \xB7 XTS" : "Host action"), /* @__PURE__ */ import_react15.default.createElement("h2", null, interaction.title ?? interaction.stepID), interaction.prompt ? /* @__PURE__ */ import_react15.default.createElement("p", null, interaction.prompt) : null, isXts ? /* @__PURE__ */ import_react15.default.createElement("p", null, "VS Code will switch to XTS. Review the view, then return here to record your findings.") : null, /* @__PURE__ */ import_react15.default.createElement(
+      return /* @__PURE__ */ import_react15.default.createElement("section", { className: "interaction-pane host-action-pane", "aria-label": isXts ? "Open XTS view" : "Open host view" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")), /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, isXts ? "Actual run \xB7 XTS" : "Host action"), /* @__PURE__ */ import_react15.default.createElement("h2", null, interaction.title ?? interaction.stepID), interaction.prompt ? /* @__PURE__ */ import_react15.default.createElement("p", null, interaction.prompt) : null, isXts ? /* @__PURE__ */ import_react15.default.createElement("p", null, "VS Code will switch to XTS. Review the view, then return here to record your findings.") : null, xtsViewCheck ? /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement("p", null, "XTS launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded with the requested environment and parameters. Do not confirm a startup, authentication, or loading error."), /* @__PURE__ */ import_react15.default.createElement("dl", null, /* @__PURE__ */ import_react15.default.createElement("dt", null, "View"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.view_path ?? "")), /* @__PURE__ */ import_react15.default.createElement("dt", null, "Environment"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.environment ?? "")), Object.entries(recordValue(interaction.host_action?.request.parameters) ?? {}).map(([name, value]) => /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, { key: name }, /* @__PURE__ */ import_react15.default.createElement("dt", null, name), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(value))))), /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          className: "primary",
+          disabled: verificationSubmitted,
+          onClick: () => {
+            setVerificationSubmitted(true);
+            onVerifyXtsView("opened");
+          }
+        },
+        "XTS view is ready"
+      ), /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          className: "danger",
+          disabled: verificationSubmitted,
+          onClick: () => {
+            setVerificationSubmitted(true);
+            onVerifyXtsView("failed");
+          }
+        },
+        "XTS failed to open"
+      )) : /* @__PURE__ */ import_react15.default.createElement(
         "button",
         {
           type: "button",
@@ -39006,7 +39040,9 @@
     routeTestError,
     onSaveRouteTest,
     onRunRouteTest,
-    xtsOpened
+    xtsOpened,
+    xtsViewCheck,
+    onVerifyXtsView
   }) {
     const runtimeNodes = (0, import_react15.useMemo)(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document2), [observedRuntimeNodes, runStatus, document2]);
     const [selectedId, setSelectedId] = (0, import_react15.useState)();
@@ -39826,7 +39862,9 @@
             interaction: pending2,
             onSubmit: onSubmitInteraction,
             onConfirmHostAction,
-            xtsOpened
+            xtsOpened,
+            xtsViewCheck,
+            onVerifyXtsView
           }
         ) : currentRouteTestEditor && routeTarget && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement(
           RouteTestPane,
@@ -39977,6 +40015,7 @@
     const [routeTestRunning, setRouteTestRunning] = (0, import_react15.useState)(false);
     const [routeTestError, setRouteTestError] = (0, import_react15.useState)();
     const [xtsOpened, setXtsOpened] = (0, import_react15.useState)(false);
+    const [xtsViewCheck, setXtsViewCheck] = (0, import_react15.useState)();
     const pendingRef = (0, import_react15.useRef)();
     const resolvedTurnsRef = (0, import_react15.useRef)(/* @__PURE__ */ new Set());
     const runIDRef = (0, import_react15.useRef)();
@@ -40009,6 +40048,7 @@
     const clearActiveRun = (preserveVisualPlayback = false) => {
       if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
       hostRequestRef.current = void 0;
+      setXtsViewCheck(void 0);
       pendingRef.current = void 0;
       runIDRef.current = void 0;
       setXtsOpened(false);
@@ -40297,6 +40337,18 @@
           setRouteTestError(void 0);
         } else if (message.type === "route-test.error") {
           setRouteTestError(message.message);
+        } else if (message.type === "yawr.xts.verify-view") {
+          const hostRequest = hostRequestRef.current;
+          const interaction = pendingRef.current;
+          if (!hostRequest || !interaction || interaction.kind !== "host_action" || interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID || runIDRef.current !== hostRequest.runID) return;
+          if (matchesXtsViewCheck(message, {
+            capability: hostRequest.capability,
+            runId: hostRequest.runID,
+            turnId: hostRequest.turnID,
+            correlationId: hostRequest.correlationID,
+            previewSessionId: hostSessionRef.current,
+            requestId: hostRequest.requestID
+          })) setXtsViewCheck(message);
         } else if (message.type === "yawr.host-action.ack" || message.type === "yawr.host-action.cancel") {
           const response = parseHostActionResponse(message);
           if (!response) return;
@@ -40306,6 +40358,7 @@
           if (response.previewSessionId !== hostSessionRef.current || interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID || interaction.host_action.capability !== hostRequest.capability || response.correlationId !== hostRequest.correlationID || response.requestId !== hostRequest.requestID) return;
           if (response.type === "yawr.host-action.ack" && (response.runId !== hostRequest.runID || response.turnId !== hostRequest.turnID || response.capability !== hostRequest.capability)) return;
           if (runIDRef.current !== hostRequest.runID) return;
+          setXtsViewCheck(void 0);
           if (response.type === "yawr.host-action.ack" && response.status === "completed" && response.result?.status === "opened") {
             setXtsOpened(true);
           }
@@ -40672,7 +40725,7 @@
         });
       });
       return () => cancelAnimationFrame(frame2);
-    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
+    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, xtsViewCheck, testMode]);
     if (loading) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "Loading runbook...");
     if (error) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state error", role: "alert" }, error);
     if (!document2) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "No graph loaded");
@@ -40736,7 +40789,12 @@
           setRouteTestError(void 0);
           vscode.postMessage({ type: "route-test.run", artifact });
         },
-        xtsOpened
+        xtsOpened,
+        xtsViewCheck,
+        onVerifyXtsView: (status) => {
+          if (!xtsViewCheck || xtsViewCheck.runId !== runIDRef.current || xtsViewCheck.turnId !== pendingRef.current?.turnID || xtsViewCheck.requestId !== hostRequestRef.current?.requestID) return;
+          vscode.postMessage({ ...xtsViewCheck, type: "yawr.xts.view-verified", status });
+        }
       }
     );
   }

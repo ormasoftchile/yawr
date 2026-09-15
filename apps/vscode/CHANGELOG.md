@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.15
+
+- Uses the current XTS `xts.openViewByPath(relativePath, args)` command, preserving
+  relative filenames and forwarding environment and view parameters as CLI-style
+  `-p name:value` arguments.
+- Accepts the command's `void` return without treating it as evidence of an
+  opened view. The host action waits for an explicit in-panel operator readiness
+  check; startup failures, exceptions, cancellation, and stale responses cannot
+  silently become a successful handoff.
+- Preserves VS Code 1.136.2 compatibility and the accepted single-CURRENT pacing.
+
 ## 0.2.14
 
 - Fixes animated viewport callbacks losing their browser `Window` receiver;

@@ -88,7 +88,8 @@ import {
   validateRouteTestAgainstDocument,
 } from './routeTestArtifacts';
 import type { RouteTestArtifact } from './routeTestTypes';
-import { launchXtsWithHandoff } from './xtsHandoff';
+import { launchXtsWithHandoff, xtsParameterArguments } from './xtsHandoff';
+import { waitForXtsViewVerification } from './xtsViewVerification';
 import {
   CANCELLED,
   UNSET,
@@ -725,20 +726,6 @@ function reportEngineFailure(step: string, err: unknown) {
 
 const XTS_HOST_ACTION_TIMEOUT_MS = 310_000;
 
-const XTS_LAUNCH_STATUSES = new Set([
-  'opened',
-  'view-not-found',
-  'environment-not-found',
-  'invalid-parameters',
-  'execution-not-started',
-]);
-
-function isXtsLaunchAcknowledgment(value: unknown): value is { status: string; message?: string } {
-  return typeof value === 'object' && value !== null &&
-    'status' in value && typeof (value as { status?: unknown }).status === 'string' &&
-    XTS_LAUNCH_STATUSES.has((value as { status: string }).status);
-}
-
 function makeXtsOpenViewHandler(
   panel: vscode.WebviewPanel,
   consumePanelConfirmation: (requestId: string) => boolean = () => false,
@@ -748,7 +735,6 @@ function makeXtsOpenViewHandler(
     );
   },
 ): HostActionHandler {
-  void panel;
   return async (args: HostActionHandlerArgs): Promise<HostActionResult> => {
     const req = args.request;
     if (typeof req !== 'object' || req === null || Array.isArray(req)) {
@@ -763,6 +749,12 @@ function makeXtsOpenViewHandler(
     if (viewPath === undefined || environment === undefined || focus === undefined || params === undefined) {
       return { status: 'failed', error: { code: 'INVALID_REQUEST', message: 'Missing required view_path, environment, focus, or parameters fields.' } };
     }
+    let parameters: string;
+    try {
+      parameters = xtsParameterArguments(environment, params);
+    } catch (error) {
+      return { status: 'failed', error: { code: 'INVALID_REQUEST', message: deriveFailureMessage(error) } };
+    }
     const panelConfirmed = consumePanelConfirmation(args.requestId);
     if (!panelConfirmed) {
       return {
@@ -774,14 +766,13 @@ function makeXtsOpenViewHandler(
       focus,
       args.cancellationToken,
       {
-        dispatch: () => vscode.commands.executeCommand('xts.openViewWithParameters', {
-          viewPath,
-          environment,
-          parameters: params,
-          focus,
-          correlationId: args.correlationId,
-        }),
-        parseAcknowledgment: (value) => isXtsLaunchAcknowledgment(value) ? value : undefined,
+        dispatch: async () => {
+          const xts = vscode.extensions.getExtension('microsoft.xts4vscode');
+          if (xts && !xts.isActive) await xts.activate();
+          if (args.cancellationToken.isCancellationRequested) return;
+          await vscode.commands.executeCommand('xts.openViewByPath', viewPath, parameters);
+        },
+        verifyView: () => waitForXtsViewVerification(args, panel.webview),
         showDispatchError: (message) => {
           void vscode.window.showErrorMessage(`Yawr could not open the XTS view: ${message}`);
         },
