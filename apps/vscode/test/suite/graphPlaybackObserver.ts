@@ -32,6 +32,7 @@ export async function connectGraphObserver(port: string) {
   let observedTitle: string | undefined;
   let observedDocumentID: string | undefined;
   let observing = false;
+  let firstCurrent: (() => void) | undefined;
   const binding = '__yawrReadOnlyGraphPlaybackSample';
   const retiredContext = (error: Error) => /Execution context was destroyed|Cannot find context|Session with given id not found/.test(error.message);
   function send<T>(method: string, params: object = {}, sessionId?: string): Promise<T> {
@@ -98,6 +99,7 @@ export async function connectGraphObserver(port: string) {
       const sample: GraphPlaybackSample = JSON.parse(message.params.payload);
       if (observing && sample.graphTitle === observedTitle && sample.ids.length > 0 && !observedDocumentID) {
         observedDocumentID = sample.documentID;
+        firstCurrent?.();
       }
       samples.push(sample);
     } else if (message.method === 'Runtime.executionContextDestroyed') {
@@ -136,8 +138,24 @@ export async function connectGraphObserver(port: string) {
       const start = samples.length;
       observedDocumentID = undefined;
       observing = true;
-      await new Promise(resolve => setTimeout(resolve, durationMs));
-      observing = false;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            firstCurrent = undefined;
+            const seen = samples.slice(start).map(sample =>
+              `${sample.documentID}: ${sample.graphTitle}, ${sample.status}, ${sample.ids.join(',')}`);
+            reject(new Error(`Installed graph never displayed CURRENT: ${JSON.stringify([...new Set(seen)])}`));
+          }, 20_000);
+          firstCurrent = () => {
+            clearTimeout(timer);
+            firstCurrent = undefined;
+            resolve();
+          };
+        });
+        await new Promise(resolve => setTimeout(resolve, durationMs));
+      } finally {
+        observing = false;
+      }
       if (errors.length) throw errors[0];
       // Run Current Runbook can replace the idle preview before execution.
       // Anchor to the first CURRENT, retaining any competing CURRENT stream.

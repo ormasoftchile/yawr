@@ -74,6 +74,7 @@ test('the installed observer records CURRENT in nested webview targets, not just
   h.sample('outer', { at: 3, ids: ['unrelated'], progress: [], status: 'running', graphTitle: 'Prior graph' });
   h.sample('inner', { at: 501, ids: ['results'], progress: ['results'], status: 'completed', results: 'available' });
   h.sample('inner', { at: 1001, ids: [], progress: [], status: 'completed', results: 'available' });
+  await new Promise(setImmediate);
   h.drain();
   const samples = await observation;
   await observer.close();
@@ -93,6 +94,7 @@ test('the installed observer retains competing CURRENT streams and samples a lon
   h.sample('outer', { at: 2, ids: ['duplicate'], progress: ['duplicate'], status: 'running' });
   h.sample('inner', { at: 10500, ids: ['results'], progress: ['results'], status: 'completed' });
   h.sample('inner', { at: 11000, ids: [], progress: [], status: 'completed' });
+  await new Promise(setImmediate);
   h.drain(11500);
   const samples = await observation;
   await observer.close();
@@ -110,7 +112,43 @@ test('the installed observer rejects destruction of the executing graph instead 
   h.sample('inner', { at: 1, ids: ['first'], progress: ['first'], status: 'running' });
   h.event('Runtime.executionContextDestroyed', { executionContextId: 1 }, 'inner');
   const rejected = assert.rejects(observation, /graph document was destroyed/);
+  await new Promise(setImmediate);
   h.drain();
+  await rejected;
+  await observer.close();
+});
+
+test('the installed playback window starts at the first CURRENT, not the idle preview', async () => {
+  const h = observerHarness();
+  const observer = await h.connect();
+  await new Promise(setImmediate);
+  h.sample('outer', { at: 0, ids: [], progress: [], status: 'idle' });
+  await observer.waitForGraph('Expected graph');
+  let finished = false;
+  const observation = observer.observe().then(samples => { finished = true; return samples; });
+  h.drain();
+  await new Promise(setImmediate);
+  assert.equal(finished, false, 'an idle preview cannot consume the execution sampling window');
+  h.sample('inner', { at: 9000, ids: ['first'], progress: ['first'], status: 'running' });
+  h.sample('inner', { at: 9500, ids: ['results'], progress: ['results'], status: 'completed' });
+  h.sample('inner', { at: 10000, ids: [], progress: [], status: 'completed' });
+  await new Promise(setImmediate);
+  assert.equal(finished, false);
+  h.drain();
+  const samples = await observation;
+  assert.deepEqual(Array.from(samples, sample => sample.ids[0]), ['first', 'results', undefined]);
+  await observer.close();
+});
+
+test('the installed observer fails explicitly when CURRENT never arrives', async () => {
+  const h = observerHarness();
+  const observer = await h.connect();
+  await new Promise(setImmediate);
+  h.sample('outer', { at: 0, ids: [], progress: [], status: 'idle' });
+  await observer.waitForGraph('Expected graph');
+  const observation = observer.observe();
+  const rejected = assert.rejects(observation, /never displayed CURRENT/);
+  h.drain(20000);
   await rejected;
   await observer.close();
 });

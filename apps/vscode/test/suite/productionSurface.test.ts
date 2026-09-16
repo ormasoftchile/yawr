@@ -212,7 +212,8 @@ flow:
           `${changes[index - 1].ids[0]} dwell: ${changes[index].at - changes[index - 1].at}ms`);
       }
       for (const sample of playback.slice(0, final)) assert.deepStrictEqual(sample.progress, sample.ids);
-      assert.ok(returnedAt < changes[2].at, 'runtime completion must return while ordinary visuals remain queued');
+      assert.ok(returnedAt < changes[2].at,
+        `runtime completion must return while ordinary visuals remain queued: returned=${returnedAt}, transitions=${JSON.stringify(changes.map(sample => ({ at: sample.at, ids: sample.ids })))}`);
       assert.ok(playback.some(sample => sample.ids[0] === 'get_database_info' && sample.status === 'completed' && sample.results === 'available'),
         'Results availability must not wait for its visual position');
       console.log(`Installed VS Code ${vscode.version} whole-run CURRENT ${interval}ms: ${changes.map(sample => `${sample.ids[0] ?? 'drained'}@${sample.at.toFixed(1)}`).join(', ')}`);
