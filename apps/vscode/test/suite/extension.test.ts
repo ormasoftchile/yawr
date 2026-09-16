@@ -1215,10 +1215,11 @@ suite('Yawr extension smoke tests', () => {
       type: 'run.event', event: { run_id: 'transition-run', kind: `step/${kind}`, sequence: ++sequence,
         payload: { qualified_node_id: id, invocation: 1 } },
     } });
-    const trace = async (transition: () => Promise<unknown>, pacing = false) => {
+    const trace = async (transition: () => Promise<unknown>, pacing: boolean | 'completion' = false) => {
       const ready = message('execution.transition-sampling');
       const result = message<{ samples: Sample[] }>('execution.transition-samples');
-      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition', value: pacing ? 'pacing' : undefined });
+      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition',
+        value: pacing === 'completion' ? 'include-pacing' : pacing ? 'pacing' : undefined });
       await ready;
       await transition();
       return (await result).samples;
@@ -1326,7 +1327,7 @@ suite('Yawr extension smoke tests', () => {
           await panel.webview.postMessage({ type: 'run.exit', code: 0, signal: null });
           await panel.webview.postMessage({ type: 'loading' });
           await panel.webview.postMessage({ type: 'graph', document: fixture, style: 'smooth-curves', testMode: true });
-        }, true);
+        }, 'completion');
         const first = samples.findIndex(value => value.currentIDs.length > 0);
         assert.ok(first >= 0, 'completion must not erase the initial current step before paint');
         const playback = samples.slice(first);
