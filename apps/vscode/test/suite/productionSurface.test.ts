@@ -77,6 +77,7 @@ suite('Installed VSIX production surface', () => {
         finished: { status: string }; stderr: string;
       }>('yawr.runCurrentRunbook');
       const returnedAt = Date.now();
+      console.log(`Installed run returned: ${scenario.entry.join('/')} status=${result?.finished.status} frames=${result?.frames.length} at=${returnedAt}`);
       const samples = await observation;
       await writeFile(join(root, scenario.evidence), JSON.stringify({ samples, returnedAt, result }, null, 2));
       if (process.env.YAWR_TEST_EVIDENCE_DIR) {
@@ -179,6 +180,7 @@ flow:
           finished: { status: string; resultsAvailability: { state: string } }; stderr: string;
         }>('yawr.runCurrentRunbook');
         const returnedAt = Date.now();
+        console.log(`Installed run returned: single-current ${interval}ms status=${result?.finished.status} results=${result?.finished.resultsAvailability.state} at=${returnedAt}`);
         return { result, returnedAt };
       })();
       const [samples, { result, returnedAt }] = await Promise.all([observation, execution]);

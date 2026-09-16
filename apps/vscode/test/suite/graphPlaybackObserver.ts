@@ -132,6 +132,26 @@ export async function connectGraphObserver(port: string) {
     }, sessionId);
     scripts.set(sessionId, identifier);
   }
+  async function describeContexts() {
+    return Promise.all([...contexts.values()].map(async context => {
+      try {
+        const result = await send<{ result: { value?: unknown } }>('Runtime.evaluate', {
+          contextId: context.id, returnByValue: true,
+          expression: `({
+            url: document.URL, ready: document.readyState, visibility: document.visibilityState,
+            observer: !!window.${observationKey},
+            app: document.querySelector('.app')?.outerHTML.slice(0, 500),
+            body: document.body?.innerText.slice(0, 500),
+            frames: Array.from(document.querySelectorAll('iframe')).map(frame => frame.src),
+            scripts: Array.from(document.scripts).map(script => script.src)
+          })`,
+        }, context.sessionId);
+        return { context: `${context.sessionId ?? 'root'}:${context.id}`, document: result.result.value };
+      } catch (error) {
+        return { context: `${context.sessionId ?? 'root'}:${context.id}`, error: String(error) };
+      }
+    }));
+  }
   await send('Runtime.addBinding', { name: binding });
   await installForNewDocuments();
   await send('Runtime.enable');
@@ -163,9 +183,9 @@ export async function connectGraphObserver(port: string) {
             firstCurrent = undefined;
             const seen = samples.slice(start).map(sample =>
               `${sample.documentID}: ${sample.graphTitle}, ${sample.status}, ${sample.ids.join(',')}`);
-            reject(new Error(`Installed graph never displayed CURRENT: ${JSON.stringify({
-              samples: [...new Set(seen)], contexts: [...contexts.keys()], errors: errors.map(error => error.message),
-            })}`));
+            void describeContexts().then(contexts => reject(new Error(`Installed graph never displayed CURRENT: ${JSON.stringify({
+              samples: [...new Set(seen)], contexts, errors: errors.map(error => error.message),
+            })}`)));
           }, 20_000);
           firstCurrent = () => {
             clearTimeout(timer);
