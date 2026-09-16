@@ -22,6 +22,7 @@ import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import { randomBytes, randomUUID } from 'crypto';
+import { mergeExecutionGraph } from './executionGraph';
 import { configureBundledRuntime, resolveBinary } from './binaryResolver';
 import { registerPresentationEditor, setPresentationEntrypoint } from './presentationEditor';
 import { registerAuthoringEditor } from './authoringEditor';
@@ -88,7 +89,8 @@ import {
   validateRouteTestAgainstDocument,
 } from './routeTestArtifacts';
 import type { RouteTestArtifact } from './routeTestTypes';
-import { launchXtsWithHandoff } from './xtsHandoff';
+import { launchXtsWithHandoff, xtsParameterArguments } from './xtsHandoff';
+import { waitForXtsViewVerification } from './xtsViewVerification';
 import {
   CANCELLED,
   UNSET,
@@ -725,20 +727,6 @@ function reportEngineFailure(step: string, err: unknown) {
 
 const XTS_HOST_ACTION_TIMEOUT_MS = 310_000;
 
-const XTS_LAUNCH_STATUSES = new Set([
-  'opened',
-  'view-not-found',
-  'environment-not-found',
-  'invalid-parameters',
-  'execution-not-started',
-]);
-
-function isXtsLaunchAcknowledgment(value: unknown): value is { status: string; message?: string } {
-  return typeof value === 'object' && value !== null &&
-    'status' in value && typeof (value as { status?: unknown }).status === 'string' &&
-    XTS_LAUNCH_STATUSES.has((value as { status: string }).status);
-}
-
 function makeXtsOpenViewHandler(
   panel: vscode.WebviewPanel,
   consumePanelConfirmation: (requestId: string) => boolean = () => false,
@@ -748,7 +736,6 @@ function makeXtsOpenViewHandler(
     );
   },
 ): HostActionHandler {
-  void panel;
   return async (args: HostActionHandlerArgs): Promise<HostActionResult> => {
     const req = args.request;
     if (typeof req !== 'object' || req === null || Array.isArray(req)) {
@@ -763,6 +750,12 @@ function makeXtsOpenViewHandler(
     if (viewPath === undefined || environment === undefined || focus === undefined || params === undefined) {
       return { status: 'failed', error: { code: 'INVALID_REQUEST', message: 'Missing required view_path, environment, focus, or parameters fields.' } };
     }
+    let parameters: string;
+    try {
+      parameters = xtsParameterArguments(environment, params);
+    } catch (error) {
+      return { status: 'failed', error: { code: 'INVALID_REQUEST', message: deriveFailureMessage(error) } };
+    }
     const panelConfirmed = consumePanelConfirmation(args.requestId);
     if (!panelConfirmed) {
       return {
@@ -774,14 +767,13 @@ function makeXtsOpenViewHandler(
       focus,
       args.cancellationToken,
       {
-        dispatch: () => vscode.commands.executeCommand('xts.openViewWithParameters', {
-          viewPath,
-          environment,
-          parameters: params,
-          focus,
-          correlationId: args.correlationId,
-        }),
-        parseAcknowledgment: (value) => isXtsLaunchAcknowledgment(value) ? value : undefined,
+        dispatch: async () => {
+          const xts = vscode.extensions.getExtension('microsoft.xts4vscode');
+          if (xts && !xts.isActive) await xts.activate();
+          if (args.cancellationToken.isCancellationRequested) return;
+          await vscode.commands.executeCommand('xts.openViewByPath', viewPath, parameters);
+        },
+        verifyView: () => waitForXtsViewVerification(args, panel.webview),
         showDispatchError: (message) => {
           void vscode.window.showErrorMessage(`Yawr could not open the XTS view: ${message}`);
         },
@@ -931,6 +923,8 @@ async function openDirectGraphPanelForRunbook(
     return interval;
   };
   let currentDocument: GraphDocument | undefined;
+  let sourceDocument: GraphDocument | undefined;
+  let retainExecutionGraph = false;
   let currentProjectRoot: string | undefined;
   let currentRunbookRelative: string | undefined;
   let currentPlanHash: string | undefined;
@@ -1438,6 +1432,7 @@ async function openDirectGraphPanelForRunbook(
       currentRunbookRelative = runbookRelative;
       currentPlanHash = planHash;
       currentDocument = document;
+      sourceDocument = document;
       if (planWarning) output?.appendLine(planWarning);
       for (const warning of loadedRouteTests.warnings) output?.appendLine(`[yawr route test] WARNING: ${warning}`);
       publish({
@@ -1470,14 +1465,14 @@ async function openDirectGraphPanelForRunbook(
     void startRun(productionRun.inputs, undefined);
   };
   const requestReload = () => {
-    if (runStarting || runSession || investigationClient || investigationDescriptor) {
+    if (runStarting || runSession || investigationClient || investigationDescriptor || retainExecutionGraph) {
       reloadPending = true;
       return;
     }
     void reload();
   };
   const applyDeferredReload = () => {
-    if (!reloadPending || disposed) return;
+    if (!reloadPending || disposed || retainExecutionGraph) return;
     reloadPending = false;
     void reload();
   };
@@ -1543,6 +1538,7 @@ async function openDirectGraphPanelForRunbook(
     let inputs: Record<string, string>;
     let debug;
     try {
+      if (sourceDocument) currentDocument = sourceDocument;
       if (!currentDocument) throw new Error('The runbook graph is not loaded.');
       inputs = routeTestPath ? {} : directRunInputs(rawInputs);
       debug = routeTestPath ? undefined : parseDirectDebugConfig(rawDebug);
@@ -1590,7 +1586,7 @@ async function openDirectGraphPanelForRunbook(
       if (!startupIsActive()) return;
       const privateInputNames = routeTestPath ? new Set<string>() : directSecretInputNames(currentDocument!);
       const args = buildStdioRunArgs(runbookPath, inputs, packageMap.path, debug !== undefined, privateInputNames, routeTestPath,
-        currentDocument !== undefined && usesTypedResults(currentDocument));
+        currentDocument !== undefined && usesTypedResults(currentDocument), true);
       const spawnOptions: Parameters<typeof spawn>[2] = {
         cwd: projectRoot,
         env: {
@@ -1622,6 +1618,11 @@ async function openDirectGraphPanelForRunbook(
       session = new DirectRunSession(child as RunChildProcess, {
         onFrame: (frame) => {
           if (!startupIsActive()) return;
+          if (frame.type === 'run.graph' && currentDocument) {
+            currentDocument = mergeExecutionGraph(currentDocument, frame.document as GraphDocument, frame.nodeIDs as string[]);
+            setPresentationEntrypoint(projectRoot, runbookPath, currentDocument.frames.map(frame => frame.runbook_path));
+            retainExecutionGraph = true;
+          }
           if (productionRun) productionFrames.push({ ...frame });
           if (frame.type === 'run.started') {
             invalidateHostActionRun();
@@ -1937,6 +1938,8 @@ async function openDirectGraphPanelForRunbook(
       runBridge?.dispose();
       runBridge = undefined;
       activeRouteTest = undefined;
+      retainExecutionGraph = false;
+      if (sourceDocument) currentDocument = sourceDocument;
       applyDeferredReload();
       return;
     }

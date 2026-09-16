@@ -11,6 +11,7 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/governance"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 	regschema "github.com/ormasoftchile/yawr/runtime/pkg/schema/regions"
+	"github.com/ormasoftchile/yawr/runtime/pkg/toolscope"
 )
 
 // ErrIndeterminate is returned by Next when the run is halted because a step's
@@ -573,12 +574,15 @@ type DurableRunStore interface {
 // ExecutionPlan is a resolved, immutable plan ready for the runtime.
 // (Defined here to avoid an import cycle between engine and planner.)
 type ExecutionPlan struct {
-	RunID       string
-	RunbookPath string
-	Steps       []ResolvedStep
-	Tools       map[string]*schema.ToolDef
-	Providers   map[string]*schema.ProviderDef
-	Governance  governance.GovernancePolicy
+	ScopeBoundary *ToolScopeBoundary
+	ToolScopes    *toolscope.Set
+	RootScopeID   string
+	RunID         string
+	RunbookPath   string
+	Steps         []ResolvedStep
+	Tools         map[string]*schema.ToolDef
+	Providers     map[string]*schema.ProviderDef
+	Governance    governance.GovernancePolicy
 	// GovernanceSource is the raw runbook governance config, carried alongside
 	// the compiled Governance policy so the engine can construct a per-run
 	// PolicyEvaluator at Start() time (BuildEvaluator requires the config, not
@@ -600,6 +604,8 @@ type ExecutionPlan struct {
 
 // ResolvedStep is a single step in the execution plan, fully resolved.
 type ResolvedStep struct {
+	LexicalScopeID   string
+	ToolBindingID    string
 	ID               string
 	Name             string // Human-readable title from runbook (falls back to ID if empty)
 	Subtitle         string

@@ -13,13 +13,18 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/internal/planner"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
+	"github.com/ormasoftchile/yawr/runtime/pkg/toolscope"
 )
 
 const SchemaVersionV3 = "execution-plan/v3"
+const SchemaVersionV4 = "execution-plan/v4"
 
 var ErrUnpinnedInclude = errors.New("plan snapshot: unresolved include cannot be resumed safely")
 
 type SnapshotV1 struct {
+	ScopeBoundary    *engine.ToolScopeBoundary      `json:"scope_boundary,omitempty"`
+	ToolScopes       *toolscope.Set                 `json:"tool_scopes,omitempty"`
+	RootScopeID      string                         `json:"root_scope_id,omitempty"`
 	SchemaVersion    string                         `json:"schema_version"`
 	SnapshotDigest   string                         `json:"snapshot_digest"`
 	RunID            string                         `json:"run_id,omitempty"`
@@ -54,6 +59,8 @@ func (snapshot *SnapshotV1) UnmarshalJSON(data []byte) error {
 }
 
 type ResolvedStepSnapshotV1 struct {
+	LexicalScopeID   string                       `json:"lexical_scope_id,omitempty"`
+	ToolBindingID    string                       `json:"tool_binding_id,omitempty"`
 	ID               string                       `json:"id"`
 	Name             string                       `json:"name"`
 	Subtitle         string                       `json:"subtitle,omitempty"`
@@ -81,6 +88,7 @@ type ResolvedStepSnapshotV1 struct {
 }
 
 type includeSpecSnapshotV1 struct {
+	TargetScopeID              string                    `json:"target_scope_id,omitempty"`
 	ResolvedBindings           []schema.Binding          `json:"resolved_bindings,omitempty"`
 	Include                    schema.IncludeConfig      `json:"include"`
 	ResolvedSteps              []flowNodeSnapshotV1      `json:"resolved_steps,omitempty"`
@@ -156,6 +164,21 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 	if plan.Metadata.PlanHash == "" {
 		return SnapshotV1{}, errors.New("plan snapshot: validated plan hash is required")
 	}
+	if err := planner.ValidateToolScopes(plan); err != nil {
+		return SnapshotV1{}, err
+	}
+	if err := validateScopedArtifacts(plan); err != nil {
+		return SnapshotV1{}, err
+	}
+	if plan.ToolScopes != nil {
+		hash, err := planner.ScopedPlanHash(plan)
+		if err != nil {
+			return SnapshotV1{}, err
+		}
+		if hash != plan.Metadata.PlanHash {
+			return SnapshotV1{}, errors.New("plan snapshot: scoped plan changed after validation")
+		}
+	}
 	if err := validateFrozenToolSubstitutions(plan.Tools); err != nil {
 		return SnapshotV1{}, err
 	}
@@ -170,6 +193,8 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 	}
 
 	draft := SnapshotV1{
+		ScopeBoundary: plan.ScopeBoundary,
+		ToolScopes:    plan.ToolScopes, RootScopeID: plan.RootScopeID,
 		SchemaVersion:    SchemaVersionV3,
 		RunID:            plan.RunID,
 		RunbookPath:      plan.RunbookPath,
@@ -181,6 +206,9 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 		Inputs:           plan.Inputs,
 		Outputs:          plan.Outputs,
 		Bindings:         plan.Bindings,
+	}
+	if plan.ToolScopes != nil {
+		draft.SchemaVersion = SchemaVersionV4
 	}
 	canonical, err := cloneSnapshot(draft)
 	if err != nil {
@@ -195,8 +223,12 @@ func FromExecutionPlan(plan *engine.ExecutionPlan) (SnapshotV1, error) {
 }
 
 func Restore(snapshot SnapshotV1) (*engine.ExecutionPlan, error) {
-	if snapshot.SchemaVersion != SchemaVersionV3 {
+	if snapshot.SchemaVersion != SchemaVersionV3 && snapshot.SchemaVersion != SchemaVersionV4 {
 		return nil, fmt.Errorf("plan snapshot: unsupported schema version %q", snapshot.SchemaVersion)
+	}
+	if (snapshot.SchemaVersion == SchemaVersionV4) != (snapshot.ToolScopes != nil && snapshot.RootScopeID != "") ||
+		snapshot.SchemaVersion == SchemaVersionV3 && (snapshot.ToolScopes != nil || snapshot.RootScopeID != "") {
+		return nil, errors.New("plan snapshot: scope tables require v4")
 	}
 	if snapshot.SnapshotDigest == "" {
 		return nil, errors.New("plan snapshot: snapshot digest is required")
@@ -220,7 +252,7 @@ func Restore(snapshot SnapshotV1) (*engine.ExecutionPlan, error) {
 		return nil, err
 	}
 	for index, pin := range owned.Metadata.DynamicIncludes {
-		if err := ValidateDynamicIncludePin(pin); err != nil {
+		if err := ValidateDynamicIncludePin(pin, owned.ToolScopes); err != nil {
 			return nil, fmt.Errorf("plan snapshot: dynamic include %d: %w", index, err)
 		}
 	}
@@ -238,6 +270,8 @@ func Restore(snapshot SnapshotV1) (*engine.ExecutionPlan, error) {
 
 	expectedHash := owned.Metadata.PlanHash
 	plan := &engine.ExecutionPlan{
+		ScopeBoundary: owned.ScopeBoundary,
+		ToolScopes:    owned.ToolScopes, RootScopeID: owned.RootScopeID,
 		RunID:            owned.RunID,
 		RunbookPath:      owned.RunbookPath,
 		Steps:            steps,
@@ -249,6 +283,9 @@ func Restore(snapshot SnapshotV1) (*engine.ExecutionPlan, error) {
 		Inputs:           owned.Inputs,
 		Outputs:          owned.Outputs,
 		Bindings:         owned.Bindings,
+	}
+	if err := validateScopedArtifacts(plan); err != nil {
+		return nil, err
 	}
 	if err := planner.ValidateExecutionPlan(plan); err != nil {
 		return nil, fmt.Errorf("plan snapshot: restored plan validation failed: %w", err)
@@ -274,6 +311,12 @@ func ValidateResumeSafetyForState(plan *engine.ExecutionPlan, state engine.RunSt
 func validateResumeSafety(plan *engine.ExecutionPlan, allowDeferredIncludes bool) error {
 	if plan == nil {
 		return errors.New("plan snapshot: plan is required")
+	}
+	if err := planner.ValidateToolScopes(plan); err != nil {
+		return err
+	}
+	if err := validateScopedArtifacts(plan); err != nil {
+		return err
 	}
 	if err := validateFrozenToolSubstitutions(plan.Tools); err != nil {
 		return err
@@ -411,23 +454,24 @@ func snapshotStep(step engine.ResolvedStep) (ResolvedStepSnapshotV1, error) {
 		return ResolvedStepSnapshotV1{}, fmt.Errorf("encode %s spec: %w", step.Kind, err)
 	}
 	return ResolvedStepSnapshotV1{
-		ID:               step.ID,
-		Name:             step.Name,
-		Subtitle:         step.Subtitle,
-		Kind:             step.Kind,
-		Spec:             spec,
-		Capture:          step.Capture,
-		CaptureDefaults:  step.CaptureDefaults,
-		Depth:            step.Depth,
-		NestDepth:        step.NestDepth,
-		DisplayOrder:     step.DisplayOrder,
-		Origin:           step.Origin,
-		OnError:          step.OnError,
-		Timeout:          step.Timeout,
-		Delay:            step.Delay,
-		When:             step.When,
-		Retry:            step.Retry,
-		Scope:            step.Scope,
+		ID:              step.ID,
+		Name:            step.Name,
+		Subtitle:        step.Subtitle,
+		Kind:            step.Kind,
+		Spec:            spec,
+		Capture:         step.Capture,
+		CaptureDefaults: step.CaptureDefaults,
+		Depth:           step.Depth,
+		NestDepth:       step.NestDepth,
+		DisplayOrder:    step.DisplayOrder,
+		Origin:          step.Origin,
+		OnError:         step.OnError,
+		Timeout:         step.Timeout,
+		Delay:           step.Delay,
+		When:            step.When,
+		Retry:           step.Retry,
+		Scope:           step.Scope,
+		LexicalScopeID:  step.LexicalScopeID, ToolBindingID: step.ToolBindingID,
 		Export:           step.Export,
 		Contract:         step.Contract,
 		RequiredEvidence: step.RequiredEvidence,
@@ -447,23 +491,24 @@ func restoreStep(snapshot ResolvedStepSnapshotV1) (engine.ResolvedStep, error) {
 		return engine.ResolvedStep{}, err
 	}
 	return engine.ResolvedStep{
-		ID:               snapshot.ID,
-		Name:             snapshot.Name,
-		Subtitle:         snapshot.Subtitle,
-		Kind:             snapshot.Kind,
-		Spec:             spec,
-		Capture:          snapshot.Capture,
-		CaptureDefaults:  snapshot.CaptureDefaults,
-		Depth:            snapshot.Depth,
-		NestDepth:        snapshot.NestDepth,
-		DisplayOrder:     snapshot.DisplayOrder,
-		Origin:           snapshot.Origin,
-		OnError:          snapshot.OnError,
-		Timeout:          snapshot.Timeout,
-		Delay:            snapshot.Delay,
-		When:             snapshot.When,
-		Retry:            snapshot.Retry,
-		Scope:            snapshot.Scope,
+		ID:              snapshot.ID,
+		Name:            snapshot.Name,
+		Subtitle:        snapshot.Subtitle,
+		Kind:            snapshot.Kind,
+		Spec:            spec,
+		Capture:         snapshot.Capture,
+		CaptureDefaults: snapshot.CaptureDefaults,
+		Depth:           snapshot.Depth,
+		NestDepth:       snapshot.NestDepth,
+		DisplayOrder:    snapshot.DisplayOrder,
+		Origin:          snapshot.Origin,
+		OnError:         snapshot.OnError,
+		Timeout:         snapshot.Timeout,
+		Delay:           snapshot.Delay,
+		When:            snapshot.When,
+		Retry:           snapshot.Retry,
+		Scope:           snapshot.Scope,
+		LexicalScopeID:  snapshot.LexicalScopeID, ToolBindingID: snapshot.ToolBindingID,
 		Export:           snapshot.Export,
 		Contract:         snapshot.Contract,
 		RequiredEvidence: snapshot.RequiredEvidence,
@@ -488,6 +533,7 @@ func decodeStepSpec(kind string, raw json.RawMessage) (engine.StepSpec, error) {
 			return nil, fmt.Errorf("decode include resolved steps: %w", err)
 		}
 		return &schema.IncludeSpec{
+			TargetScopeID:              snapshot.TargetScopeID,
 			Include:                    snapshot.Include,
 			ResolvedSteps:              resolvedSteps,
 			ResolvedRunbookPath:        snapshot.ResolvedRunbookPath,
@@ -607,7 +653,8 @@ func encodeStepSpec(spec engine.StepSpec) (json.RawMessage, error) {
 			return nil, fmt.Errorf("encode include resolved steps: %w", err)
 		}
 		return json.Marshal(includeSpecSnapshotV1{
-			Include: include.Include, ResolvedSteps: resolvedSteps,
+			TargetScopeID: include.TargetScopeID,
+			Include:       include.Include, ResolvedSteps: resolvedSteps,
 			ResolvedRunbookPath:        include.ResolvedRunbookPath,
 			ResolvedRunbookID:          include.ResolvedRunbookID,
 			ResolvedRunbookName:        include.ResolvedRunbookName,

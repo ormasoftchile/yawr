@@ -35926,6 +35926,109 @@
     }
   };
 
+  // src/executionGraph.ts
+  function mergeExecutionGraph(current, incoming, nodeIDs) {
+    if (current.runbook.id !== incoming.runbook.id || current.runbook.path !== incoming.runbook.path) {
+      throw new Error("execution graph belongs to a different runbook");
+    }
+    const dynamicIDs = new Set(nodeIDs);
+    const resolve = (id2) => dynamicIDs.has(id2) ? id2 : graphExecutionNodeID(current, id2) ?? id2;
+    const nodes = incoming.nodes.filter((node) => dynamicIDs.has(node.id)).map((node) => ({
+      ...node,
+      data: { ...node.data, execution_occurrence: true }
+    }));
+    const frameIDs = new Set(nodes.map((node) => String(node.data.frame_id)));
+    const groupIDs = new Set(incoming.groups.filter((group) => frameIDs.has(group.frame_id)).map((group) => group.id));
+    const merge = (prior, next) => [...new Map([...prior, ...next].map((item) => [item.id, item])).values()];
+    const document2 = {
+      ...current,
+      schema_version: incoming.schema_version === "3" ? "3" : current.schema_version,
+      hash: incoming.hash,
+      nodes: merge(current.nodes, nodes),
+      frames: merge(current.frames, incoming.frames.filter((frame2) => frameIDs.has(frame2.id)).map((frame2) => ({
+        ...frame2,
+        parent_include_node_id: frame2.parent_include_node_id ? resolve(frame2.parent_include_node_id) : void 0
+      }))),
+      groups: merge(current.groups, incoming.groups.filter((group) => groupIDs.has(group.id)).map((group) => ({
+        ...group,
+        parent_node_id: resolve(group.parent_node_id)
+      }))),
+      edges: merge(current.edges, incoming.edges.filter((edge) => dynamicIDs.has(edge.source) || dynamicIDs.has(edge.target)).map((edge) => ({
+        ...edge,
+        id: `execution:${edge.source}:${edge.target}:${edge.type ?? ""}`,
+        source: resolve(edge.source),
+        target: resolve(edge.target)
+      })))
+    };
+    const ids = new Set(document2.nodes.map((node) => node.id));
+    if (document2.edges.some((edge) => !ids.has(edge.source) || !ids.has(edge.target)) || document2.groups.some((group) => !ids.has(group.parent_node_id))) {
+      throw new Error("execution graph references an unavailable parent");
+    }
+    return document2;
+  }
+  function executionHistory(document2, runtime) {
+    return Object.entries(runtime).flatMap(([id2, state]) => {
+      const nodeID = graphExecutionNodeID(document2, id2);
+      if (!nodeID) return [];
+      return (state.occurrences ?? [state]).flatMap((occurrence) => occurrence.startedEventSequence === void 0 ? [] : [{
+        nodeID,
+        sequence: occurrence.startedEventSequence,
+        occurrenceID: occurrence.occurrenceID,
+        path: occurrence.qualifiedNodeID ?? id2,
+        status: occurrence.status,
+        startedAt: occurrence.startedAt,
+        finishedAt: occurrence.finishedAt
+      }]);
+    }).sort((left, right) => left.sequence - right.sequence);
+  }
+  function executionReturnEdges(document2, runtime) {
+    const nodes = new Map(document2.nodes.map((node) => [node.id, node]));
+    const frames = new Map(document2.frames.map((frame2) => [frame2.id, frame2]));
+    const history = executionHistory(document2, runtime);
+    const edges = /* @__PURE__ */ new Map();
+    for (let index = 1; index < history.length; index++) {
+      const source = history[index - 1], target = history[index];
+      const finished = Date.parse(source.finishedAt ?? ""), started = Date.parse(target.startedAt ?? "");
+      if (!Number.isFinite(finished) || !Number.isFinite(started) || finished > started) continue;
+      let frameID = String(nodes.get(source.nodeID)?.data.frame_id ?? "");
+      const targetFrame = String(nodes.get(target.nodeID)?.data.frame_id ?? "");
+      if (!frameID || !targetFrame || frameID === targetFrame) continue;
+      const seen = /* @__PURE__ */ new Set();
+      while (frameID && !seen.has(frameID)) {
+        seen.add(frameID);
+        const parent = frames.get(frameID)?.parent_include_node_id;
+        frameID = parent ? String(nodes.get(parent)?.data.frame_id ?? "") : "";
+        if (frameID !== targetFrame) continue;
+        const id2 = `execution-return:${source.nodeID}:${target.nodeID}`;
+        edges.set(id2, { id: id2, source: source.nodeID, target: target.nodeID, label: "Return" });
+        break;
+      }
+    }
+    return [...edges.values()];
+  }
+  function anchorExecutionLayout(previous, next, currentID) {
+    const absolute = (nodes, id2) => {
+      const byID = new Map(nodes.map((node2) => [node2.id, node2]));
+      const seen = /* @__PURE__ */ new Set();
+      let node = id2 ? byID.get(id2) : void 0;
+      if (!node) return void 0;
+      let x = 0, y = 0;
+      while (node && !seen.has(node.id)) {
+        seen.add(node.id);
+        x += node.position.x;
+        y += node.position.y;
+        node = node.parentNode ? byID.get(node.parentNode) : void 0;
+      }
+      return { x, y };
+    };
+    const before = absolute(previous, currentID), after = absolute(next, currentID);
+    if (!before || !after) return next;
+    return next.map((node) => node.parentNode ? node : {
+      ...node,
+      position: { x: node.position.x + before.x - after.x, y: node.position.y + before.y - after.y }
+    });
+  }
+
   // src/workflowView.ts
   function decodeWorkflowPreference(value) {
     const item = value;
@@ -37502,6 +37605,13 @@
     return value;
   }
 
+  // src/xtsViewVerification.ts
+  function matchesXtsViewCheck(value, expected) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    const candidate = value;
+    return candidate.type === "yawr.xts.verify-view" && Object.keys(candidate).length === 7 && ["capability", "runId", "turnId", "correlationId", "previewSessionId", "requestId"].every((key) => candidate[key] === expected[key]);
+  }
+
   // src/collectorFieldValues.ts
   function fieldLabel(field2) {
     return field2.label ?? field2.display_name ?? field2.name;
@@ -38290,7 +38400,9 @@
     interaction,
     onSubmit,
     onConfirmHostAction,
-    xtsOpened
+    xtsOpened,
+    xtsViewCheck,
+    onVerifyXtsView
   }) {
     const [selected, setSelected] = (0, import_react15.useState)([]);
     const [values, setValues] = (0, import_react15.useState)(() => {
@@ -38301,6 +38413,7 @@
       return initial;
     });
     const [submitting, setSubmitting] = (0, import_react15.useState)(false);
+    const [verificationSubmitted, setVerificationSubmitted] = (0, import_react15.useState)(false);
     const [validationError, setValidationError] = (0, import_react15.useState)();
     const [collectorReview, setCollectorReview] = (0, import_react15.useState)();
     const choiceMax = interaction.kind === "choice" && interaction.multiple && typeof interaction.max === "number" && Number.isInteger(interaction.max) && interaction.max >= 0 ? interaction.max : void 0;
@@ -38312,7 +38425,31 @@
     if (interaction.kind === "host_action") {
       const isXts = interaction.host_action?.capability === "xts.open-view";
       if (!isXts) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "interaction-wait", role: "status" }, "Opening host view...");
-      return /* @__PURE__ */ import_react15.default.createElement("section", { className: "interaction-pane host-action-pane", "aria-label": isXts ? "Open XTS view" : "Open host view" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")), /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, isXts ? "Actual run \xB7 XTS" : "Host action"), /* @__PURE__ */ import_react15.default.createElement("h2", null, interaction.title ?? interaction.stepID), interaction.prompt ? /* @__PURE__ */ import_react15.default.createElement("p", null, interaction.prompt) : null, isXts ? /* @__PURE__ */ import_react15.default.createElement("p", null, "VS Code will switch to XTS. Review the view, then return here to record your findings.") : null, /* @__PURE__ */ import_react15.default.createElement(
+      return /* @__PURE__ */ import_react15.default.createElement("section", { className: "interaction-pane host-action-pane", "aria-label": isXts ? "Open XTS view" : "Open host view" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")), /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, isXts ? "Actual run \xB7 XTS" : "Host action"), /* @__PURE__ */ import_react15.default.createElement("h2", null, interaction.title ?? interaction.stepID), interaction.prompt ? /* @__PURE__ */ import_react15.default.createElement("p", null, interaction.prompt) : null, isXts ? /* @__PURE__ */ import_react15.default.createElement("p", null, "VS Code will switch to XTS. Review the view, then return here to record your findings.") : null, xtsViewCheck ? /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement("p", null, "XTS launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded with the requested environment and parameters. Do not confirm a startup, authentication, or loading error."), /* @__PURE__ */ import_react15.default.createElement("dl", null, /* @__PURE__ */ import_react15.default.createElement("dt", null, "View"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.view_path ?? "")), /* @__PURE__ */ import_react15.default.createElement("dt", null, "Environment"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.environment ?? "")), Object.entries(recordValue(interaction.host_action?.request.parameters) ?? {}).map(([name, value]) => /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, { key: name }, /* @__PURE__ */ import_react15.default.createElement("dt", null, name), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(value))))), /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          className: "primary",
+          disabled: verificationSubmitted,
+          onClick: () => {
+            setVerificationSubmitted(true);
+            onVerifyXtsView("opened");
+          }
+        },
+        "XTS view is ready"
+      ), /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          className: "danger",
+          disabled: verificationSubmitted,
+          onClick: () => {
+            setVerificationSubmitted(true);
+            onVerifyXtsView("failed");
+          }
+        },
+        "XTS failed to open"
+      )) : /* @__PURE__ */ import_react15.default.createElement(
         "button",
         {
           type: "button",
@@ -38709,6 +38846,7 @@
   }
   function eventNodeID(event) {
     const payload = event.payload ?? {};
+    if (typeof payload.graph_node_id === "string" && payload.graph_node_id) return payload.graph_node_id;
     if (typeof payload.qualified_node_id === "string" && payload.qualified_node_id) return payload.qualified_node_id;
     const explicitNodeID = payload.node_id;
     if (typeof explicitNodeID === "string" && explicitNodeID) return explicitNodeID;
@@ -38848,7 +38986,7 @@
       occurrenceID,
       runID: event.run_id,
       segmentID: "",
-      qualifiedNodeID: nodeID,
+      qualifiedNodeID: typeof payload.qualified_node_id === "string" ? payload.qualified_node_id : nodeID,
       phase: typeof payload.phase === "string" ? payload.phase : void 0,
       invocation,
       retryAttempt,
@@ -39006,7 +39144,9 @@
     routeTestError,
     onSaveRouteTest,
     onRunRouteTest,
-    xtsOpened
+    xtsOpened,
+    xtsViewCheck,
+    onVerifyXtsView
   }) {
     const runtimeNodes = (0, import_react15.useMemo)(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document2), [observedRuntimeNodes, runStatus, document2]);
     const [selectedId, setSelectedId] = (0, import_react15.useState)();
@@ -39056,6 +39196,7 @@
       () => currentActivities(document2, observedRuntimeNodes, runStatus, runID, pending2),
       [document2, observedRuntimeNodes, runStatus, runID, pending2]
     );
+    const history = (0, import_react15.useMemo)(() => executionHistory(document2, observedRuntimeNodes), [document2, observedRuntimeNodes]);
     const previousExecutionRef = (0, import_react15.useRef)();
     const executionScope = sessionID ?? document2.runbook.path ?? document2.hash ?? document2;
     const liveCurrentNodeID = currentExecutionNode(
@@ -39129,18 +39270,35 @@
       }
     }, [issues, routeTargetID, routeDisplayDocument, workflow]);
     const layoutTopologyKey = (0, import_react15.useMemo)(() => sessionGraphTopologyKey(displayDocument), [displayDocument]);
-    const layoutGeometry = (0, import_react15.useMemo)(() => layoutDocument(displayDocument, style2), [layoutTopologyKey, style2]);
+    const previousLayout = (0, import_react15.useRef)();
+    const layoutScope = `${document2.runbook.path}:${runID}:${style2}`;
+    const layoutGeometry = (0, import_react15.useMemo)(() => {
+      const next = layoutDocument(displayDocument, style2);
+      if (previousLayout.current?.scope === layoutScope && document2.nodes.some((node) => node.data.execution_occurrence)) {
+        next.nodes = anchorExecutionLayout(previousLayout.current.nodes, next.nodes, currentNodeID);
+      }
+      return next;
+    }, [layoutTopologyKey, style2]);
+    (0, import_react15.useLayoutEffect)(() => {
+      previousLayout.current = { scope: layoutScope, nodes: layoutGeometry.nodes };
+    }, [layoutGeometry, layoutScope]);
     const layout = (0, import_react15.useMemo)(
       () => refreshLayoutMetadata(layoutGeometry, displayDocument, style2),
       [displayDocument, layoutGeometry, style2]
     );
-    const runtimeEdges = (0, import_react15.useMemo)(() => layout.edges.map((edge) => ({
+    const returnEdges = (0, import_react15.useMemo)(() => executionReturnEdges(document2, observedRuntimeNodes), [document2, observedRuntimeNodes]);
+    const runtimeEdges = (0, import_react15.useMemo)(() => [...layout.edges.map((edge) => ({
       ...edge,
       className: edge.data?.graphEdge ? [
         edge.data.graphEdge.type === "session-transition" ? "edge-session-transition" : "",
         runtimeEdgeClass(edge.data.graphEdge, runtimeNodes) ?? ""
       ].filter(Boolean).join(" ") || void 0 : void 0
-    })), [layout.edges, runtimeNodes]);
+    })), ...returnEdges.map((edge) => ({
+      ...edge,
+      type: "smoothstep",
+      className: "edge-execution-return",
+      markerEnd: { type: MarkerType.ArrowClosed }
+    }))], [layout.edges, runtimeNodes, returnEdges]);
     const focusedNodeID = routeTargetID ?? selectedId;
     const displayNodes = (0, import_react15.useMemo)(() => layout.nodes.map((node) => ({
       ...node,
@@ -39309,7 +39467,13 @@
       if (!testMode) return;
       const receiveTestAction = (event) => {
         const message = event.data;
-        if (message?.type === "test.action" && message.action === "select-node" && message.name) {
+        if (message?.type === "test.action" && ["select-runbook", "select-history"].includes(message.action) && message.value) {
+          const select = window.document.querySelector(message.action === "select-runbook" ? 'select[aria-label="Inspect runbook"]' : 'select[aria-label="Inspect executed step"]');
+          if (select) {
+            select.value = message.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        } else if (message?.type === "test.action" && message.action === "select-node" && message.name) {
           const selectedNode = document2.nodes.find((node) => node.id === message.name || node.data.id === message.name);
           setSelectedId(selectedNode?.id);
         } else if (message?.type === "test.action" && message.action === "inspect-results") {
@@ -39366,7 +39530,10 @@
         if (event.data?.type !== "test.action" || event.data.action !== "sample-execution-transition") return;
         cancelAnimationFrame(frame2);
         const samples = [];
-        const frameCount = event.data.value === "pacing" ? 180 : 30;
+        const includePlayback = event.data.value === "include-pacing";
+        const frameCount = includePlayback ? 1800 : event.data.value === "pacing" ? 180 : 30;
+        let seenCurrent = false;
+        let drainedFrames = 0;
         const sample = () => {
           const canvas = canvasRef.current;
           const nodes = Array.from(canvas?.querySelectorAll(".react-flow__node-yawrStep") ?? []);
@@ -39383,7 +39550,10 @@
             viewport: flowRef.current?.getViewport(),
             positions: flowRef.current?.getNodes().map((node) => ({ id: node.id, position: node.position, width: node.width, height: node.height }))
           });
-          if (samples.length < frameCount) frame2 = requestAnimationFrame(sample);
+          const hasCurrent = nodes.some((node) => node.querySelector(".execution-current"));
+          seenCurrent ||= hasCurrent;
+          drainedFrames = seenCurrent && !hasCurrent && window.document.querySelector(".app")?.dataset.runStatus === "completed" ? drainedFrames + 1 : 0;
+          if (samples.length < frameCount && (!includePlayback || drainedFrames < 10)) frame2 = requestAnimationFrame(sample);
           else vscode.postMessage({ type: "execution.transition-samples", samples });
         };
         frame2 = requestAnimationFrame(sample);
@@ -39422,6 +39592,9 @@
         vscode.postMessage({
           type: "graph.visibility",
           canonicalIDs: document2.nodes.map((node) => node.id),
+          runbooks: document2.frames.map((frame2) => ({ ...frame2, nodeIDs: document2.nodes.filter((node) => node.data.frame_id === frame2.id).map((node) => node.id) })),
+          executionHistory: history,
+          executionReturns: returnEdges,
           projectedIDs: displayDocument.nodes.map((node) => node.id),
           edges: displayDocument.edges.map((edge) => ({
             id: edge.id,
@@ -39444,6 +39617,7 @@
           mode: effectiveWorkflowMode,
           selectedID: selectedId,
           routeTargetID,
+          inspectedOccurrence: window.document.querySelector('select[aria-label="Execution occurrence"]')?.value,
           runtimeStatuses: Object.fromEntries(Object.entries(runtimeNodes).map(([id2, value]) => [id2, value.status])),
           currentNodeID: resolvedExecutionNodeID,
           currentMarkerCount: window.document.querySelectorAll(".step-node.execution-current").length,
@@ -39584,7 +39758,7 @@
           const edgeCount = window.document.querySelectorAll(".react-flow__edge").length;
           const expectedNodeCount = layout.nodes.filter((node) => node.type === "yawrStep").length;
           const expectedFrameCount = layout.nodes.filter((node) => node.type === "frameBox").length;
-          const rendered = reactFlowRootCount === 1 && nodeCount === expectedNodeCount && frameCount === expectedFrameCount && edgeCount === layout.edges.length && (layout.edges.length === 0 || edgeClassName.includes("react-flow__edge-"));
+          const rendered = reactFlowRootCount === 1 && nodeCount === expectedNodeCount && frameCount === expectedFrameCount && edgeCount === runtimeEdges.length && (runtimeEdges.length === 0 || edgeClassName.includes("react-flow__edge-"));
           if (++attempts < 120 && !rendered) {
             report();
             return;
@@ -39612,7 +39786,7 @@
       };
       report();
       return () => cancelAnimationFrame(frame2);
-    }, [document2, layout.nodes.length, layout.edges.length, style2, testMode]);
+    }, [document2, layout.nodes.length, runtimeEdges.length, style2, testMode]);
     return /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement(
       "main",
       {
@@ -39819,14 +39993,40 @@
             onLocate: locateExecutionNode,
             locationNotice: activityLocationNotice
           }
-        ), pending2 ? /* @__PURE__ */ import_react15.default.createElement(
+        ), document2.frames.length > 1 ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "runbook-navigation", "aria-label": "Runbooks in this run" }, /* @__PURE__ */ import_react15.default.createElement("label", null, "Runbooks in this run", /* @__PURE__ */ import_react15.default.createElement("select", { "aria-label": "Inspect runbook", value: "", onChange: (event) => {
+          const node = document2.nodes.find((node2) => node2.data.frame_id === event.target.value);
+          if (node) {
+            setIssueSelection(void 0);
+            setRouteTargetID(void 0);
+            setSelectedId(node.id);
+            setLocateNodeID(node.id);
+            setShowPanel(true);
+          }
+        } }, /* @__PURE__ */ import_react15.default.createElement("option", { value: "" }, "Choose a runbook to inspect"), document2.frames.map((frame2, index) => /* @__PURE__ */ import_react15.default.createElement("option", { key: frame2.id, value: frame2.id }, index + 1, ". ", frame2.runbook_id, " (", frame2.runbook_path.split(/[\\/]/).pop(), ")")))), /* @__PURE__ */ import_react15.default.createElement("label", null, "Execution history", /* @__PURE__ */ import_react15.default.createElement("select", { "aria-label": "Inspect executed step", value: "", onChange: (event) => {
+          const entry = history[Number(event.target.value)];
+          if (entry) {
+            setIssueSelection({
+              nodeID: entry.nodeID,
+              occurrenceID: entry.occurrenceID,
+              qualifiedNodeID: entry.path,
+              status: entry.status,
+              blockedOutcome: false
+            });
+            setRouteTargetID(void 0);
+            setSelectedId(entry.nodeID);
+            setLocateNodeID(entry.nodeID);
+            setShowPanel(true);
+          }
+        } }, /* @__PURE__ */ import_react15.default.createElement("option", { value: "" }, "Choose a preceding step"), history.map((entry, index) => /* @__PURE__ */ import_react15.default.createElement("option", { key: `${entry.nodeID}:${entry.sequence}`, value: index, "data-occurrence-id": entry.occurrenceID }, index + 1, ". ", entry.path, " [", entry.status, "]")))), /* @__PURE__ */ import_react15.default.createElement("small", null, document2.frames.find((frame2) => frame2.id === (selected ?? executionNode)?.data.frame_id)?.runbook_path)) : null, pending2 ? /* @__PURE__ */ import_react15.default.createElement(
           InteractionPane,
           {
             key: `${pending2.turnID}:${runError ?? ""}`,
             interaction: pending2,
             onSubmit: onSubmitInteraction,
             onConfirmHostAction,
-            xtsOpened
+            xtsOpened,
+            xtsViewCheck,
+            onVerifyXtsView
           }
         ) : currentRouteTestEditor && routeTarget && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement(
           RouteTestPane,
@@ -39977,6 +40177,7 @@
     const [routeTestRunning, setRouteTestRunning] = (0, import_react15.useState)(false);
     const [routeTestError, setRouteTestError] = (0, import_react15.useState)();
     const [xtsOpened, setXtsOpened] = (0, import_react15.useState)(false);
+    const [xtsViewCheck, setXtsViewCheck] = (0, import_react15.useState)();
     const pendingRef = (0, import_react15.useRef)();
     const resolvedTurnsRef = (0, import_react15.useRef)(/* @__PURE__ */ new Set());
     const runIDRef = (0, import_react15.useRef)();
@@ -39984,6 +40185,7 @@
     const sessionStatusRef = (0, import_react15.useRef)();
     const runFinishedRef = (0, import_react15.useRef)(false);
     const directDocumentRef = (0, import_react15.useRef)();
+    const sourceDocumentRef = (0, import_react15.useRef)();
     const directRunScopeRef = (0, import_react15.useRef)();
     const displayWithdrawalsRef = (0, import_react15.useRef)(
       decodeDisplayWithdrawals(recordValue(vscode.getState?.())?.displayWithdrawals)
@@ -40009,6 +40211,7 @@
     const clearActiveRun = (preserveVisualPlayback = false) => {
       if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
       hostRequestRef.current = void 0;
+      setXtsViewCheck(void 0);
       pendingRef.current = void 0;
       runIDRef.current = void 0;
       setXtsOpened(false);
@@ -40042,6 +40245,7 @@
             setResults(void 0);
           }
           directDocumentRef.current = message.document;
+          sourceDocumentRef.current = message.document;
           setDocument(message.document);
           if (message.document.presentation_state) {
             const retained = message.document.presentation_state;
@@ -40158,6 +40362,10 @@
           setLoading(false);
           setError(message.message);
         } else if (message.type === "run.starting") {
+          if (sourceDocumentRef.current) {
+            directDocumentRef.current = sourceDocumentRef.current;
+            setDocument(sourceDocumentRef.current);
+          }
           setResults(void 0);
           directRunScopeRef.current = void 0;
           clearActiveRun();
@@ -40178,7 +40386,16 @@
           }
         } else if (message.type === "run.frame") {
           const frame2 = message.frame;
-          if (frame2.type === "run.started") {
+          if (frame2.type === "run.graph" && frame2.document && frame2.nodeIDs) {
+            if (!directDocumentRef.current || !runIDRef.current || frame2.runID !== runIDRef.current || runFinishedRef.current) return;
+            try {
+              const graph = mergeExecutionGraph(directDocumentRef.current, frame2.document, frame2.nodeIDs);
+              directDocumentRef.current = graph;
+              setDocument(graph);
+            } catch (error2) {
+              setRunError(error2 instanceof Error ? error2.message : "Execution graph could not be updated.");
+            }
+          } else if (frame2.type === "run.started") {
             if (runFinishedRef.current || !frame2.runID || runIDRef.current && frame2.runID !== runIDRef.current) return;
             runIDRef.current = frame2.runID;
             directRunScopeRef.current = frame2.runID;
@@ -40297,6 +40514,18 @@
           setRouteTestError(void 0);
         } else if (message.type === "route-test.error") {
           setRouteTestError(message.message);
+        } else if (message.type === "yawr.xts.verify-view") {
+          const hostRequest = hostRequestRef.current;
+          const interaction = pendingRef.current;
+          if (!hostRequest || !interaction || interaction.kind !== "host_action" || interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID || runIDRef.current !== hostRequest.runID) return;
+          if (matchesXtsViewCheck(message, {
+            capability: hostRequest.capability,
+            runId: hostRequest.runID,
+            turnId: hostRequest.turnID,
+            correlationId: hostRequest.correlationID,
+            previewSessionId: hostSessionRef.current,
+            requestId: hostRequest.requestID
+          })) setXtsViewCheck(message);
         } else if (message.type === "yawr.host-action.ack" || message.type === "yawr.host-action.cancel") {
           const response = parseHostActionResponse(message);
           if (!response) return;
@@ -40306,6 +40535,7 @@
           if (response.previewSessionId !== hostSessionRef.current || interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID || interaction.host_action.capability !== hostRequest.capability || response.correlationId !== hostRequest.correlationID || response.requestId !== hostRequest.requestID) return;
           if (response.type === "yawr.host-action.ack" && (response.runId !== hostRequest.runID || response.turnId !== hostRequest.turnID || response.capability !== hostRequest.capability)) return;
           if (runIDRef.current !== hostRequest.runID) return;
+          setXtsViewCheck(void 0);
           if (response.type === "yawr.host-action.ack" && response.status === "completed" && response.result?.status === "opened") {
             setXtsOpened(true);
           }
@@ -40503,6 +40733,10 @@
       }
       if (runStarting || !isTerminalRunStatus(runStatus)) return;
       vscode.postMessage({ type: "run.reset" });
+      if (sourceDocumentRef.current) {
+        directDocumentRef.current = sourceDocumentRef.current;
+        setDocument(sourceDocumentRef.current);
+      }
       setResults(void 0);
       clearActiveRun();
       runFinishedRef.current = true;
@@ -40672,7 +40906,7 @@
         });
       });
       return () => cancelAnimationFrame(frame2);
-    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
+    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, xtsViewCheck, testMode]);
     if (loading) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "Loading runbook...");
     if (error) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state error", role: "alert" }, error);
     if (!document2) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "No graph loaded");
@@ -40736,7 +40970,12 @@
           setRouteTestError(void 0);
           vscode.postMessage({ type: "route-test.run", artifact });
         },
-        xtsOpened
+        xtsOpened,
+        xtsViewCheck,
+        onVerifyXtsView: (status) => {
+          if (!xtsViewCheck || xtsViewCheck.runId !== runIDRef.current || xtsViewCheck.turnId !== pendingRef.current?.turnID || xtsViewCheck.requestId !== hostRequestRef.current?.requestID) return;
+          vscode.postMessage({ ...xtsViewCheck, type: "yawr.xts.view-verified", status });
+        }
       }
     );
   }

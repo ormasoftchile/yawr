@@ -378,3 +378,16 @@ button, input, select, textarea { font: inherit; }
 .current-activity small { color: var(--vscode-descriptionForeground); }
 .current-activity button { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; }
 .current-activity button svg { width: 14px; height: 14px; }
+.runbook-navigation {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+.runbook-navigation label { display: grid; gap: 4px; }
+.runbook-navigation select { width: 100%; min-width: 0; }
+.runbook-navigation small { overflow-wrap: anywhere; }
+.edge-execution-return .react-flow__edge-path {
+  stroke: var(--vscode-charts-green);
+  stroke-dasharray: 6 4;
+}

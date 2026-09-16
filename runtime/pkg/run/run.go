@@ -18,12 +18,14 @@ import (
 	internalgovernance "github.com/ormasoftchile/yawr/runtime/internal/governance"
 	internalinput "github.com/ormasoftchile/yawr/runtime/internal/input"
 	internalparser "github.com/ormasoftchile/yawr/runtime/internal/parser"
-	internalplanner "github.com/ormasoftchile/yawr/runtime/internal/planner"
 	internaltool "github.com/ormasoftchile/yawr/runtime/internal/tool"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
+	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
+	"github.com/ormasoftchile/yawr/runtime/pkg/expand"
 	"github.com/ormasoftchile/yawr/runtime/pkg/governance"
 	inputpkg "github.com/ormasoftchile/yawr/runtime/pkg/input"
 	parserpkg "github.com/ormasoftchile/yawr/runtime/pkg/parser"
+	"github.com/ormasoftchile/yawr/runtime/pkg/pkgcatalog"
 	plannerpkg "github.com/ormasoftchile/yawr/runtime/pkg/planner"
 	"github.com/ormasoftchile/yawr/runtime/pkg/platform"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
@@ -39,6 +41,12 @@ type Config struct {
 	RunbookPath string
 	RunbookFS   fs.FS  // optional — use with RunbookName
 	RunbookName string // filename within RunbookFS
+
+	// WorkspaceRoot defaults to the process working directory. Embedded
+	// filesystems use it only as an absolute namespace for captured paths.
+	WorkspaceRoot  string
+	PackageMapPath string
+	Profile        *schema.RuntimeProfile
 
 	// PromptProvider handles interactive prompts.
 	// If nil, a no-op provider is used (auto-approve defaults).
@@ -70,11 +78,10 @@ type Config struct {
 	// OnEvent is an optional callback invoked for each runtime event.
 	OnEvent func(engine.Event)
 
-	// OnSubEvent is an optional callback invoked for events emitted by
-	// sub-engines that execute branch/iterate arm steps. These events are
-	// not visible via RunHandle.Events() because the sub-engine has its own
-	// event channel. Callers that need to observe sub-step output (e.g. for
-	// TUI pre-population) should set this.
+	// OnSubEvent is an optional callback for nested step events, including
+	// completion committed by the parent execution-frame owner. When provided,
+	// nested events are delivered here rather than OnEvent. They also appear
+	// in RunHandle.Events().
 	// Like OnEvent, delivery completes before the emitting sub-step returns.
 	// Parallel sub-steps may invoke the callback concurrently.
 	OnSubEvent func(engine.Event)
@@ -136,35 +143,48 @@ func StartWithWarnings(ctx context.Context, cfg Config) (Result, error) {
 	}
 	parsed.Source = source
 
-	// 3. Build tool registries
-	mapRegistry, toolRegistryAdapter := buildToolRegistries(cfg.KitFS)
-
-	// 3a. Resolve toolRefs declared in the runbook and register them before planning
-	if parsed.Runbook != nil && len(parsed.Runbook.ToolRefs) > 0 {
-		toolDefs, err := internaladapter.ResolveToolRefs(source, parsed.Runbook.ToolRefs)
+	mapRegistry, _ := buildToolRegistries(cfg.KitFS)
+	workspace, err := os.Getwd()
+	if err != nil {
+		return Result{}, err
+	}
+	if cfg.WorkspaceRoot != "" {
+		workspace, err = filepath.Abs(cfg.WorkspaceRoot)
 		if err != nil {
-			return Result{}, fmt.Errorf("run: resolve toolRefs: %w", err)
-		}
-		for _, def := range toolDefs {
-			if err := mapRegistry.Register(def); err != nil {
-				return Result{}, fmt.Errorf("run: register tool %s: %w", def.Name, err)
-			}
+			return Result{}, err
 		}
 	}
+	entrypoint, err := filepath.Abs(source)
+	if err != nil {
+		return Result{}, err
+	}
+	catalogOptions := pkgcatalog.BuildOptions{WorkspaceRoot: workspace, Builtins: mapRegistry.All()}
+	if cfg.RunbookPath == "" && cfg.RunbookFS != nil {
+		if !fs.ValidPath(cfg.RunbookName) {
+			return Result{}, fmt.Errorf("run: invalid embedded runbook name %q", cfg.RunbookName)
+		}
+		catalogOptions.Source = embeddedCatalogSource(workspace, cfg.RunbookFS)
+		entrypoint = filepath.Join(workspace, filepath.FromSlash(cfg.RunbookName))
+	}
+	project, _, err := pkgcatalog.ReadProjectBindings(catalogOptions.Source, workspace, cfg.PackageMapPath)
+	if err != nil {
+		return Result{}, err
+	}
+	catalogOptions.ProjectRequires, catalogOptions.ProjectToolPaths = project.Requires, project.ToolPaths
+	prepared, err := internaladapter.PrepareScopedRun(ctx, internaladapter.ScopedRunOptions{
+		Catalog: catalogOptions, Parser: parser, Entrypoint: entrypoint, Profile: cfg.Profile,
+	})
+	if err != nil {
+		return Result{}, fmt.Errorf("run: freeze dependencies: %w", err)
+	}
+	parsed = prepared.Root
 
 	loaderInstance := &fsRunbookLoader{
-		parser:       parser,
-		fsys:         cfg.RunbookFS,
-		toolRegistry: mapRegistry,
+		parser: parser,
+		fsys:   cfg.RunbookFS,
 	}
 
-	// 4. Plan with internal planner
-	planner := internalplanner.New(plannerpkg.Config{
-		Loader: loaderInstance,
-		Tools:  toolRegistryAdapter,
-	})
-
-	plan, err := planner.Plan(ctx, parsed)
+	plan, err := prepared.Plan(ctx, expand.Policy{})
 	if err != nil {
 		return Result{}, fmt.Errorf("run: plan runbook: %w", err)
 	}
@@ -175,7 +195,8 @@ func StartWithWarnings(ctx context.Context, cfg Config) (Result, error) {
 	if parsed.Runbook != nil {
 		parentImports = parsed.Runbook.Imports
 	}
-	engineCfg, err := buildEngineConfig(cfg, plat, mapRegistry, loaderInstance, baseDir, parentImports)
+	engineCfg, err := buildEngineConfig(cfg, plat, mapRegistry, loaderInstance, baseDir, parentImports,
+		scopedRunWiring{loader: prepared.LazyLoader, resolver: prepared.Resolver})
 	if err != nil {
 		return Result{}, fmt.Errorf("run: build engine config: %w", err)
 	}
@@ -224,6 +245,7 @@ func StartWithWarnings(ctx context.Context, cfg Config) (Result, error) {
 		}
 	}
 
+	engineCfg.OnEvent = scopedRunEventObserver(engineCfg.OnEvent, cfg.OnSubEvent)
 	eng := internalengine.New(engineCfg)
 	handle, err := eng.Start(ctx, plan, engine.RunOptions{
 		Mode:   engine.RunModeReal,
@@ -234,7 +256,11 @@ func StartWithWarnings(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("run: start engine: %w", err)
 	}
 
-	return Result{Handle: handle, Warnings: parsed.Warnings}, nil
+	warnings := append([]parserpkg.ParseWarning(nil), parsed.Warnings...)
+	for _, warning := range prepared.Warnings {
+		warnings = append(warnings, parserpkg.ParseWarning{Field: "dependencies", Message: warning.Error()})
+	}
+	return Result{Handle: handle, Warnings: warnings}, nil
 }
 
 // loadRunbook loads runbook bytes from either RunbookPath or RunbookFS+RunbookName.
@@ -259,7 +285,7 @@ func loadRunbook(cfg Config) ([]byte, string, error) {
 }
 
 // buildEngineConfig constructs an EngineConfig from the public Config.
-func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internaltool.MapRegistry, loader *fsRunbookLoader, baseDir string, parentImports map[string]string) (engine.EngineConfig, error) {
+func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internaltool.MapRegistry, loader *fsRunbookLoader, baseDir string, parentImports map[string]string, scoped ...scopedRunWiring) (engine.EngineConfig, error) {
 	// Trace writer
 	traceWriter := cfg.TraceWriter
 	if traceWriter == nil {
@@ -357,6 +383,14 @@ func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internal
 	// kind "include" for any include node — the IncludeExecutor then
 	// recurses through this same runner.
 	subRunner := func(ctx context.Context, parent internalexecutor.SubStepParent, nodes []schema.FlowNode, vars map[string]any) ([]*engine.StepResult, error) {
+		if engine.ToolScopesFromContext(ctx) != nil {
+			return internaladapter.ExecuteSubSteps(ctx, engine.EngineConfig{
+				Executors: baseRegistry, Dispatcher: dispatcher, TraceWriter: traceWriter,
+				Platform: plat, EventBus: eventBus, InputProvider: inputProvider,
+				PromptProvider: promptProvider, ToolRuntime: toolRuntime, ApprovalGate: approvalGate,
+				Evaluator: evaluator, ConditionEvaluator: conditionEvaluator,
+			}, parent, nodes, vars)
+		}
 		steps, err := expandSubNodes(ctx, parent, nodes, baseDir, loader, parentImports)
 		if err != nil {
 			return nil, err
@@ -364,6 +398,12 @@ func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internal
 		return runSubSteps(ctx, steps, vars)
 	}
 
+	var lazyLoader internalexecutor.LazyRunbookLoader = internaladapter.NewParserLazyLoader(loader.parser)
+	var dynamicResolver internalexecutor.DynamicIncludeResolver
+	if len(scoped) > 0 {
+		lazyLoader = scoped[0].loader
+		dynamicResolver = scoped[0].resolver
+	}
 	baseRegistry = internalexecutor.NewDefaultRegistry(internalexecutor.RegistryConfig{
 		Platform:           plat,
 		Evaluator:          evaluator,
@@ -378,7 +418,9 @@ func buildEngineConfig(cfg Config, plat platform.Platform, mapRegistry *internal
 		// auto resolved to lazy) can be materialized at execution time.
 		// Without this, the IncludeExecutor fails with "no LazyRunbookLoader
 		// is configured" and the run aborts on the first lazy include.
-		LazyRunbookLoader: internaladapter.NewParserLazyLoader(loader.parser),
+		LazyRunbookLoader:      lazyLoader,
+		DynamicIncludeResolver: dynamicResolver,
+		SubstitutionParser:     loader.parser,
 	})
 
 	return engine.EngineConfig{
@@ -454,12 +496,10 @@ func (a *toolRegistryAdapter) Lookup(ctx context.Context, name string, action st
 	}, nil
 }
 
-// fsRunbookLoader loads runbooks from an fs.FS (for include support).
-// It also resolves and registers any toolRefs declared by each loaded runbook.
+// fsRunbookLoader retains the legacy loader for unscoped internal callers.
 type fsRunbookLoader struct {
-	parser       parserpkg.Parser
-	fsys         fs.FS
-	toolRegistry *internaltool.MapRegistry
+	parser parserpkg.Parser
+	fsys   fs.FS
 }
 
 func (l *fsRunbookLoader) Load(ctx context.Context, path string) (*parserpkg.ParsedRunbook, error) {
@@ -484,17 +524,8 @@ func (l *fsRunbookLoader) Load(ctx context.Context, path string) (*parserpkg.Par
 		}
 	}
 
-	// Resolve and register toolRefs declared by this child runbook.
-	if l.toolRegistry != nil && parsed.Runbook != nil && len(parsed.Runbook.ToolRefs) > 0 {
-		toolDefs, err := internaladapter.ResolveToolRefs(parsed.Source, parsed.Runbook.ToolRefs)
-		if err != nil {
-			return nil, fmt.Errorf("loader: resolve toolRefs for %s: %w", path, err)
-		}
-		for _, def := range toolDefs {
-			if err := l.toolRegistry.Register(def); err != nil {
-				return nil, fmt.Errorf("loader: register tool %s: %w", def.Name, err)
-			}
-		}
+	if parsed.Runbook != nil && (len(parsed.Runbook.ToolRefs) > 0 || len(parsed.Runbook.Requires) > 0) {
+		return nil, errkit.New("SCOPE-002", fmt.Sprintf("child %s requires frozen dependency preparation", path))
 	}
 
 	return parsed, nil

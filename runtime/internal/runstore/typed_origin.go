@@ -88,12 +88,24 @@ func validateFrameDeclarations(state engine.RunState, plan *engine.ExecutionPlan
 					continue
 				}
 				seen[id] = true
-				flow, err := plansnapshot.RestoreFlowClosure(frozen.ExecutableClosure)
+				var flow []schema.FlowNode
+				var err error
+				if plan.ToolScopes != nil {
+					if err := plansnapshot.ValidateFrozenToolSubstitution(frozen, plan.ToolScopes); err != nil {
+						return err
+					}
+					flow, err = plansnapshot.RestoreScopedFlowClosure(frozen.ExecutableClosure, plan.ToolScopes, frozen.TargetScopeID)
+				} else {
+					flow, err = plansnapshot.RestoreFlowClosure(frozen.ExecutableClosure)
+				}
 				if err != nil {
 					return err
 				}
 				add("tool-substitution", frozen.RunbookPath, frozen.Bindings, frozen.Outputs, flow)
 				walkNodes(flow)
+				if plan.ToolScopes != nil {
+					continue
+				}
 				nested, err := plansnapshot.RestoreFlowTools(frozen.ExecutableClosure)
 				if err != nil {
 					return err
@@ -108,6 +120,15 @@ func validateFrameDeclarations(state engine.RunState, plan *engine.ExecutionPlan
 	if err := tools(plan.Tools); err != nil {
 		return err
 	}
+	if plan.ToolScopes != nil {
+		definitions := make(map[string]*schema.ToolDef)
+		for id, definition := range plan.ToolScopes.Export().Definitions {
+			definitions[id] = definition.Declaration
+		}
+		if err := tools(definitions); err != nil {
+			return err
+		}
+	}
 	pins := append([]schema.LockedDynamicInclude(nil), plan.Metadata.DynamicIncludes...)
 	for _, resolution := range state.DynamicIncludes {
 		if resolution != nil {
@@ -115,12 +136,24 @@ func validateFrameDeclarations(state engine.RunState, plan *engine.ExecutionPlan
 		}
 	}
 	for _, pin := range pins {
-		flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		var flow []schema.FlowNode
+		var err error
+		if plan.ToolScopes != nil {
+			if err := plansnapshot.ValidateDynamicIncludePin(pin, plan.ToolScopes); err != nil {
+				return err
+			}
+			flow, err = plansnapshot.RestoreScopedFlowClosure(pin.ExecutableClosure, plan.ToolScopes, pin.TargetScopeID)
+		} else {
+			flow, err = plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		}
 		if err != nil {
 			return err
 		}
 		add("include", pin.AbsPath, pin.ResolvedBindings, pin.ResolvedOutputs, flow)
 		walkNodes(flow)
+		if plan.ToolScopes != nil {
+			continue
+		}
 		nested, err := plansnapshot.RestoreFlowTools(pin.ExecutableClosure)
 		if err != nil {
 			return err

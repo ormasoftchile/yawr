@@ -13,7 +13,8 @@
 // API integration (vscode.lm.tools / invokeTool) is implemented.
 
 import * as assert from 'assert';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
+import { cp } from 'fs/promises';
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import { PassThrough } from 'stream';
@@ -1027,6 +1028,132 @@ suite('Yawr extension smoke tests', () => {
     }
   });
 
+  test('real included-runbook execution is paced and every preceding runbook remains navigable', async function () {
+    this.timeout(120_000);
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    const workspace = vscode.workspace.workspaceFolders?.[0];
+    const core = path.resolve(__dirname, '..', '..', '..', '..', '..', 'runtime');
+    assert.ok(workspace);
+    const root = path.join(workspace.uri.fsPath, ...testStatePath, 'execution-graph');
+    await cp(path.join(core, 'examples', 'execution-graph'), root, {
+      recursive: true, filter: source => !source.includes(`${path.sep}.runbook`),
+    });
+    for (const name of ['dynamic-router', 'repeated-dynamic', 'static-eager', 'static-lazy']) {
+      const uri = vscode.Uri.file(path.join(root, 'runbooks', `${name}.runbook.yaml`));
+      const config = vscode.workspace.getConfiguration('yawr', uri);
+      const previous = config.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue;
+      await config.update('preview.minimumStepDisplayMs', 500, vscode.ConfigurationTarget.Workspace);
+      const { stdout: graph } = await execFileAsync(sourceYawrBinaryPath,
+        ['preview', '--format', 'graphjson', '--recurse', uri.fsPath], { cwd: root });
+      let wire = '';
+      let stderr = '';
+      const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.test.openDirectGraphPanel',
+        uri.fsPath, { documentLoader: async () => JSON.parse(graph),
+          spawnRun: (_binary: string, args: string[], options: Parameters<typeof spawn>[2]) => {
+            const child = spawn(sourceYawrBinaryPath, args, options);
+            child.stdout!.on('data', bytes => { wire += bytes; });
+            child.stderr!.on('data', bytes => { stderr += bytes; });
+            return child;
+          } });
+      assert.ok(panel);
+      let latestUI: unknown;
+      const stateObserver = panel.webview.onDidReceiveMessage(value => { if (value.type === 'ui.state') latestUI = value; });
+      const message = <T,>(type: string): Promise<T> => new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { subscription.dispose(); reject(new Error(`Missing ${type}`)); }, 45_000);
+        const subscription = panel.webview.onDidReceiveMessage(value => {
+          if (value.type !== type) return;
+          clearTimeout(timeout); subscription.dispose(); resolve(value);
+        });
+      });
+      type Visibility = { canonicalIDs: string[]; selectedID?: string; inspectedOccurrence?: string; runStatus: string; currentMarkerCount: number;
+        runbooks: Array<{ id: string; nodeIDs: string[] }>; executionHistory: Array<{ nodeID: string; occurrenceID: string }> };
+      const inspect = async () => {
+        const response = message<Visibility>('graph.visibility');
+        await panel.webview.postMessage({ type: 'test.action', action: 'inspect-graph-visibility' });
+        return response;
+      };
+      try {
+        await message('ui.state');
+        const ready = message('execution.transition-sampling');
+        const observation = message<{ samples: Array<{ at: number; currentIDs: string[] }> }>('execution.transition-samples');
+        await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition', value: 'include-pacing' });
+        await ready;
+        await panel.webview.postMessage({ type: 'test.action', action: 'run' });
+        const { samples } = await observation;
+        assert.ok(wire.trim(), `runtime ${sourceYawrBinaryPath} did not start: ${stderr}; ${JSON.stringify(latestUI)}`);
+        const frames = wire.trim().split(/\r?\n/).map(line => JSON.parse(line));
+        assert.equal(frames.find(frame => frame.type === 'run.finished')?.status, 'completed', wire);
+        const state = await inspect();
+        const expected = frames.filter(frame => frame.event?.kind === 'step/started')
+          .map(frame => frame.event.payload.graph_node_id ?? frame.event.payload.qualified_node_id)
+          .filter(id => state.canonicalIDs.includes(id));
+        const children = frames.filter(frame => frame.event?.kind === 'step/started' && frame.event.payload.graph_node_id);
+        assert.ok(name.startsWith('static-') ? expected.length >= 7 : children.length >= 5,
+          'the real runtime must execute both included runbooks');
+        for (const frame of children) assert.ok(state.canonicalIDs.includes(frame.event.payload.graph_node_id));
+        const start = samples.findIndex(sample => sample.currentIDs.length > 0);
+        assert.ok(start >= 0);
+        const playback = samples.slice(start);
+        const end = playback.findIndex(sample => sample.currentIDs.length === 0);
+        assert.ok(end > 0, 'visual completion must include the final dwell');
+        assert.ok(playback.slice(0, end).every(sample => sample.currentIDs.length === 1), 'no transient missing CURRENT');
+        assert.ok(playback.slice(end).every(sample => sample.currentIDs.length === 0), 'no second CURRENT stream');
+        const changes = playback.slice(0, end + 1).filter((sample, index) =>
+          index === 0 || sample.currentIDs[0] !== playback[index - 1].currentIDs[0]);
+        assert.deepEqual(changes.map(sample => sample.currentIDs[0]), [...expected, undefined]);
+        for (let index = 1; index < changes.length; index++) assert.ok(
+          changes[index].at - changes[index - 1].at >= 465,
+          `${name}: ${changes[index - 1].currentIDs[0]} displayed for ${changes[index].at - changes[index - 1].at}ms`);
+        assert.deepEqual(state.executionHistory.map(item => item.nodeID), expected);
+        assert.equal(state.runbooks.length, name === 'repeated-dynamic' ? 5 : 3);
+        if (name === 'repeated-dynamic') {
+          const repeated = children.filter(frame => frame.event.payload.qualified_node_id.endsWith('/collect_evidence'));
+          assert.equal(repeated.length, 2);
+          assert.notEqual(repeated[0].event.payload.graph_node_id, repeated[1].event.payload.graph_node_id,
+            'the same child called twice must have two distinct retained graph identities');
+          const firstRepeated = state.executionHistory.findIndex(entry =>
+            state.executionHistory.filter(other => other.nodeID === entry.nodeID).length > 1);
+          assert.ok(firstRepeated >= 0, 'the include site must have multiple recorded occurrences');
+          await panel.webview.postMessage({ type: 'test.action', action: 'select-history', value: String(firstRepeated) });
+          let selected = await inspect();
+          for (let attempt = 0; attempt < 20 && selected.inspectedOccurrence !== state.executionHistory[firstRepeated].occurrenceID; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 25));
+            selected = await inspect();
+          }
+          assert.equal(selected.inspectedOccurrence, state.executionHistory[firstRepeated].occurrenceID,
+            'history must inspect the requested occurrence, not silently select the latest visit');
+        }
+        for (const runbook of state.runbooks) {
+          assert.ok(runbook.nodeIDs.length);
+          await panel.webview.postMessage({ type: 'test.action', action: 'select-runbook', value: runbook.id });
+          let selected = await inspect();
+          for (let attempt = 0; attempt < 20 && selected.selectedID !== runbook.nodeIDs[0]; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 25));
+            selected = await inspect();
+          }
+          assert.equal(selected.selectedID, runbook.nodeIDs[0], 'the actual runbook selector must navigate after completion');
+          assert.equal(selected.currentMarkerCount, 0, 'inspection must not restart playback');
+        }
+        await panel.webview.postMessage({ type: 'test.action', action: 'reset' });
+        let reset = await inspect();
+        for (let attempt = 0; attempt < 20 && reset.runStatus !== 'idle'; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 25));
+          reset = await inspect();
+        }
+        assert.equal(reset.runStatus, 'idle');
+        assert.equal(reset.runbooks.length, JSON.parse(graph).frames.length,
+          'Reset must restore exactly the original source graph without old dynamic invocations');
+        assert.equal(reset.executionHistory.length, 0);
+      } finally {
+        stateObserver.dispose();
+        panel.dispose();
+        await config.update('preview.minimumStepDisplayMs', previous, vscode.ConfigurationTarget.Workspace);
+      }
+    }
+  });
+
   test('execution transitions keep one current marker, fixed geometry and bounded offscreen pans', async function () {
     this.timeout(60_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
@@ -1088,10 +1215,11 @@ suite('Yawr extension smoke tests', () => {
       type: 'run.event', event: { run_id: 'transition-run', kind: `step/${kind}`, sequence: ++sequence,
         payload: { qualified_node_id: id, invocation: 1 } },
     } });
-    const trace = async (transition: () => Promise<unknown>, pacing = false) => {
+    const trace = async (transition: () => Promise<unknown>, pacing: boolean | 'completion' = false) => {
       const ready = message('execution.transition-sampling');
       const result = message<{ samples: Sample[] }>('execution.transition-samples');
-      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition', value: pacing ? 'pacing' : undefined });
+      await panel.webview.postMessage({ type: 'test.action', action: 'sample-execution-transition',
+        value: pacing === 'completion' ? 'include-pacing' : pacing ? 'pacing' : undefined });
       await ready;
       await transition();
       return (await result).samples;
@@ -1199,7 +1327,7 @@ suite('Yawr extension smoke tests', () => {
           await panel.webview.postMessage({ type: 'run.exit', code: 0, signal: null });
           await panel.webview.postMessage({ type: 'loading' });
           await panel.webview.postMessage({ type: 'graph', document: fixture, style: 'smooth-curves', testMode: true });
-        }, true);
+        }, 'completion');
         const first = samples.findIndex(value => value.currentIDs.length > 0);
         assert.ok(first >= 0, 'completion must not erase the initial current step before paint');
         const playback = samples.slice(first);
@@ -1255,7 +1383,7 @@ suite('Yawr extension smoke tests', () => {
     }
   });
 
-  test('direct XTS handoff waits for Open XTS and collector review submits once', async function () {
+  for (const viewReady of [true, false]) test(`direct XTS handoff waits for real-view verification (${viewReady ? 'ready' : 'startup failed'})`, async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
@@ -1299,18 +1427,23 @@ suite('Yawr extension smoke tests', () => {
           const answer = command.answer as Record<string, unknown>;
           answers.push(answer);
           if (answer.kind === 'host_action') {
-            writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-xts' });
-            writeFrame({
-              type: 'interaction.pending', runID: 'run-xts', turnID: 'turn-findings',
-              interaction: {
-                type: 'pending', runID: 'run-xts', turnID: 'turn-findings', stepID: 'record_findings', kind: 'collector',
-                title: 'Record findings', prompt: 'Review XTS, then return here.',
-                fields: [{
-                  name: 'primary_health', type: 'select', label: 'Primary health', required: true,
-                  options: [{ value: 'unavailable', label: 'Unavailable' }, { value: 'healthy', label: 'Healthy' }],
-                }],
-              },
-            });
+            if (answer.status !== 'completed') {
+              writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-xts' });
+              writeFrame({ type: 'run.finished', runID: 'run-xts', status: 'failed' });
+            } else {
+              writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-xts' });
+              writeFrame({
+                type: 'interaction.pending', runID: 'run-xts', turnID: 'turn-findings',
+                interaction: {
+                  type: 'pending', runID: 'run-xts', turnID: 'turn-findings', stepID: 'record_findings', kind: 'collector',
+                  title: 'Record GEODR classification', prompt: 'Review XTS, then record the operator classification.',
+                  fields: [{
+                    name: 'primary_health', type: 'select', label: 'Primary health', required: true,
+                    options: [{ value: 'unavailable', label: 'Unavailable' }, { value: 'healthy', label: 'Healthy' }],
+                  }],
+                },
+              });
+            }
           } else if (answer.kind === 'collector') {
             writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-findings' });
             writeFrame({ type: 'run.finished', runID: 'run-xts', status: 'completed' });
@@ -1328,9 +1461,10 @@ suite('Yawr extension smoke tests', () => {
     let xtsDispatches = 0;
     let xtsAcks = 0;
     let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewWithParameters', () => {
+    const dispatchedArguments: unknown[][] = [];
+    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', (...args: unknown[]) => {
       xtsDispatches += 1;
-      return { status: 'opened' };
+      dispatchedArguments.push(args);
     });
     const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>(
       'yawr.test.openDirectGraphPanel',
@@ -1349,7 +1483,8 @@ suite('Yawr extension smoke tests', () => {
                 correlationID: 'corr-xts', title: 'Open replication view',
                 host_action: {
                   capability: 'xts.open-view',
-                  request: { view_path: 'replicas.xts', environment: 'Production', parameters: { server: 'db01' }, focus: true },
+                  request: { view_path: 'Database Replicas.xts', environment: 'ProdEus1a',
+                    parameters: { server: 'server-859807057', database: 'database-859807057' }, focus: true },
                 },
               },
             });
@@ -1390,14 +1525,37 @@ suite('Yawr extension smoke tests', () => {
       await hostPending;
       assert.strictEqual(xtsDispatches, 0, 'XTS dispatched before explicit panel confirmation');
 
-      const collectorPending = waitForUI((state) => state.pendingKind === 'collector', 'collector did not follow the opened XTS result');
+      const verificationPending = waitForUI(
+        state => state.pendingKind === 'host_action' && state.visibleButtons?.includes('XTS view is ready') === true,
+        'void command did not leave the run at view verification',
+      );
       const openClicked = waitForDOM((state) => state.clicked === 'Open XTS', 'Open XTS button was not clicked');
       await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
       assert.strictEqual((await openClicked).found, true);
+      await verificationPending;
+      assert.deepStrictEqual(dispatchedArguments, [['Database Replicas.xts',
+        '-p environment:ProdEus1a -p server:server-859807057 -p database:database-859807057']]);
+      assert.strictEqual(xtsAcks, 0, 'command dispatch is not evidence of an opened view');
+      assert.strictEqual(answers.length, 0, 'runtime must remain at the operator interaction');
+      assert.strictEqual(xtsReminders, 0);
+      if (!viewReady) {
+        const failed = waitForUI(state => state.runStatus === 'failed', 'startup failure was not surfaced');
+        await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'XTS failed to open' });
+        await failed;
+        assert.strictEqual(answers.length, 1);
+        assert.strictEqual(answers[0].status, 'failed');
+        assert.strictEqual(answers[0].result, undefined);
+        assert.strictEqual(xtsReminders, 0);
+        return;
+      }
+      const collectorPending = waitForUI((state) => state.pendingKind === 'collector', 'collector did not follow verified readiness');
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'XTS view is ready' });
       await collectorPending;
       assert.strictEqual(xtsDispatches, 1);
-      assert.strictEqual(xtsAcks, 1, 'successful XTS dispatch must traverse the production host-action transport');
-      assert.strictEqual(xtsReminders, 1, 'successful focused XTS dispatch must traverse the production reminder path');
+      assert.strictEqual(xtsAcks, 1, 'verified XTS readiness must traverse the production host-action transport');
+      assert.strictEqual(xtsReminders, 1, 'verified focused XTS view must traverse the production reminder path');
+      assert.strictEqual(answers.filter(answer => answer.kind === 'collector').length, 0,
+        'the run must wait for operator classification after the view is ready');
 
       const fieldSet = waitForDOM((state) => state.field === 'primary_health', 'collector field was not edited');
       await panel.webview.postMessage({ type: 'test.action', action: 'set-collector-field', name: 'primary_health', value: 'unavailable' });
@@ -1469,9 +1627,8 @@ suite('Yawr extension smoke tests', () => {
     let xtsDispatches = 0;
     let xtsAcks = 0;
     let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewWithParameters', () => {
+    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
       xtsDispatches += 1;
-      return { status: 'opened' };
     });
     const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>(
       'yawr.test.openDirectGraphPanel',
@@ -1621,7 +1778,7 @@ suite('Yawr extension smoke tests', () => {
     let xtsDispatches = 0;
     let xtsAcks = 0;
     let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewWithParameters', () => {
+    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
       xtsDispatches += 1;
       dispatchStarted();
       return delayedDispatch;
@@ -1788,7 +1945,7 @@ suite('Yawr extension smoke tests', () => {
     const dispatching = new Promise<void>((resolve) => { dispatchStarted = resolve; });
     let resolveDispatch!: (value: unknown) => void;
     const delayedDispatch = new Promise<unknown>((resolve) => { resolveDispatch = resolve; });
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewWithParameters', () => {
+    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
       dispatchStarted();
       return delayedDispatch;
     });
@@ -1886,7 +2043,13 @@ suite('Yawr extension smoke tests', () => {
         (state) => state.runID === 'run-new' && state.runStatus === 'running' && state.pendingKind === undefined,
         'replacement run was failed or reset by the superseded child close',
       );
-      resolveDispatch({ status: 'opened' });
+      const verificationPending = waitForUI(
+        state => state.visibleButtons?.includes('XTS view is ready') === true,
+        'replacement run did not reach real-view verification',
+      );
+      resolveDispatch(undefined);
+      await verificationPending;
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'XTS view is ready' });
       const answer = await Promise.race([
         newAnswer,
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('replacement host action did not complete')), 10_000)),
@@ -1911,7 +2074,7 @@ suite('Yawr extension smoke tests', () => {
     }
   });
 
-  test('cancelling a run cancels a delayed XTS handoff before it can ack or show a reminder', async function () {
+  for (const duringVerification of [false, true]) test(`cancelling XTS during ${duringVerification ? 'view verification' : 'command dispatch'} cannot ack or show a reminder`, async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
@@ -1969,7 +2132,7 @@ suite('Yawr extension smoke tests', () => {
     let xtsDispatches = 0;
     let xtsAcks = 0;
     let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewWithParameters', () => {
+    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
       xtsDispatches += 1;
       dispatchStarted();
       return delayedDispatch;
@@ -2025,13 +2188,22 @@ suite('Yawr extension smoke tests', () => {
       await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
       await dispatching;
       assert.strictEqual(xtsDispatches, 1, 'the regression requires an in-flight XTS dispatch');
+      if (duringVerification) {
+        const verifying = waitForUI(
+          state => state.visibleButtons?.includes('XTS view is ready') === true,
+          'the regression requires pending operator verification',
+        );
+        resolveDispatch(undefined);
+        await verifying;
+      }
 
       const cancelledUI = waitForUI((state) => state.runStatus === 'cancelled', 'run did not settle as cancelled');
       await panel.webview.postMessage({ type: 'test.action', action: 'cancel' });
       await runCancelled;
-      await cancelledUI;
+      assert.ok(!(await cancelledUI).visibleButtons?.includes('XTS view is ready'),
+        'a cancelled run must not expose a stale readiness confirmation');
 
-      resolveDispatch({ status: 'opened' });
+      resolveDispatch(undefined);
       await delayedDispatch;
       await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -2039,7 +2211,7 @@ suite('Yawr extension smoke tests', () => {
       assert.strictEqual(xtsAcks, 0, 'cancelled XTS dispatch must not emit a host-action acknowledgment');
       assert.strictEqual(xtsReminders, 0, 'cancelled XTS dispatch must not show the return-to-Yawr reminder');
     } finally {
-      resolveDispatch({ status: 'opened' });
+      resolveDispatch(undefined);
       panel.dispose();
       xtsCommand.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });

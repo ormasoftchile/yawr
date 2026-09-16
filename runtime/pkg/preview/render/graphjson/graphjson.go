@@ -130,6 +130,9 @@ func RenderWithState(doc *graphdoc.Document, state *runstate.State) ([]byte, err
 			"frame_id":  frameID,
 			"order":     n.Order,
 		}
+		if n.RuntimeNodeID != "" {
+			data["runtime_node_id"] = n.RuntimeNodeID
+		}
 		if n.Dynamic {
 			data["dynamic"] = true
 		}

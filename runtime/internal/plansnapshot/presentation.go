@@ -128,7 +128,7 @@ func Preflight(data []byte) error {
 		return errors.New("plan snapshot: invalid envelope")
 	}
 	version, ok := object["schema_version"].(string)
-	if !ok || version != SchemaVersionV3 {
+	if !ok || version != SchemaVersionV3 && version != SchemaVersionV4 {
 		return errors.New("plan snapshot: unsupported schema version")
 	}
 	return nil

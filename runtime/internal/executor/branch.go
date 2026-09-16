@@ -61,6 +61,7 @@ func (e *BranchExecutor) Execute(ctx context.Context, step engine.ResolvedStep, 
 
 	results, err := e.runner(ctx, SubStepParent{
 		ID:          step.ID,
+		RootScopeID: step.LexicalScopeID,
 		Kind:        "branch",
 		BranchLabel: matched.Label,
 		NestDepth:   step.NestDepth + 1,

@@ -74,6 +74,8 @@ flow:
 				writeFile(t, filepath.Join(pkgDir, "nested.runbook.yaml"), `apiVersion: yawr.runbook/v1
 id: nested
 name: Nested substituted tool
+toolRefs:
+  - {name: composition, package: acme.includes}
 inputs: {scenario: {type: string, required: true}}
 outputs: {summary: {type: string, value: '${child_summary}'}}
 flow:

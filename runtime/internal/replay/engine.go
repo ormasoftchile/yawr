@@ -753,7 +753,7 @@ func replayStepSites(plan *engine.ExecutionPlan) (*replayStepSiteIndex, error) {
 		if len(pin.ExecutableClosure) == 0 {
 			continue
 		}
-		flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		flow, err := restoreReplayPin(pin, plan.ToolScopes)
 		if err != nil {
 			return nil, errors.New("replay: pinned dynamic include closure is invalid")
 		}
@@ -910,7 +910,7 @@ func replayDynamicIncludeSites(plan *engine.ExecutionPlan) (map[string]bool, err
 		if len(pin.ExecutableClosure) == 0 {
 			continue
 		}
-		flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		flow, err := restoreReplayPin(pin, plan.ToolScopes)
 		if err != nil {
 			return nil, errors.New("replay: pinned dynamic include closure is invalid")
 		}

@@ -174,7 +174,10 @@ flow:
 					t.Fatal(err)
 				}
 				for _, resolution := range state.DynamicIncludes {
-					tools, err := plansnapshot.RestoreFlowTools(resolution.Pin.ExecutableClosure)
+					if err := plansnapshot.ValidateDynamicIncludePin(resolution.Pin, plan.ToolScopes); err != nil {
+						t.Fatal(err)
+					}
+					tools, err := plan.ToolScopes.Declarations(resolution.Pin.TargetScopeID)
 					if err != nil || !plansnapshot.HasPresentation(tools) || resolution.Pin.Revision < 1 {
 						t.Fatalf("committed dynamic descriptors missing: %v", err)
 					}

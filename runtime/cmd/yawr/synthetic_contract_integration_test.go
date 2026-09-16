@@ -90,7 +90,7 @@ actions:
 func newOpsSyntheticCLIMCPServer(t *testing.T, gotAuth *string, mu *sync.Mutex) *httptest.Server {
 	t.Helper()
 	initialized := false
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var msg map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 			http.Error(w, "bad json", http.StatusBadRequest)
@@ -174,6 +174,15 @@ func newOpsSyntheticCLIMCPServer(t *testing.T, gotAuth *string, mu *sync.Mutex) 
 			http.Error(w, "unknown method "+method, http.StatusBadRequest)
 		}
 	}))
+	original := http.DefaultTransport
+	transport := original.(*http.Transport).Clone()
+	transport.TLSClientConfig = server.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	http.DefaultTransport = transport
+	t.Cleanup(func() {
+		http.DefaultTransport = original
+		transport.CloseIdleConnections()
+	})
+	return server
 }
 
 // ─── primary composition proof ────────────────────────────────────────────────

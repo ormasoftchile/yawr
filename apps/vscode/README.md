@@ -40,9 +40,10 @@ mid-run changes apply to the next run/session.
 
 Ordinary live steps are displayed in event order for at least that interval.
 Only the visual queue head owns the graph's Current marker and progress glow.
-Runtime-only wrappers and dynamic identities absent from the graph remain in
-runtime/inspector evidence, but do not consume graph dwell intervals or redirect
-the marker to live activity. Known graph aliases are canonicalized before queueing.
+Runtime-only wrappers remain in runtime/inspector evidence, but do not consume
+graph dwell intervals or redirect the marker to live activity. Resolved dynamic
+runbooks are added before their child events are displayed. Known graph aliases
+are canonicalized before queueing.
 Successful runtime completion does not discard queued visuals: playback continues
 through every ordinary step, including Results, and the final step's full interval.
 Runtime status and Results processing/persistence update immediately; automatic
@@ -80,6 +81,37 @@ Reset restores the saved workflow-view preference. Routine advances preserve
 selection and zoom; an offscreen current node receives only the minimum smooth
 pan needed to reveal it. Explicit Locate, route-view and Fit controls still work.
 
+### Included runbooks and execution history
+
+Static includes are recursively visible, including when execution uses lazy
+expansion. Dynamic catalog includes publish frozen execution graphs as their
+targets resolve; the editor never reconstructs an executed child from current
+source files. Child and grandchild nodes join the existing graph without
+resetting CURRENT playback. Repeated dynamic invocations have distinct retained
+nodes and runbook frames, even when they call the same file.
+
+The inspector's **Runbooks in this run** selector navigates to any retained
+runbook. **Execution history** preserves the observed step order, including
+calls, returns and repeated visits. Dashed **Return** edges show observed
+completed child-to-parent transitions; they are not scheduling dependencies.
+Inspecting history does not move CURRENT or restart playback.
+
+History remains available after success, failure or cancellation until Reset,
+a new run, or panel disposal. Source edits do not replace a retained dynamic
+execution graph; deferred refresh applies on Reset. This is not durable
+cross-editor-restart recovery (investigation sessions provide that separately).
+
+Normal graphical runs require the additive `yawr.run-graph/v1` runtime
+capability. The VSIX bundles the matching runtime; no package-map or binary-path
+setup is needed for the self-contained
+[execution graph examples](../../runtime/examples/execution-graph/README.md).
+An explicitly configured older runtime fails with an unsupported-capability
+error rather than silently hiding executed children.
+
+Debugger Step Into remains limited to static includes. Dynamic debugger
+stepping has a separate runtime protection limitation documented with the
+examples; automatic graphical execution of dynamic includes is supported.
+
 There is no execution-log strip above the graph. **Execution activity** in the
 inspector retains runtime paths, concurrent lanes, timing and Locate controls.
 Per-step Run tabs retain output, errors, evidence and occurrence history; run
@@ -114,9 +146,9 @@ result is written back to the active Yawr child over `yawr.stdio/v1`.
   "requestId": "preview-session-123:turn-123",
   "capability": "xts.open-view",
   "request": {
-    "view_path": "logical-view-name",
-    "environment": "prod",
-    "parameters": { "search_string": "server-name" },
+    "view_path": "Database Replicas.xts",
+    "environment": "ProdEus1a",
+    "parameters": { "server": "server-name", "database": "database-name" },
     "focus": true
   }
 }
@@ -124,14 +156,33 @@ result is written back to the active Yawr child over `yawr.stdio/v1`.
 
 The Yawr wire shape is closed: undeclared fields are rejected. At the trusted
 extension boundary, the capability maps only to
-`xts.openViewWithParameters` with exactly
-`{ viewPath, environment, parameters, focus, correlationId }`. The extension
-preserves the typed `parameters` object unchanged. Runbooks own the view path and
+`xts.openViewByPath(view_path, args)`, preserving the relative filename verbatim.
+The argument string starts with `-p environment:ProdEus1a`, followed by each
+parameter as `-p name:value` (for example,
+`-p environment:ProdEus1a -p server:server-name -p database:database-name`).
+XTS 0.4.32 parses these values literally up to the next `-p`; no shell quoting
+is added. String values preserve internal spaces, quotes, and backslashes;
+finite numbers and booleans are serialized to text. Parameter names must use
+word characters. Empty values, outer whitespace, nested objects/arrays, embedded
+`-p` arguments, and overriding `environment` inside `parameters` are rejected
+rather than changing the requested values. Runbooks own the view path and
 must use the target view's declared parameter names. XTS remains responsible for
 validating the target view's parameter schema, configured view roots,
 authentication, and the explicitly supplied environment.
+YAWR activates the installed XTS extension before dispatch when needed.
+The current XTS command controls tab activation and has no `focus` argument;
+`focus` continues to control YAWR's reminder after readiness verification.
 
-The webview receives a correlated acknowledgment:
+The current command returns `void` and may display startup failures without
+throwing. YAWR therefore never interprets command completion as `opened`.
+The run remains at the host-action interaction until the operator returns to
+the YAWR panel and selects **XTS view is ready**, after verifying that the real
+view has loaded with the displayed filename, environment, and parameters.
+**XTS failed to open** reports a failed handoff, not a completed investigation.
+This is an explicit operator attestation, not an automatic XTS readiness probe.
+The subsequent runbook classification/collector still requires its own answer.
+
+Only after this correlated readiness confirmation does the webview receive:
 
 ```json
 {
@@ -150,8 +201,8 @@ The webview receives a correlated acknowledgment:
 ```
 
 The bridge ack statuses are `completed`, `failed`, `timed-out`, `unsupported`, and
-`execution-not-started`. XTS terminal values (`opened`, `view-not-found`, `environment-not-found`,
-`invalid-parameters`, `execution-not-started`) are carried inside `result.status` when the bridge status is `completed`. The extension never
+`execution-not-started`. An operator-verified XTS view carries `opened` inside
+`result.status` when the bridge status is `completed`. The extension never
 includes a requested path, XTS row, or parameters in an acknowledgment.
 Cancelling a matching tuple, reloading the preview, replacing its panel, or
 disposing it acknowledges that tuple as `execution-not-started`; late command
@@ -186,8 +237,11 @@ private `run.configure` stdin frame. They are never placed in child-process
 arguments or emitted in run frames.
 
 XTS host actions pause on an explicit **Open XTS** control in the run panel.
-That reviewed in-panel action is the only launch confirmation; the extension
-does not show a second modal. A reminder appears after a focused XTS view opens.
+That reviewed in-panel action is the launch confirmation; the extension
+does not show a second modal. After dispatch, a separate in-panel readiness
+check keeps startup failures from advancing the run. A reminder appears only
+after the operator verifies a focused XTS view is ready. Cancellation, panel
+disposal, and the existing handoff timeout discard pending verification listeners.
 
 ## Installed-editor file-only subprocess support
 

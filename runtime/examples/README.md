@@ -28,6 +28,7 @@ Runbook composition, iteration, and multi-file organization.
 | [collect-health](./collect-health/) | Sequential health checks with result accumulation | Iterate + include, result capture, accumulation pattern |
 | [collect-health-parallel](./collect-health-parallel/) | Parallel health checks with concurrent execution | Concurrency, collect field, join function |
 | [nested-chain](./nested-chain/) | Five-level deep include chain | Deep nesting, include chain, execution tracing |
+| [execution-graph](./execution-graph/) | Safe VS Code execution and history verification | Eager/lazy includes, nested dynamic routing, repeated invocations, returns, failure, operator choice |
 | [multi-region-rollout](./multi-region-rollout/) | Rolling health check across regions | Iterate, governance, approval gates, assert steps, evidence checklists |
 
 ## Advanced Patterns

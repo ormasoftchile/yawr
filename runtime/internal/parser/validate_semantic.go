@@ -90,7 +90,10 @@ func walkFlowNodes(nodes []schema.FlowNode, inParallel bool, p platform.Platform
 		case fn.Step != nil:
 			errs = append(errs, validateStep(fn.Step, inParallel, i, p, rb)...)
 		case fn.Iterate != nil:
-			for key := range fn.Iterate.CollectValues {
+			for key, value := range fn.Iterate.CollectValues {
+				if _, err := schema.TypedTreeReferences(value); err != nil {
+					errs = append(errs, verr("iterate/collect-values", "flow."+fn.Iterate.ID+".collect_values."+key, err.Error()))
+				}
 				if _, duplicate := fn.Iterate.Collect[key]; duplicate {
 					errs = append(errs, verr("iterate/duplicate-collection", "flow."+fn.Iterate.ID,
 						fmt.Sprintf("%q is declared in both collect and collect_values", key)))

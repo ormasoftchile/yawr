@@ -6,6 +6,7 @@ import (
 
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
+	"github.com/ormasoftchile/yawr/runtime/pkg/toolscope"
 )
 
 // ValidateTypedBoundClosure includes implicit include propagation and frozen
@@ -23,16 +24,24 @@ func ValidateTypedBoundClosure(plan *engine.ExecutionPlan) error {
 	var writes func(any, map[string]bool, map[string]bool) (map[string]bool, error)
 	writes = func(value any, declared, visiting map[string]bool) (map[string]bool, error) {
 		out := make(map[string]bool)
-		var scan func(any) error
-		scan = func(value any) error {
+		var scan func(any, string) error
+		scan = func(value any, owner string) error {
 			switch value := value.(type) {
 			case []any:
 				for _, child := range value {
-					if err := scan(child); err != nil {
+					if err := scan(child, owner); err != nil {
 						return err
 					}
 				}
 			case map[string]any:
+				if lexical, ok := value["lexical_scope_id"].(string); ok {
+					owner = lexical
+				}
+				if common, ok := value["common"].(map[string]any); ok {
+					if lexical, ok := common["lexical_scope_id"].(string); ok {
+						owner = lexical
+					}
+				}
 				if captures, ok := value["capture"].(map[string]any); ok {
 					for name := range captures {
 						if declared[name] {
@@ -58,9 +67,21 @@ func ValidateTypedBoundClosure(plan *engine.ExecutionPlan) error {
 				if ref, ok := value["tool"].(map[string]any); ok {
 					name, _ := ref["name"].(string)
 					actionName, _ := ref["action"].(string)
-					if definition := plan.Tools[name]; definition != nil {
+					definition := plan.Tools[name]
+					key := name + "#" + actionName
+					if plan.ToolScopes != nil {
+						bound, err := plan.ToolScopes.Resolve(owner, name, actionName)
+						if err != nil {
+							return err
+						}
+						definition = bound.Definition.Declaration
+						key = bound.BindingID + "#" + actionName
+						if definition == nil {
+							return fmt.Errorf("typed concurrency: frozen declaration missing")
+						}
+					}
+					if definition != nil {
 						if action := definition.Actions[actionName]; action != nil && action.Execute.IsSubstitution() {
-							key := name + "#" + actionName
 							if visiting[key] || action.FrozenSubstitution == nil {
 								return fmt.Errorf("typed concurrency: unresolved or cyclic tool closure %s", key)
 							}
@@ -69,7 +90,7 @@ func ValidateTypedBoundClosure(plan *engine.ExecutionPlan) error {
 							if err := json.Unmarshal(action.FrozenSubstitution.ExecutableClosure, &body); err != nil {
 								return err
 							}
-							if err := scan(body); err != nil {
+							if err := scan(body, action.FrozenSubstitution.TargetScopeID); err != nil {
 								return err
 							}
 							delete(visiting, key)
@@ -81,14 +102,14 @@ func ValidateTypedBoundClosure(plan *engine.ExecutionPlan) error {
 					case "value", "value_tree", "args", "default", "with", "vars", "collect_values", "tools":
 						continue
 					}
-					if err := scan(child); err != nil {
+					if err := scan(child, owner); err != nil {
 						return err
 					}
 				}
 			}
 			return nil
 		}
-		if err := scan(value); err != nil {
+		if err := scan(value, plan.RootScopeID); err != nil {
 			return nil, err
 		}
 		return out, nil
@@ -225,7 +246,7 @@ func nodesData(nodes []schema.FlowNode, specData func(engine.StepSpec) any) []an
 	out := make([]any, 0, len(nodes))
 	for _, node := range nodes {
 		if node.Step != nil {
-			out = append(out, map[string]any{"capture": node.Step.Capture, "spec": specData(specForStep(node.Step))})
+			out = append(out, map[string]any{"lexical_scope_id": node.Step.LexicalScopeID, "capture": node.Step.Capture, "spec": specData(specForStep(node.Step))})
 		}
 		if node.Iterate != nil {
 			out = append(out, specData(node.Iterate))
@@ -238,16 +259,36 @@ func nodesData(nodes []schema.FlowNode, specData func(engine.StepSpec) any) []an
 }
 
 func ValidateTypedBoundFlow(nodes []schema.FlowNode, bindings []schema.Binding, tools map[string]*schema.ToolDef) error {
-	plan := &engine.ExecutionPlan{Bindings: bindings, Tools: tools}
+	if err := ValidateScopedFlow(nodes, nil, ""); err != nil {
+		return err
+	}
+	return validateTypedBoundFlow(nodes, bindings, tools, nil, "")
+}
+
+// ValidateScopedTypedBoundFlow validates references before proving concurrent
+// writes disjoint, using only the supplied immutable declaring-file scope.
+func ValidateScopedTypedBoundFlow(nodes []schema.FlowNode, bindings []schema.Binding, scopes *toolscope.Set, scopeID string) error {
+	if scopes == nil {
+		return fmt.Errorf("typed concurrency: immutable tool scopes required")
+	}
+	if err := ValidateScopedFlow(nodes, scopes, scopeID); err != nil {
+		return err
+	}
+	return validateTypedBoundFlow(nodes, bindings, nil, scopes, scopeID)
+}
+
+func validateTypedBoundFlow(nodes []schema.FlowNode, bindings []schema.Binding, tools map[string]*schema.ToolDef, scopes *toolscope.Set, scopeID string) error {
+	plan := &engine.ExecutionPlan{Bindings: bindings, Tools: tools, ToolScopes: scopes, RootScopeID: scopeID}
 	for _, node := range nodes {
 		if node.Step != nil {
-			plan.Steps = append(plan.Steps, engine.ResolvedStep{ID: node.Step.ID, Kind: string(node.Step.Type), Spec: specForStep(node.Step)})
+			plan.Steps = append(plan.Steps, engine.ResolvedStep{ID: node.Step.ID, Kind: string(node.Step.Type), Spec: specForStep(node.Step),
+				LexicalScopeID: node.Step.LexicalScopeID, ToolBindingID: node.Step.ToolBindingID})
 		}
 		if node.Iterate != nil {
-			plan.Steps = append(plan.Steps, engine.ResolvedStep{Spec: node.Iterate})
+			plan.Steps = append(plan.Steps, engine.ResolvedStep{ID: node.Iterate.ID, Kind: "iterate", Spec: node.Iterate, LexicalScopeID: scopeID})
 		}
 		if node.Parallel != nil {
-			plan.Steps = append(plan.Steps, engine.ResolvedStep{Spec: node.Parallel})
+			plan.Steps = append(plan.Steps, engine.ResolvedStep{ID: node.Parallel.ID, Kind: "parallel", Spec: node.Parallel, LexicalScopeID: scopeID})
 		}
 	}
 	return ValidateTypedBoundClosure(plan)

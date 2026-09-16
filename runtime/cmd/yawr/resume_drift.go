@@ -15,6 +15,7 @@ import (
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/parser"
+	"github.com/ormasoftchile/yawr/runtime/pkg/pkgcatalog"
 	"github.com/ormasoftchile/yawr/runtime/pkg/pkgdrift"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 	"github.com/ormasoftchile/yawr/runtime/pkg/trace"
@@ -51,6 +52,13 @@ func checkResumePackageDrift(
 		return nil
 	}
 
+	if state.Plan.ToolScopes != nil {
+		prepared, _, err := prepareScopedCLI(ctx, parserImpl, state.Plan.RunbookPath, packageMapPath, state.Plan.Metadata.Profile)
+		if err != nil {
+			return err
+		}
+		return checkResumeCatalogDrift(ecfg, state, resumeID, prepared.Catalog, allowDrift)
+	}
 	parsed, err := parserImpl.Parse(ctx, state.Plan.RunbookPath)
 	if err != nil {
 		return fmt.Errorf("resume: re-parse runbook for package drift check: %w", err)
@@ -97,6 +105,10 @@ func checkResumePackageDrift(
 		return fatalCatErrs[0]
 	}
 
+	return checkResumeCatalogDrift(ecfg, state, resumeID, cat, allowDrift)
+}
+
+func checkResumeCatalogDrift(ecfg engine.EngineConfig, state engine.RunState, resumeID string, cat *pkgcatalog.Catalog, allowDrift bool) error {
 	// §7.5 rule 5 (B4): the manifest's recorded PackageDigests is the
 	// AUTHORITATIVE set, not merely a filter over whichever packages
 	// happen to resolve today. Iterate the UNION of recorded and current

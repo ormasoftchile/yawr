@@ -31,6 +31,7 @@ import { canonicalProgress, currentActivities, graphExecutionNodeID, compareOccu
 import { CurrentActivity as ActivityDetails } from './CurrentActivity';
 import { currentExecutionNode, ordinaryVisualNodeID, executionViewMode, executionViewport, animateExecutionViewport } from '../src/executionView';
 import { VisualStepPacer, type VisualStep } from '../src/visualStepPacer';
+import { mergeExecutionGraph, executionHistory, executionReturnEdges, anchorExecutionLayout } from '../src/executionGraph';
 import { decodeWorkflowPreference, mergeWorkflowPreference } from '../src/workflowView';
 import type { ResultsAvailability } from '../src/typedResultsTypes';
 import { ResultsViewer } from './ResultsViewer';
@@ -64,6 +65,7 @@ import {
 import type { RouteTestArtifact } from '../src/routeTestTypes';
 import { sessionGraphTopologyKey, type SessionGraphViewState } from '../src/sessionCompositeGraph';
 import { parseHostActionResponse, type HostActionResponseEnvelope } from '../src/hostActionWebviewProtocol';
+import { matchesXtsViewCheck, type XtsViewCheck } from '../src/xtsViewVerification';
 import {
   collectorInputType,
   formatCollectorReviewValue as collectorReviewValue,
@@ -112,15 +114,18 @@ type HostMessage =
   | { type: 'route-test.error'; message: string }
   | {
       type: 'test.action';
-      action: 'sample-execution-transition' | 'inspect-graph-visibility' | 'inspect-results' | 'set-graph-viewport' | 'set-input' | 'run' | 'debug' | 'reset' | 'cancel' | 'answer' | 'toggle-breakpoint' | 'select-node' | 'inspect-expressions' | 'run-route-test' | 'save-route-test' | 'save-route-test-result' | 'click-button' | 'click-route-test-checkbox' | 'toggle-choice' | 'set-collector-field';
+      action: 'select-history' | 'select-runbook' | 'sample-execution-transition' | 'inspect-graph-visibility' | 'inspect-results' | 'set-graph-viewport' | 'set-input' | 'run' | 'debug' | 'reset' | 'cancel' | 'answer' | 'toggle-breakpoint' | 'select-node' | 'inspect-expressions' | 'run-route-test' | 'save-route-test' | 'save-route-test-result' | 'click-button' | 'click-route-test-checkbox' | 'toggle-choice' | 'set-collector-field';
       name?: string;
       value?: string;
       answer?: Record<string, unknown>;
       artifact?: RouteTestArtifact;
     }
-  | HostActionResponseEnvelope;
+  | HostActionResponseEnvelope
+  | XtsViewCheck;
 
 interface StdioFrame {
+  document?: GraphDocument;
+  nodeIDs?: string[];
   type: string;
   version: 'yawr.stdio/v1';
   runID?: string;
@@ -739,11 +744,15 @@ function InteractionPane({
   onSubmit,
   onConfirmHostAction,
   xtsOpened,
+  xtsViewCheck,
+  onVerifyXtsView,
 }: {
   interaction: PendingInteraction;
   onSubmit(answer: Record<string, unknown>): void;
   onConfirmHostAction(interaction: PendingInteraction): void;
   xtsOpened: boolean;
+  xtsViewCheck?: XtsViewCheck;
+  onVerifyXtsView(status: 'opened' | 'failed'): void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [values, setValues] = useState<Record<string, unknown>>(() => {
@@ -754,6 +763,7 @@ function InteractionPane({
     return initial;
   });
   const [submitting, setSubmitting] = useState(false);
+  const [verificationSubmitted, setVerificationSubmitted] = useState(false);
   const [validationError, setValidationError] = useState<string>();
   const [collectorReview, setCollectorReview] = useState<Record<string, unknown>>();
   const choiceMax = interaction.kind === 'choice' && interaction.multiple &&
@@ -776,7 +786,20 @@ function InteractionPane({
         <h2>{interaction.title ?? interaction.stepID}</h2>
         {interaction.prompt ? <p>{interaction.prompt}</p> : null}
         {isXts ? <p>VS Code will switch to XTS. Review the view, then return here to record your findings.</p> : null}
-        <button
+        {xtsViewCheck ? <>
+          <p>XTS launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded
+            with the requested environment and parameters. Do not confirm a startup, authentication, or loading error.</p>
+          <dl>
+            <dt>View</dt><dd>{String(interaction.host_action?.request.view_path ?? '')}</dd>
+            <dt>Environment</dt><dd>{String(interaction.host_action?.request.environment ?? '')}</dd>
+            {Object.entries(recordValue(interaction.host_action?.request.parameters) ?? {}).map(([name, value]) =>
+              <React.Fragment key={name}><dt>{name}</dt><dd>{String(value)}</dd></React.Fragment>)}
+          </dl>
+          <button type="button" className="primary" disabled={verificationSubmitted}
+            onClick={() => { setVerificationSubmitted(true); onVerifyXtsView('opened'); }}>XTS view is ready</button>
+          <button type="button" className="danger" disabled={verificationSubmitted}
+            onClick={() => { setVerificationSubmitted(true); onVerifyXtsView('failed'); }}>XTS failed to open</button>
+        </> : <button
           type="button"
           className="primary"
           disabled={submitting}
@@ -786,7 +809,7 @@ function InteractionPane({
           }}
         >
           {submitting ? 'Opening XTS...' : <span>Open XTS</span>}
-        </button>
+        </button>}
       </section>
     );
   }
@@ -1288,6 +1311,7 @@ function runtimeEdgeClass(edge: GraphEdge, runtimeNodes: Readonly<Record<string,
 
 function eventNodeID(event: RuntimeEvent): string | undefined {
   const payload = event.payload ?? {};
+  if (typeof payload.graph_node_id === 'string' && payload.graph_node_id) return payload.graph_node_id;
   if (typeof payload.qualified_node_id === 'string' && payload.qualified_node_id) return payload.qualified_node_id;
   const explicitNodeID = payload.node_id;
   if (typeof explicitNodeID === 'string' && explicitNodeID) return explicitNodeID;
@@ -1433,7 +1457,8 @@ function applyRuntimeEvent(
         : {}),
   };
   const { occurrences: _history, retainedPresentations: _retained, displayObservations: _displayHistory, ...observation } = value;
-  const occurrence = { ...observation, occurrenceID, runID: event.run_id, segmentID: '', qualifiedNodeID: nodeID,
+  const occurrence = { ...observation, occurrenceID, runID: event.run_id, segmentID: '',
+    qualifiedNodeID: typeof payload.qualified_node_id === 'string' ? payload.qualified_node_id : nodeID,
     phase: typeof payload.phase === 'string' ? payload.phase : undefined, invocation, retryAttempt,
     frameID: typeof payload.frame_id === 'string' ? payload.frame_id : undefined,
     frameStepIndex: counter(payload.frame_step_index, 0),
@@ -1640,6 +1665,8 @@ function GraphView({
   onSaveRouteTest,
   onRunRouteTest,
   xtsOpened,
+  xtsViewCheck,
+  onVerifyXtsView,
 }: {
   document: GraphDocument;
   results?: ResultsAvailability;
@@ -1686,6 +1713,8 @@ function GraphView({
   onSaveRouteTest(artifact: RouteTestArtifact): void;
   onRunRouteTest(artifact: RouteTestArtifact): void;
   xtsOpened: boolean;
+  xtsViewCheck?: XtsViewCheck;
+  onVerifyXtsView(status: 'opened' | 'failed'): void;
 }) {
   const runtimeNodes = useMemo(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document), [observedRuntimeNodes, runStatus, document]);
   const [selectedId, setSelectedId] = useState<string>();
@@ -1733,6 +1762,7 @@ function GraphView({
   const [activityLocationNotice, setActivityLocationNotice] = useState<string>();
   const activities = useMemo(() => currentActivities(document, observedRuntimeNodes, runStatus, runID, pending),
     [document, observedRuntimeNodes, runStatus, runID, pending]);
+  const history = useMemo(() => executionHistory(document, observedRuntimeNodes), [document, observedRuntimeNodes]);
   const previousExecutionRef = useRef<{ scope: string | GraphDocument; nodeID?: string }>();
   const executionScope = sessionID ?? document.runbook.path ?? document.hash ?? document;
   const liveCurrentNodeID = currentExecutionNode(activities, runStatus,
@@ -1809,12 +1839,22 @@ function GraphView({
     }
   }, [issues, routeTargetID, routeDisplayDocument, workflow]);
   const layoutTopologyKey = useMemo(() => sessionGraphTopologyKey(displayDocument), [displayDocument]);
-  const layoutGeometry = useMemo(() => layoutDocument(displayDocument, style), [layoutTopologyKey, style]);
+  const previousLayout = useRef<{ scope: string; nodes: Node<GraphNodeData>[] }>();
+  const layoutScope = `${document.runbook.path}:${runID}:${style}`;
+  const layoutGeometry = useMemo(() => {
+    const next = layoutDocument(displayDocument, style);
+    if (previousLayout.current?.scope === layoutScope && document.nodes.some(node => node.data.execution_occurrence)) {
+      next.nodes = anchorExecutionLayout(previousLayout.current.nodes, next.nodes, currentNodeID);
+    }
+    return next;
+  }, [layoutTopologyKey, style]);
+  useLayoutEffect(() => { previousLayout.current = { scope: layoutScope, nodes: layoutGeometry.nodes }; }, [layoutGeometry, layoutScope]);
   const layout = useMemo(
     () => refreshLayoutMetadata(layoutGeometry, displayDocument, style),
     [displayDocument, layoutGeometry, style],
   );
-  const runtimeEdges = useMemo(() => layout.edges.map((edge) => ({
+  const returnEdges = useMemo(() => executionReturnEdges(document, observedRuntimeNodes), [document, observedRuntimeNodes]);
+  const runtimeEdges = useMemo(() => [...layout.edges.map((edge) => ({
     ...edge,
     className: edge.data?.graphEdge
       ? [
@@ -1822,7 +1862,10 @@ function GraphView({
           runtimeEdgeClass(edge.data.graphEdge, runtimeNodes) ?? '',
         ].filter(Boolean).join(' ') || undefined
       : undefined,
-  })), [layout.edges, runtimeNodes]);
+  })), ...returnEdges.map(edge => ({
+    ...edge, type: 'smoothstep', className: 'edge-execution-return',
+    markerEnd: { type: MarkerType.ArrowClosed },
+  }))], [layout.edges, runtimeNodes, returnEdges]);
   const focusedNodeID = routeTargetID ?? selectedId;
   const displayNodes = useMemo(() => layout.nodes.map((node) => ({
     ...node,
@@ -2002,7 +2045,14 @@ function GraphView({
     if (!testMode) return;
     const receiveTestAction = (event: MessageEvent<HostMessage>) => {
       const message = event.data;
-      if (message?.type === 'test.action' && message.action === 'select-node' && message.name) {
+      if (message?.type === 'test.action' && ['select-runbook', 'select-history'].includes(message.action) && message.value) {
+        const select = window.document.querySelector<HTMLSelectElement>(message.action === 'select-runbook'
+          ? 'select[aria-label="Inspect runbook"]' : 'select[aria-label="Inspect executed step"]');
+        if (select) {
+          select.value = message.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else if (message?.type === 'test.action' && message.action === 'select-node' && message.name) {
         const selectedNode = document.nodes.find((node) => node.id === message.name || node.data.id === message.name);
         setSelectedId(selectedNode?.id);
       } else if (message?.type === 'test.action' && message.action === 'inspect-results') {
@@ -2054,7 +2104,10 @@ function GraphView({
       if (event.data?.type !== 'test.action' || event.data.action !== 'sample-execution-transition') return;
       cancelAnimationFrame(frame);
       const samples: unknown[] = [];
-      const frameCount = event.data.value === 'pacing' ? 180 : 30;
+      const includePlayback = event.data.value === 'include-pacing';
+      const frameCount = includePlayback ? 1800 : event.data.value === 'pacing' ? 180 : 30;
+      let seenCurrent = false;
+      let drainedFrames = 0;
       const sample = () => {
         const canvas = canvasRef.current;
         const nodes = Array.from(canvas?.querySelectorAll<HTMLElement>('.react-flow__node-yawrStep') ?? []);
@@ -2071,7 +2124,11 @@ function GraphView({
           viewport: flowRef.current?.getViewport(),
           positions: flowRef.current?.getNodes().map(node => ({ id: node.id, position: node.position, width: node.width, height: node.height })),
         });
-        if (samples.length < frameCount) frame = requestAnimationFrame(sample);
+        const hasCurrent = nodes.some(node => node.querySelector('.execution-current'));
+        seenCurrent ||= hasCurrent;
+        drainedFrames = seenCurrent && !hasCurrent &&
+          window.document.querySelector<HTMLElement>('.app')?.dataset.runStatus === 'completed' ? drainedFrames + 1 : 0;
+        if (samples.length < frameCount && (!includePlayback || drainedFrames < 10)) frame = requestAnimationFrame(sample);
         else vscode.postMessage({ type: 'execution.transition-samples', samples });
       };
       frame = requestAnimationFrame(sample);
@@ -2105,6 +2162,9 @@ function GraphView({
             css.opacity !== '0' && css.visibility !== 'hidden', transform: element.style.transform };
       });
       vscode.postMessage({ type: 'graph.visibility', canonicalIDs: document.nodes.map(node => node.id),
+        runbooks: document.frames.map(frame => ({ ...frame, nodeIDs: document.nodes.filter(node => node.data.frame_id === frame.id).map(node => node.id) })),
+        executionHistory: history,
+        executionReturns: returnEdges,
         projectedIDs: displayDocument.nodes.map(node => node.id), edges: displayDocument.edges.map(edge => ({
           id: edge.id, source: edge.source, target: edge.target, label: edge.label })),
         nodes: rendered, canvas: canvas?.toJSON(), viewport: flowRef.current?.getViewport(),
@@ -2113,6 +2173,7 @@ function GraphView({
         edgePaths: window.document.querySelectorAll('.react-flow__edge-path').length,
         edgeClasses: Array.from(window.document.querySelectorAll('.react-flow__edge')).map(edge => edge.getAttribute('class')),
         mode: effectiveWorkflowMode, selectedID: selectedId, routeTargetID,
+        inspectedOccurrence: window.document.querySelector<HTMLSelectElement>('select[aria-label="Execution occurrence"]')?.value,
         runtimeStatuses: Object.fromEntries(Object.entries(runtimeNodes).map(([id, value]) => [id, value.status])),
         currentNodeID: resolvedExecutionNodeID,
         currentMarkerCount: window.document.querySelectorAll('.step-node.execution-current').length,
@@ -2231,8 +2292,8 @@ function GraphView({
         const rendered = reactFlowRootCount === 1 &&
           nodeCount === expectedNodeCount &&
           frameCount === expectedFrameCount &&
-          edgeCount === layout.edges.length &&
-          (layout.edges.length === 0 || edgeClassName.includes('react-flow__edge-'));
+          edgeCount === runtimeEdges.length &&
+          (runtimeEdges.length === 0 || edgeClassName.includes('react-flow__edge-'));
         if (++attempts < 120 && !rendered) {
           report();
           return;
@@ -2260,7 +2321,7 @@ function GraphView({
     };
     report();
     return () => cancelAnimationFrame(frame);
-  }, [document, layout.nodes.length, layout.edges.length, style, testMode]);
+  }, [document, layout.nodes.length, runtimeEdges.length, style, testMode]);
 
   return (
     <>
@@ -2498,6 +2559,40 @@ function GraphView({
         <aside id="step-details-panel" className="inspector" aria-label="Step details">
           <ActivityDetails activities={activities} runStatus={runStatus} remaining={progressCounts.remaining}
             onLocate={locateExecutionNode} locationNotice={activityLocationNotice} />
+          {document.frames.length > 1 ? (
+            <section className="runbook-navigation" aria-label="Runbooks in this run">
+              <label>Runbooks in this run
+                <select aria-label="Inspect runbook" value="" onChange={event => {
+                  const node = document.nodes.find(node => node.data.frame_id === event.target.value);
+                  if (node) {
+                    setIssueSelection(undefined);
+                    setRouteTargetID(undefined); setSelectedId(node.id); setLocateNodeID(node.id); setShowPanel(true);
+                  }
+                }}>
+                  <option value="">Choose a runbook to inspect</option>
+                  {document.frames.map((frame, index) => <option key={frame.id} value={frame.id}>
+                    {index + 1}. {frame.runbook_id} ({frame.runbook_path.split(/[\\/]/).pop()})
+                  </option>)}
+                </select>
+              </label>
+              <label>Execution history
+                <select aria-label="Inspect executed step" value="" onChange={event => {
+                  const entry = history[Number(event.target.value)];
+                  if (entry) {
+                    setIssueSelection({ nodeID: entry.nodeID, occurrenceID: entry.occurrenceID,
+                      qualifiedNodeID: entry.path, status: entry.status, blockedOutcome: false });
+                    setRouteTargetID(undefined); setSelectedId(entry.nodeID); setLocateNodeID(entry.nodeID); setShowPanel(true);
+                  }
+                }}>
+                  <option value="">Choose a preceding step</option>
+                  {history.map((entry, index) => <option key={`${entry.nodeID}:${entry.sequence}`} value={index} data-occurrence-id={entry.occurrenceID}>
+                    {index + 1}. {entry.path} [{entry.status}]
+                  </option>)}
+                </select>
+              </label>
+              <small>{document.frames.find(frame => frame.id === (selected ?? executionNode)?.data.frame_id)?.runbook_path}</small>
+            </section>
+          ) : null}
           {pending ? (
             <InteractionPane
               key={`${pending.turnID}:${runError ?? ''}`}
@@ -2505,6 +2600,8 @@ function GraphView({
               onSubmit={onSubmitInteraction}
               onConfirmHostAction={onConfirmHostAction}
               xtsOpened={xtsOpened}
+              xtsViewCheck={xtsViewCheck}
+              onVerifyXtsView={onVerifyXtsView}
             />
           ) : currentRouteTestEditor && routeTarget && routeTestContext ? (
             <RouteTestPane
@@ -2669,6 +2766,7 @@ function App() {
   const [routeTestRunning, setRouteTestRunning] = useState(false);
   const [routeTestError, setRouteTestError] = useState<string>();
   const [xtsOpened, setXtsOpened] = useState(false);
+  const [xtsViewCheck, setXtsViewCheck] = useState<XtsViewCheck>();
   const pendingRef = useRef<PendingInteraction>();
   const resolvedTurnsRef = useRef(new Set<string>());
   const runIDRef = useRef<string>();
@@ -2676,6 +2774,7 @@ function App() {
   const sessionStatusRef = useRef<string>();
   const runFinishedRef = useRef(false);
   const directDocumentRef = useRef<GraphDocument>();
+  const sourceDocumentRef = useRef<GraphDocument>();
   const directRunScopeRef = useRef<string>();
   const displayWithdrawalsRef = useRef<DisplayObservations>(
     decodeDisplayWithdrawals(recordValue(vscode.getState?.())?.displayWithdrawals));
@@ -2700,6 +2799,7 @@ function App() {
   const clearActiveRun = (preserveVisualPlayback = false) => {
     if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
     hostRequestRef.current = undefined;
+    setXtsViewCheck(undefined);
     pendingRef.current = undefined;
     runIDRef.current = undefined;
     setXtsOpened(false);
@@ -2735,6 +2835,7 @@ function App() {
           setResults(undefined);
         }
         directDocumentRef.current = message.document;
+        sourceDocumentRef.current = message.document;
         setDocument(message.document);
         if (message.document.presentation_state) {
           const retained = message.document.presentation_state;
@@ -2854,6 +2955,10 @@ function App() {
         setLoading(false);
         setError(message.message);
       } else if (message.type === 'run.starting') {
+        if (sourceDocumentRef.current) {
+          directDocumentRef.current = sourceDocumentRef.current;
+          setDocument(sourceDocumentRef.current);
+        }
         setResults(undefined);
         directRunScopeRef.current = undefined;
         clearActiveRun();
@@ -2874,7 +2979,16 @@ function App() {
         }
       } else if (message.type === 'run.frame') {
         const frame = message.frame;
-        if (frame.type === 'run.started') {
+        if (frame.type === 'run.graph' && frame.document && frame.nodeIDs) {
+          if (!directDocumentRef.current || !runIDRef.current || frame.runID !== runIDRef.current || runFinishedRef.current) return;
+          try {
+            const graph = mergeExecutionGraph(directDocumentRef.current, frame.document, frame.nodeIDs);
+            directDocumentRef.current = graph;
+            setDocument(graph);
+          } catch (error) {
+            setRunError(error instanceof Error ? error.message : 'Execution graph could not be updated.');
+          }
+        } else if (frame.type === 'run.started') {
           if (runFinishedRef.current || !frame.runID || (runIDRef.current && frame.runID !== runIDRef.current)) return;
           runIDRef.current = frame.runID;
           directRunScopeRef.current = frame.runID;
@@ -2985,6 +3099,17 @@ function App() {
         setRouteTestError(undefined);
       } else if (message.type === 'route-test.error') {
         setRouteTestError(message.message);
+      } else if (message.type === 'yawr.xts.verify-view') {
+        const hostRequest = hostRequestRef.current;
+        const interaction = pendingRef.current;
+        if (!hostRequest || !interaction || interaction.kind !== 'host_action' ||
+            interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID ||
+            runIDRef.current !== hostRequest.runID) return;
+        if (matchesXtsViewCheck(message, {
+          capability: hostRequest.capability, runId: hostRequest.runID, turnId: hostRequest.turnID,
+          correlationId: hostRequest.correlationID, previewSessionId: hostSessionRef.current,
+          requestId: hostRequest.requestID,
+        })) setXtsViewCheck(message);
       } else if (message.type === 'yawr.host-action.ack' || message.type === 'yawr.host-action.cancel') {
         const response = parseHostActionResponse(message);
         if (!response) return;
@@ -3003,6 +3128,7 @@ function App() {
           response.capability !== hostRequest.capability
         )) return;
         if (runIDRef.current !== hostRequest.runID) return;
+        setXtsViewCheck(undefined);
         if (response.type === 'yawr.host-action.ack' && response.status === 'completed' && response.result?.status === 'opened') {
           setXtsOpened(true);
         }
@@ -3213,6 +3339,10 @@ function App() {
     }
     if (runStarting || !isTerminalRunStatus(runStatus)) return;
     vscode.postMessage({ type: 'run.reset' });
+    if (sourceDocumentRef.current) {
+      directDocumentRef.current = sourceDocumentRef.current;
+      setDocument(sourceDocumentRef.current);
+    }
     setResults(undefined);
     clearActiveRun();
     runFinishedRef.current = true;
@@ -3393,7 +3523,7 @@ function App() {
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, testMode]);
+  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, xtsViewCheck, testMode]);
 
   if (loading) return <div className="state" role="status">Loading runbook...</div>;
   if (error) return <div className="state error" role="alert">{error}</div>;
@@ -3454,6 +3584,13 @@ function App() {
         vscode.postMessage({ type: 'route-test.run', artifact });
       }}
       xtsOpened={xtsOpened}
+      xtsViewCheck={xtsViewCheck}
+      onVerifyXtsView={(status) => {
+        if (!xtsViewCheck || xtsViewCheck.runId !== runIDRef.current ||
+            xtsViewCheck.turnId !== pendingRef.current?.turnID ||
+            xtsViewCheck.requestId !== hostRequestRef.current?.requestID) return;
+        vscode.postMessage({ ...xtsViewCheck, type: 'yawr.xts.view-verified', status });
+      }}
     />
   );
 }

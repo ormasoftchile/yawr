@@ -69,6 +69,7 @@ func (e *impl) PrepareDurablePlan(ctx context.Context, plan *enginepkg.Execution
 	if plan == nil || plan.Validation == nil {
 		return errors.New("engine: validated execution plan is required")
 	}
+	ctx = withFrozenPlanContext(ctx, plan)
 	hadDeferredIncludes := internalplanner.HasDeferredStaticIncludes(plan)
 	if err := executor.MaterializeLazyIncludes(ctx, e.cfg.Executors, plan); err != nil {
 		return err
@@ -77,6 +78,9 @@ func (e *impl) PrepareDurablePlan(ctx context.Context, plan *enginepkg.Execution
 		return err
 	}
 	if err := internalplanner.ValidateTypedBoundClosure(plan); err != nil {
+		return err
+	}
+	if err := validateScopedSubstitutionBindings(plan); err != nil {
 		return err
 	}
 	for _, definition := range plan.Tools {
@@ -982,7 +986,7 @@ func (h *runHandle) Next(ctx context.Context) (result *enginepkg.StepResult, err
 	// Also merge with the caller's cancellation.
 	stepCtx = mergeContexts(stepCtx, ctx)
 	stepCtx = enginepkg.WithRunID(stepCtx, h.run.ID)
-	stepCtx = enginepkg.WithPlanTools(stepCtx, h.run.Plan.Tools)
+	stepCtx = withFrozenPlanContext(stepCtx, h.run.Plan)
 	_, inheritedFrame := enginepkg.ExecutionFrameBindingFromContext(stepCtx)
 	if !inheritedFrame && enginepkg.ExecutionFrameCommitterFromContext(stepCtx) == nil {
 		stepCtx = enginepkg.WithExecutionFrameCommitter(stepCtx, h)
@@ -1103,6 +1107,10 @@ func (h *runHandle) Next(ctx context.Context) (result *enginepkg.StepResult, err
 // executeStep runs a single step and returns the result.
 // The caller must hold h.mu.
 func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep) (*enginepkg.StepResult, error) {
+	stepClassification, classificationErr := resolveStepClassification(step, h.run.Plan)
+	if classificationErr != nil {
+		return nil, classificationErr
+	}
 	snapshotDigest := ""
 	if parent := enginepkg.ToolPresentationFromContext(ctx); parent != nil {
 		snapshotDigest = parent.SnapshotDigest
@@ -1320,7 +1328,11 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
 		if step.Kind == "tool" {
 			if toolSpec, ok := step.Spec.(*schema.ToolCallSpec); ok && toolSpec != nil {
 				if h.run.Plan != nil {
-					if toolDef, found := h.run.Plan.Tools[toolSpec.Tool.Name]; found && toolDef != nil {
+					toolDef, err := enginepkg.FrozenToolDefinition(h.run.Plan, step)
+					if err != nil {
+						return h.failRun(ctx, step.ID, err)
+					}
+					if toolDef != nil {
 						if toolDef.Governance != nil && toolDef.Governance.RequiresApproval != nil {
 							stepInfo.ToolRequiresApproval = *toolDef.Governance.RequiresApproval
 						}
@@ -1487,12 +1499,12 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
 		return nil, context.Canceled
 	}
 	if errors.Is(execErr, enginepkg.ErrIndeterminate) {
-		return h.haltIndeterminate(ctx, step, execErr, 1, resolveStepClassification(step, h.run.Plan))
+		return h.haltIndeterminate(ctx, step, execErr, 1, stepClassification)
 	}
 
 	if h.runCtx.Err() != nil {
 		if staged := h.stagePreparedDispatchIndeterminate(step.ID); staged {
-			classification := resolveStepClassification(step, h.run.Plan)
+			classification := stepClassification
 			return h.haltIndeterminate(ctx, step, h.runCtx.Err(), 1, classification)
 		}
 		return nil, h.runCtx.Err()
@@ -1545,7 +1557,7 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
 			}
 		}
 		if step.Kind == "tool" && isTransportLoss(execErr) {
-			classification := resolveStepClassification(step, h.run.Plan)
+			classification := stepClassification
 			if requiresIndeterminate(classification) {
 				h.stagePreparedDispatchIndeterminate(step.ID)
 				return h.haltIndeterminate(ctx, step, execErr, 1, classification)
@@ -1563,7 +1575,7 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
 	// with a transport-loss error rather than an execErr) for tool steps.
 	if step.Kind == "tool" && result.Status == enginepkg.StepStatusFailed &&
 		result.Error != nil && isTransportLoss(result.Error) {
-		classification := resolveStepClassification(step, h.run.Plan)
+		classification := stepClassification
 		if requiresIndeterminate(classification) {
 			h.stagePreparedDispatchIndeterminate(step.ID)
 			return h.haltIndeterminate(ctx, step, result.Error, 1, classification)
@@ -2533,7 +2545,15 @@ func (h *runHandle) CommitDynamicIncludeResolution(
 	if err := internaldebugprotect.ValidateHandoffJSON(protection, artifact); err != nil {
 		return enginepkg.DynamicIncludeResolutionState{}, errors.New("engine: dynamic include resolution contains protected content")
 	}
-	flow, err := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+	var flow []schema.FlowNode
+	if h.run.Plan.ToolScopes != nil {
+		if err := plansnapshot.ValidateDynamicIncludePin(pin, h.run.Plan.ToolScopes); err != nil {
+			return enginepkg.DynamicIncludeResolutionState{}, err
+		}
+		flow, err = plansnapshot.RestoreScopedFlowClosure(pin.ExecutableClosure, h.run.Plan.ToolScopes, pin.TargetScopeID)
+	} else {
+		flow, err = plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+	}
 	if err != nil {
 		return enginepkg.DynamicIncludeResolutionState{}, errors.New("engine: dynamic include resolution closure is invalid")
 	}
@@ -2609,6 +2629,12 @@ func (h *runHandle) CommitDynamicIncludeResolution(
 		Revision: revision,
 		Pin:      pin, Status: enginepkg.DynamicIncludeResolutionStatusActive,
 		CommittedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if h.run.Plan.ToolScopes != nil {
+		resolution.SchemaVersion = enginepkg.DynamicIncludeResolutionStateSchemaV2
+	}
+	if err := enginepkg.ValidateDynamicIncludeResolutionVersion(resolution); err != nil {
+		return enginepkg.DynamicIncludeResolutionState{}, err
 	}
 	previous := h.run.DynamicIncludes
 	previousDispatches := h.run.Dispatches
@@ -4797,7 +4823,12 @@ func buildIndeterminateRecord(runID string, step enginepkg.ResolvedStep, err err
 		if toolSpec, ok := step.Spec.(*schema.ToolCallSpec); ok && toolSpec != nil {
 			rec.ToolName = toolSpec.Tool.Name
 			rec.ActionName = toolSpec.Tool.Action
-			if toolDef, found := plan.Tools[toolSpec.Tool.Name]; found && toolDef != nil {
+			toolDef := plan.Tools[toolSpec.Tool.Name]
+			if capture := enginepkg.ToolPresentationFromContext(ctx); capture != nil && capture.ScopeID == step.LexicalScopeID &&
+				capture.BindingID == step.ToolBindingID && capture.Definition != nil {
+				toolDef = capture.Definition
+			}
+			if toolDef != nil {
 				// Host only — credentials and full URLs are never recorded.
 				if toolDef.Transport.URL != "" {
 					if u, parseErr := url.Parse(toolDef.Transport.URL); parseErr == nil {
@@ -4814,27 +4845,37 @@ func buildIndeterminateRecord(runID string, step enginepkg.ResolvedStep, err err
 // resolveStepClassification returns the classification pointer for the action
 // invoked by a tool step, or nil when the step is not a tool step, the tool
 // definition is absent, or the action has no declared classification.
-func resolveStepClassification(step enginepkg.ResolvedStep, plan *enginepkg.ExecutionPlan) *string {
+func resolveStepClassification(step enginepkg.ResolvedStep, plan *enginepkg.ExecutionPlan) (*string, error) {
 	if step.Kind != "tool" || plan == nil {
-		return nil
+		return nil, nil
 	}
 	toolSpec, ok := step.Spec.(*schema.ToolCallSpec)
 	if !ok || toolSpec == nil {
-		return nil
-	}
-	toolDef, found := plan.Tools[toolSpec.Tool.Name]
-	if !found || toolDef == nil {
-		return nil
+		return nil, nil
 	}
 	actionName := toolSpec.Tool.Action
 	if actionName == "" {
 		actionName = "run"
 	}
+	toolDef, found := plan.Tools[toolSpec.Tool.Name]
+	if plan.ToolScopes != nil {
+		bound, err := plan.ToolScopes.Resolve(step.LexicalScopeID, toolSpec.Tool.Name, actionName)
+		if err != nil {
+			return nil, err
+		}
+		if bound.BindingID != step.ToolBindingID {
+			return nil, errors.New("engine: tool classification binding does not match step owner")
+		}
+		toolDef, found = bound.Definition.Declaration, true
+	}
+	if !found || toolDef == nil {
+		return nil, nil
+	}
 	action, found := toolDef.Actions[actionName]
 	if !found || action == nil {
-		return nil
+		return nil, nil
 	}
-	return action.Classification
+	return action.Classification, nil
 }
 
 // requiresIndeterminate reports whether a transport-loss event on an action with
@@ -5134,6 +5175,7 @@ func (h *runHandle) runDir() string {
 type compensationEntry struct {
 	key            string
 	registrationID string
+	scopeID        string
 	on             string
 	steps          []schema.FlowNode
 }
@@ -5150,6 +5192,9 @@ func (h *runHandle) executeCompensations(ctx context.Context) error {
 			resolved, ok := resolveFlowNode(node)
 			if !ok {
 				continue
+			}
+			if node.Step == nil {
+				resolved.LexicalScopeID = entry.scopeID
 			}
 			steps = append(steps, resolved)
 		}
@@ -5212,7 +5257,7 @@ func (h *runHandle) collectCompensations() []compensationEntry {
 				continue
 			}
 		}
-		entries = append(entries, compensationEntry{key: key, registrationID: step.ID, on: on, steps: steps})
+		entries = append(entries, compensationEntry{key: key, registrationID: step.ID, scopeID: step.LexicalScopeID, on: on, steps: steps})
 	}
 	return entries
 }
@@ -5268,6 +5313,8 @@ func resolveFlowNode(node schema.FlowNode) (enginepkg.ResolvedStep, bool) {
 			Capture:         step.Capture,
 			CaptureDefaults: step.CaptureDefaults,
 			Delay:           step.Delay,
+			LexicalScopeID:  step.LexicalScopeID,
+			ToolBindingID:   step.ToolBindingID,
 		}, true
 	}
 	if node.Iterate != nil {
@@ -5373,6 +5420,7 @@ func (h *runHandle) executeCompensationStep(
 	stepIndex int,
 	step enginepkg.ResolvedStep,
 ) error {
+	ctx = withFrozenPlanContext(ctx, h.run.Plan)
 	startedAt := time.Now()
 	exec := h.engine.cfg.Executors.Lookup(step.Kind)
 	var result *enginepkg.StepResult
@@ -6163,6 +6211,7 @@ func (bh *branchHandle) executeSteps(ctx context.Context, steps []enginepkg.Reso
 }
 
 func (bh *branchHandle) executeOne(ctx context.Context, stepIndex int, step enginepkg.ResolvedStep) (*enginepkg.StepResult, error) {
+	ctx = withFrozenPlanContext(ctx, bh.run.Plan)
 	digest := ""
 	if parent := enginepkg.ToolPresentationFromContext(ctx); parent != nil {
 		digest = parent.SnapshotDigest

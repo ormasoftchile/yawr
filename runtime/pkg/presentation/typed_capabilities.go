@@ -3,7 +3,7 @@ package presentation
 import toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 
 func TypedResultsCapabilities() any {
-	capabilities := []string{"yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1"}
+	capabilities := []string{"yawr.typed-results/v1", "yawr.run-results-chunks/v1", "yawr.run-get-results/v1", "yawr.terminal-results/v1", "yawr.terminal-outcome-gis/v1", "yawr.lexical-tool-scopes/v1"}
 	if toolpkg.FileOnlySubprocessAvailable() {
 		capabilities = append(capabilities, "yawr.file-only-subprocess/v1")
 	}
@@ -21,8 +21,8 @@ func TypedResultsCapabilities() any {
 		ResultsChunkBytes  int      `json:"results_chunk_bytes"`
 		ResultsMaxBytes    int      `json:"results_max_bytes"`
 	}{"presentation-capabilities/v3", "core-binding/v3",
-		[]string{"execution-plan/v3"},
-		[]string{"execution-plan/v3"},
+		[]string{"execution-plan/v3", "execution-plan/v4"},
+		[]string{"execution-plan/v3", "execution-plan/v4"},
 		capabilities,
 		[]string{"1", "3"}, AuthoringRequestVersion, ExpressionSchemaVersion,
 		"yawr.stdio/v1", 1 << 20, 64 << 10, 256 << 20}

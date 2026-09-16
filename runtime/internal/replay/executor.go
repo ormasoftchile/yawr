@@ -10,7 +10,6 @@ import (
 	"time"
 
 	internalexecutor "github.com/ormasoftchile/yawr/runtime/internal/executor"
-	"github.com/ormasoftchile/yawr/runtime/internal/plansnapshot"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/expr"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
@@ -52,14 +51,13 @@ func (e *ReplayExecutor) WithEnumChecks(evaluator expr.Evaluator, tools map[stri
 
 // Execute returns recorded outputs for the given step.
 func (e *ReplayExecutor) Execute(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
-	_ = ctx
 	now := time.Now()
 
 	switch e.kind {
 	case "cli":
 		return e.executeCLI(step, now)
 	case "tool":
-		return e.executeTool(step, vars, now)
+		return e.executeTool(ctx, step, vars, now)
 	case "manual", "choice", "decision", "collector":
 		return e.executeManual(step, now)
 	default:
@@ -118,7 +116,7 @@ func (e *ReplayExecutor) executeCLI(step engine.ResolvedStep, now time.Time) (*e
 	}, nil
 }
 
-func (e *ReplayExecutor) executeTool(step engine.ResolvedStep, vars map[string]any, now time.Time) (*engine.StepResult, error) {
+func (e *ReplayExecutor) executeTool(ctx context.Context, step engine.ResolvedStep, vars map[string]any, now time.Time) (*engine.StepResult, error) {
 	toolName := extractToolName(step)
 
 	// ENUM-008 (AR-ENUM-7, barbara-enum-mvp-implementation-gate.md R5):
@@ -130,7 +128,7 @@ func (e *ReplayExecutor) executeTool(step engine.ResolvedStep, vars map[string]a
 	// registry (e.g. constructed without a plan's Tools map) -- in that
 	// case there is no declaration to check against, not a bypass of a
 	// known one.
-	if aerr := e.checkToolCallEnums(step, vars); aerr != nil {
+	if aerr := e.checkToolCallEnums(ctx, step, vars); aerr != nil {
 		return &engine.StepResult{
 			StepID:      step.ID,
 			Status:      engine.StepStatusFailed,
@@ -249,12 +247,20 @@ func extractToolName(step engine.ResolvedStep) string {
 // ReplayExecutor wasn't constructed with a tools map/evaluator, or when
 // the referenced tool/action isn't present in it -- there is genuinely no
 // declaration to check in those cases.
-func (e *ReplayExecutor) checkToolCallEnums(step engine.ResolvedStep, vars map[string]any) error {
+func (e *ReplayExecutor) checkToolCallEnums(ctx context.Context, step engine.ResolvedStep, vars map[string]any) error {
 	spec, ok := step.Spec.(*schema.ToolCallSpec)
-	if !ok || spec == nil || e.tools == nil {
+	if !ok || spec == nil {
 		return nil
 	}
 	toolDef, ok := e.tools[spec.Tool.Name]
+	if engine.ToolScopesFromContext(ctx) != nil {
+		var err error
+		toolDef, err = scopedReplayToolDefinition(ctx, step, spec.Tool.Name, spec.Tool.Action)
+		if err != nil {
+			return err
+		}
+		ok = true
+	}
 	if !ok || toolDef == nil {
 		return nil
 	}
@@ -472,7 +478,7 @@ func (executor *replayToolExecutor) Execute(
 			WithEnumChecks(executor.registry.evaluator, executor.registry.tools).
 			Execute(ctx, step, vars)
 	}
-	definition, action, err := executor.frozenDefinition(step, vars)
+	definition, action, err := executor.frozenDefinition(ctx, step, vars)
 	if err != nil {
 		return nil, engine.NewReplayBoundaryError(err)
 	}
@@ -505,6 +511,7 @@ func (executor *replayToolExecutor) Execute(
 }
 
 func (executor *replayToolExecutor) frozenDefinition(
+	ctx context.Context,
 	step engine.ResolvedStep,
 	vars map[string]any,
 ) (*schema.ToolDef, *schema.ToolAction, error) {
@@ -520,10 +527,6 @@ func (executor *replayToolExecutor) frozenDefinition(
 			return nil, nil, fmt.Errorf("replay: resolve frozen tool name: %w", err)
 		}
 	}
-	definition := executor.registry.tools[toolName]
-	if definition == nil {
-		return nil, nil, fmt.Errorf("replay: frozen tool %q is unavailable", toolName)
-	}
 	actionName := spec.Tool.Action
 	if actionName == "" {
 		actionName = "run"
@@ -533,6 +536,16 @@ func (executor *replayToolExecutor) frozenDefinition(
 		if err != nil {
 			return nil, nil, fmt.Errorf("replay: resolve frozen tool action: %w", err)
 		}
+	}
+	definition := executor.registry.tools[toolName]
+	if engine.ToolScopesFromContext(ctx) != nil {
+		definition, err = scopedReplayToolDefinition(ctx, step, toolName, actionName)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if definition == nil {
+		return nil, nil, fmt.Errorf("replay: frozen tool %q is unavailable", toolName)
 	}
 	action := definition.Actions[actionName]
 	if action == nil {
@@ -699,11 +712,12 @@ func (e *DynamicIncludeReplayExecutor) Execute(ctx context.Context, step engine.
 		if pin.RunbookID == "" || pin.RunbookName == "" || len(pin.RunbookContentHash) != 64 {
 			return nil, engine.NewReplayBoundaryError(errors.New("replay: pinned dynamic include has no authored runbook identity"))
 		}
-		flow, closureErr := plansnapshot.RestoreFlowClosure(pin.ExecutableClosure)
+		flow, closureErr := restoreReplayPin(pin, engine.ToolScopesFromContext(ctx))
 		if closureErr != nil {
 			return nil, engine.NewReplayBoundaryError(fmt.Errorf("replay: restore pinned dynamic include %q: %w", pin.QualifiedID, closureErr))
 		}
 		modifiedSpec.ResolvedSteps = flow
+		modifiedSpec.TargetScopeID = pin.TargetScopeID
 		modifiedSpec.ResolvedRunbookPath = pin.AbsPath
 		modifiedSpec.ResolvedRunbookID = pin.RunbookID
 		modifiedSpec.ResolvedRunbookName = pin.RunbookName
@@ -713,6 +727,9 @@ func (e *DynamicIncludeReplayExecutor) Execute(ctx context.Context, step engine.
 		modifiedSpec.ResolvedOutputs = pin.ResolvedOutputs
 		modifiedSpec.ResolvedGovernance = pin.ResolvedGovernance
 	} else {
+		if engine.ToolScopesFromContext(ctx) != nil {
+			return nil, engine.NewReplayBoundaryError(errors.New("replay: scoped pin has no captured executable closure"))
+		}
 		actual, digErr := fileDigestSHA256(pin.AbsPath)
 		if digErr != nil {
 			return nil, engine.NewReplayBoundaryError(fmt.Errorf("replay: read pinned dynamic include %q: %w", pin.QualifiedID, digErr))

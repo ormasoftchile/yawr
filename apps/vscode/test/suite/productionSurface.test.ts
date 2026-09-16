@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { copyFile, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { connectGraphObserver } from './graphPlaybackObserver';
 
@@ -38,6 +38,92 @@ async function directoryEntries(path: string): Promise<string[]> {
 }
 
 suite('Installed VSIX production surface', () => {
+  for (const scenario of [
+    { label: 'dynamic included runbooks', directory: 'execution-graph', entry: ['runbooks', 'dynamic-router.runbook.yaml'],
+      title: 'Dynamic router - nested calls and returns', steps: 9, nodes: 9, runbooks: 3, evidence: 'included-runbooks-500ms.json' },
+    { label: 'lexically scoped included runbooks', directory: 'dependency-scopes', entry: ['dynamic.runbook.yaml'],
+      title: 'Dynamically selected children own their package dependencies',
+      steps: 15, nodes: 13, runbooks: 7, evidence: 'dependency-scopes-500ms.json' },
+  ]) test(`${scenario.label} form one paced CURRENT stream and retain the complete return history`, async function () {
+    this.timeout(60_000);
+    assert.equal(vscode.version, '1.136.2');
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    await extension.activate();
+    const { directOccurrenceID }: {
+      directOccurrenceID(runID: string, nodeID: string, payload: Record<string, unknown>): string;
+    } = require(join(extension.extensionPath, 'out', 'executionProgress.js'));
+    const root = process.env.YAWR_TEST_STATE_ROOT;
+    const core = join(__dirname, '..', '..', '..', '..', '..', 'runtime');
+    const port = process.env.YAWR_TEST_CDP_PORT;
+    assert.ok(root && core && port, 'the installed harness must supply its isolated environment');
+    const destination = join(root, 'workspace', scenario.directory);
+    await cp(join(core, 'examples', scenario.directory), destination, {
+      recursive: true, filter: source => !source.includes(`${require('node:path').sep}.runbook`),
+    });
+    const uri = vscode.Uri.file(join(destination, ...scenario.entry));
+    const config = vscode.workspace.getConfiguration('yawr', uri);
+    const previous = config.inspect<number>('preview.minimumStepDisplayMs')?.workspaceValue;
+    const observer = await connectGraphObserver(port);
+    let panel: vscode.WebviewPanel | undefined;
+    try {
+      await config.update('preview.minimumStepDisplayMs', 500, vscode.ConfigurationTarget.Workspace);
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+      panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.previewGraph');
+      await observer.waitForGraph(scenario.title);
+      const observation = observer.observe(scenario.steps * 500 + 4000);
+      const result = await vscode.commands.executeCommand<{
+        frames: Array<{ type: string; runID?: string; event?: { kind: string; payload: Record<string, unknown> } }>;
+        finished: { status: string }; stderr: string;
+      }>('yawr.runCurrentRunbook');
+      const returnedAt = Date.now();
+      console.log(`Installed run returned: ${scenario.entry.join('/')} status=${result?.finished.status} frames=${result?.frames.length} at=${returnedAt}`);
+      const samples = await observation;
+      await writeFile(join(root, scenario.evidence), JSON.stringify({ samples, returnedAt, result }, null, 2));
+      if (process.env.YAWR_TEST_EVIDENCE_DIR) {
+        await mkdir(process.env.YAWR_TEST_EVIDENCE_DIR, { recursive: true });
+        await copyFile(join(root, scenario.evidence), join(process.env.YAWR_TEST_EVIDENCE_DIR, scenario.evidence));
+      }
+      assert.equal(result?.finished.status, 'completed', result?.stderr);
+      assert.ok(result.frames.some(frame => frame.type === 'run.graph'), 'real runtime graph updates must reach the extension');
+      const expected = result.frames.filter(frame => frame.event?.kind === 'step/started').map(frame =>
+        String(frame.event!.payload.graph_node_id ?? frame.event!.payload.qualified_node_id));
+      const expectedOccurrences = result.frames.filter(frame => frame.event?.kind === 'step/started').map(frame => {
+        assert.ok(frame.runID);
+        const payload = frame.event!.payload;
+        return directOccurrenceID(frame.runID, String(payload.graph_node_id ?? payload.qualified_node_id), payload);
+      });
+      assert.equal(expected.length, scenario.steps, 'every canonical fixture step must execute');
+      assert.equal(new Set(expected).size, scenario.nodes, 'the exact graph sites, including repeated include visits, must execute');
+      assert.equal(new Set(expectedOccurrences).size, scenario.steps, 'each canonical execution occurrence must occur exactly once');
+      const first = samples.findIndex(sample => sample.ids.length > 0);
+      assert.ok(first >= 0, 'the run must display current steps');
+      const playback = samples.slice(first);
+      const end = playback.findIndex(sample => sample.ids.length === 0);
+      assert.ok(end > 0, 'playback must drain after the final Results dwell');
+      assert.ok(playback.slice(0, end).every(sample => sample.ids.length === 1), 'graph growth must never remove CURRENT');
+      assert.ok(playback.slice(end).every(sample => sample.ids.length === 0), 'there must be no replay');
+      const changes = playback.slice(0, end + 1).filter((sample, index) =>
+        index === 0 || sample.ids[0] !== playback[index - 1].ids[0]);
+      assert.deepEqual(changes.map(sample => sample.ids[0]), [...expected, undefined]);
+      for (let index = 1; index < changes.length; index++) {
+        assert.ok(changes[index].at - changes[index - 1].at >= 465,
+          `included step ${changes[index - 1].ids[0]} dwell was ${changes[index].at - changes[index - 1].at}ms`);
+      }
+      const final = playback.at(-1)!;
+      assert.equal(final.runbooks?.length, scenario.runbooks, 'all runbook invocations must remain navigable after completion');
+      assert.equal(final.history?.length, scenario.steps, 'execution history must retain child entry and parent return');
+      assert.deepEqual(final.historyIDs, expectedOccurrences, 'retained occurrence identities must exactly match canonical runtime order');
+      for (const id of expected) assert.ok(final.nodes?.includes(id), `completed graph lost ${id}`);
+      assert.ok(returnedAt < changes.at(-2)!.at, 'runtime completion must not wait for visual playback');
+      console.log(`Installed included-runbook CURRENT dwells: ${changes.slice(1).map((sample, index) => sample.at - changes[index].at).join(', ')}ms`);
+    } finally {
+      await observer.close();
+      panel?.dispose();
+      await config.update('preview.minimumStepDisplayMs', previous, vscode.ConfigurationTarget.Workspace);
+    }
+  });
+
   for (const configuredInterval of [undefined, 500]) test(`one canonical CURRENT stream covers the entire installed runtime run and completion backlog at ${configuredInterval ?? 'default 200'}ms`, async function () {
     this.timeout(60_000);
     assert.strictEqual(vscode.version, '1.136.2', 'compatibility requires the actual minimum supported host');
@@ -87,13 +173,14 @@ flow:
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(runbook));
       panel = await vscode.commands.executeCommand<vscode.WebviewPanel>('yawr.previewGraph');
       assert.ok(panel);
-      await observer.waitForGraph();
+      await observer.waitForGraph('Single current stream');
       const observation = observer.observe();
       const execution = (async () => {
         const result = await vscode.commands.executeCommand<{
           finished: { status: string; resultsAvailability: { state: string } }; stderr: string;
         }>('yawr.runCurrentRunbook');
         const returnedAt = Date.now();
+        console.log(`Installed run returned: single-current ${interval}ms status=${result?.finished.status} results=${result?.finished.resultsAvailability.state} at=${returnedAt}`);
         return { result, returnedAt };
       })();
       const [samples, { result, returnedAt }] = await Promise.all([observation, execution]);
@@ -127,7 +214,8 @@ flow:
           `${changes[index - 1].ids[0]} dwell: ${changes[index].at - changes[index - 1].at}ms`);
       }
       for (const sample of playback.slice(0, final)) assert.deepStrictEqual(sample.progress, sample.ids);
-      assert.ok(returnedAt < changes[2].at, 'runtime completion must return while ordinary visuals remain queued');
+      assert.ok(returnedAt < changes[2].at,
+        `runtime completion must return while ordinary visuals remain queued: returned=${returnedAt}, transitions=${JSON.stringify(changes.map(sample => ({ at: sample.at, ids: sample.ids })))}`);
       assert.ok(playback.some(sample => sample.ids[0] === 'get_database_info' && sample.status === 'completed' && sample.results === 'available'),
         'Results availability must not wait for its visual position');
       console.log(`Installed VS Code ${vscode.version} whole-run CURRENT ${interval}ms: ${changes.map(sample => `${sample.ids[0] ?? 'drained'}@${sample.at.toFixed(1)}`).join(', ')}`);
@@ -436,7 +524,7 @@ flow:
       'run',
       '--stdio',
       '--require-capabilities',
-      'yawr.typed-results/v1,yawr.run-results-chunks/v1',
+      'yawr.lexical-tool-scopes/v1,yawr.typed-results/v1,yawr.run-results-chunks/v1,yawr.run-graph/v1',
       '--package-map',
       workspaceMap,
       runbookDocument.fileName,

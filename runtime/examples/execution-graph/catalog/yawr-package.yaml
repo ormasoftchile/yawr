@@ -1,0 +1,14 @@
+apiVersion: yawr.tool-package/v1
+meta:
+  name: graph-demo
+  version: "1.0.0"
+exports:
+  runbooks:
+    - id: investigate
+      path: investigate.runbook.yaml
+    - id: classify
+      path: classify.runbook.yaml
+    - id: fail
+      path: fail.runbook.yaml
+    - id: operator
+      path: operator.runbook.yaml

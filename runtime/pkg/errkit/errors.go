@@ -106,6 +106,8 @@ func ClassForCode(code string) string {
 		return "DINC"
 	case strings.HasPrefix(code, "MCP-"):
 		return "MCP"
+	case strings.HasPrefix(code, "SCOPE-"):
+		return "SCOPE"
 	}
 	return ""
 }
@@ -154,10 +156,16 @@ func Codes() []string {
 
 // Classes returns all conformance error classes known to the P1 registry.
 func Classes() []string {
-	return []string{"GXL-PARSE", "GXL-TYPE", "GXL-PATH", "GXL-EVAL", "GIS-PARSE", "GIS-PATH", "GIS-TYPE", "GIS-EVAL", "GCP-PARSE", "GCP-RESOLVE", "GCP-DEFAULT", "GCP-TYPE", "GCP-EVAL", "PKG", "PKG-W", "ENUM", "ENUM-W", "DINC", "DINC-W", "MCP"}
+	return []string{"GXL-PARSE", "GXL-TYPE", "GXL-PATH", "GXL-EVAL", "GIS-PARSE", "GIS-PATH", "GIS-TYPE", "GIS-EVAL", "GCP-PARSE", "GCP-RESOLVE", "GCP-DEFAULT", "GCP-TYPE", "GCP-EVAL", "PKG", "PKG-W", "ENUM", "ENUM-W", "DINC", "DINC-W", "MCP", "SCOPE"}
 }
 
 var (
+	// ErrSCOPE001 indicates a missing file-local tool binding.
+	ErrSCOPE001 = &Error{code: "SCOPE-001", class: "SCOPE"}
+	// ErrSCOPE002 indicates an invalid or unfrozen scope reference.
+	ErrSCOPE002 = &Error{code: "SCOPE-002", class: "SCOPE"}
+	// ErrSCOPE003 indicates a dependency-closure resource limit.
+	ErrSCOPE003 = &Error{code: "SCOPE-003", class: "SCOPE"}
 	// ErrGXLParse001 is the GXL-PARSE-001 sentinel.
 	ErrGXLParse001 = &Error{code: "GXL-PARSE-001", class: "GXL-PARSE"}
 	// ErrGXLParse002 is the GXL-PARSE-002 sentinel.
@@ -410,6 +418,7 @@ var (
 )
 
 var codeOrder = []string{
+	"SCOPE-001", "SCOPE-002", "SCOPE-003",
 	"GCP-DEFAULT-SUBTREE", "GCP-PARSE-001", "GCP-PARSE-002", "GCP-PARSE-003", "GCP-PARSE-004", "GCP-PARSE-005", "GCP-PARSE-006", "GCP-RESOLVE-001", "GCP-RESOLVE-002", "GCP-RESOLVE-003", "GCP-RESOLVE-004", "GCP-TYPE-001",
 	"GIS-PARSE-003", "GIS-PATH-MISSING",
 	"GXL-EVAL-001", "GXL-EVAL-002", "GXL-EVAL-003", "GXL-EVAL-004", "GXL-PARSE-001", "GXL-PARSE-002", "GXL-PARSE-003", "GXL-PARSE-004", "GXL-PARSE-005", "GXL-PARSE-006", "GXL-PARSE-007", "GXL-PARSE-008", "GXL-PARSE-009", "GXL-PARSE-010", "GXL-PATH-001", "GXL-PATH-002", "GXL-PATH-003", "GXL-PATH-004", "GXL-TYPE-001", "GXL-TYPE-002", "GXL-TYPE-003", "GXL-TYPE-004", "GXL-TYPE-005",
@@ -424,6 +433,7 @@ var codeOrder = []string{
 }
 
 var classSentinels = map[string]*Error{
+	"SCOPE":     {class: "SCOPE"},
 	"GXL-PARSE": {class: "GXL-PARSE"}, "GXL-TYPE": {class: "GXL-TYPE"}, "GXL-PATH": {class: "GXL-PATH"}, "GXL-EVAL": {class: "GXL-EVAL"},
 	"GIS-PARSE": {class: "GIS-PARSE"}, "GIS-PATH": {class: "GIS-PATH"}, "GIS-TYPE": {class: "GIS-TYPE"}, "GIS-EVAL": {class: "GIS-EVAL"},
 	"GCP-PARSE": {class: "GCP-PARSE"}, "GCP-RESOLVE": {class: "GCP-RESOLVE"}, "GCP-DEFAULT": {class: "GCP-DEFAULT"}, "GCP-TYPE": {class: "GCP-TYPE"}, "GCP-EVAL": {class: "GCP-EVAL"},
@@ -433,6 +443,7 @@ var classSentinels = map[string]*Error{
 }
 
 var sentinels = map[string]*Error{
+	"SCOPE-001": ErrSCOPE001, "SCOPE-002": ErrSCOPE002, "SCOPE-003": ErrSCOPE003,
 	"GXL-PARSE-001": ErrGXLParse001, "GXL-PARSE-002": ErrGXLParse002, "GXL-PARSE-003": ErrGXLParse003, "GXL-PARSE-004": ErrGXLParse004, "GXL-PARSE-005": ErrGXLParse005, "GXL-PARSE-006": ErrGXLParse006, "GXL-PARSE-007": ErrGXLParse007, "GXL-PARSE-008": ErrGXLParse008, "GXL-PARSE-009": ErrGXLParse009, "GXL-PARSE-010": ErrGXLParse010,
 	"GXL-PATH-001": ErrGXLPath001, "GXL-PATH-002": ErrGXLPath002, "GXL-PATH-003": ErrGXLPath003, "GXL-PATH-004": ErrGXLPath004,
 	"GXL-TYPE-001": ErrGXLType001, "GXL-TYPE-002": ErrGXLType002, "GXL-TYPE-003": ErrGXLType003, "GXL-TYPE-004": ErrGXLType004, "GXL-TYPE-005": ErrGXLType005,

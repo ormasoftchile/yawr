@@ -86,6 +86,8 @@ func (p *impl) Plan(ctx context.Context, rb *parser.ParsedRunbook) (*engine.Exec
 		}
 	}
 
+	schema.CaptureIncludeAliases(rb.Runbook)
+
 	// Do not dispatch a partially wired typed invocation. Remove this draft
 	// capability guard only with durable root/frame publication integration.
 	if err := typedRuntimeAvailability(rb.Runbook); err != nil {
@@ -107,6 +109,17 @@ func (p *impl) Plan(ctx context.Context, rb *parser.ParsedRunbook) (*engine.Exec
 		lazyAt:    make(map[string]string),
 		dynamicAt: make(map[string]bool),
 	}
+	scopes := engine.ToolScopesFromContext(ctx)
+	if scopes != nil {
+		if !scopes.HasScope(rb.Runbook.LexicalScopeID) {
+			return nil, fmt.Errorf("tool scope: parsed runbook has no frozen lexical owner")
+		}
+		if err := ValidateScopedFlowBeforePlanning(rb.Runbook.Flow, scopes, rb.Runbook.LexicalScopeID); err != nil {
+			return nil, err
+		}
+	} else if rb.Runbook.LexicalScopeID != "" {
+		return nil, fmt.Errorf("tool scope: parsed runbook requires immutable scopes")
+	}
 
 	w := &flowwalk.Walker{
 		Loader:   &loaderAdapter{l: p.loader},
@@ -123,6 +136,7 @@ func (p *impl) Plan(ctx context.Context, rb *parser.ParsedRunbook) (*engine.Exec
 	}
 
 	plan := &engine.ExecutionPlan{
+		ToolScopes: scopes, RootScopeID: rb.Runbook.LexicalScopeID,
 		RunbookPath:      rb.Source,
 		Steps:            v.out,
 		Tools:            v.tools,
@@ -137,6 +151,10 @@ func (p *impl) Plan(ctx context.Context, rb *parser.ParsedRunbook) (*engine.Exec
 			RunbookContentHash: runbookContentHash, Regions: rb.Runbook.Regions,
 			Extensions: rb.Runbook.Extensions, Profile: p.profile,
 		},
+	}
+	if scopes != nil {
+		plan.Tools = nil
+		plan.Metadata.CatalogDigest = scopes.Export().CatalogDigest
 	}
 	if _, err := validatePlan(plan); err != nil {
 		return nil, err
@@ -246,16 +264,17 @@ func (v *planVisitor) EnterStep(ctx flowwalk.Ctx, s *schema.Step) error {
 // EnterIterate emits the iterate parent ResolvedStep and pushes body depth.
 func (v *planVisitor) EnterIterate(ctx flowwalk.Ctx, iter *schema.IterateNode) error {
 	v.out = append(v.out, engine.ResolvedStep{
-		ID:           iter.ID,
-		Kind:         "iterate",
-		Spec:         iter,
-		Depth:        v.execDepth,
-		NestDepth:    v.displayDepth,
-		DisplayOrder: v.nextDisplayOrder(),
-		Origin:       ctx.Origin,
-		ParentID:     ctx.ParentID,
-		ParentKind:   ctx.ParentKind,
-		BranchLabel:  ctx.BranchLabel,
+		LexicalScopeID: planningDocumentScope(ctx),
+		ID:             iter.ID,
+		Kind:           "iterate",
+		Spec:           iter,
+		Depth:          v.execDepth,
+		NestDepth:      v.displayDepth,
+		DisplayOrder:   v.nextDisplayOrder(),
+		Origin:         ctx.Origin,
+		ParentID:       ctx.ParentID,
+		ParentKind:     ctx.ParentKind,
+		BranchLabel:    ctx.BranchLabel,
 	})
 	v.execDepth++
 	v.displayDepth++
@@ -274,16 +293,17 @@ func (v *planVisitor) LeaveIterate(_ flowwalk.Ctx, _ *schema.IterateNode) error 
 // (which reset depth at each branch start via flattenNodes).
 func (v *planVisitor) EnterParallel(ctx flowwalk.Ctx, par *schema.ParallelNode) error {
 	v.out = append(v.out, engine.ResolvedStep{
-		ID:           par.ID,
-		Kind:         "parallel",
-		Spec:         par,
-		Depth:        v.execDepth,
-		NestDepth:    v.displayDepth,
-		DisplayOrder: v.nextDisplayOrder(),
-		Origin:       ctx.Origin,
-		ParentID:     ctx.ParentID,
-		ParentKind:   ctx.ParentKind,
-		BranchLabel:  ctx.BranchLabel,
+		LexicalScopeID: planningDocumentScope(ctx),
+		ID:             par.ID,
+		Kind:           "parallel",
+		Spec:           par,
+		Depth:          v.execDepth,
+		NestDepth:      v.displayDepth,
+		DisplayOrder:   v.nextDisplayOrder(),
+		Origin:         ctx.Origin,
+		ParentID:       ctx.ParentID,
+		ParentKind:     ctx.ParentKind,
+		BranchLabel:    ctx.BranchLabel,
 	})
 	return nil
 }
@@ -418,6 +438,17 @@ func (v *planVisitor) BeforeInclude(ctx flowwalk.Ctx, s *schema.Step) (bool, err
 // entirely at run time.
 func (v *planVisitor) EnterInclude(ctx flowwalk.Ctx, s *schema.Step, childRb *parser.ParsedRunbook) (bool, error) {
 	if childRb != nil {
+		schema.CaptureIncludeAliases(childRb.Runbook)
+	}
+	if scopes := engine.ToolScopesFromContext(v.ctx); scopes != nil && childRb != nil {
+		if childRb.Runbook == nil || childRb.Runbook.LexicalScopeID != s.IncludeSpec.TargetScopeID {
+			return false, fmt.Errorf("tool scope: loaded include differs from frozen target owner")
+		}
+		if err := ValidateScopedFlowBeforePlanning(childRb.Runbook.Flow, scopes, childRb.Runbook.LexicalScopeID); err != nil {
+			return false, err
+		}
+	}
+	if childRb != nil {
 		if err := typedRuntimeAvailability(childRb.Runbook); err != nil {
 			return false, err
 		}
@@ -425,7 +456,8 @@ func (v *planVisitor) EnterInclude(ctx flowwalk.Ctx, s *schema.Step, childRb *pa
 	if _, ok := v.dynamicAt[s.ID]; ok {
 		rs := v.makeStep(ctx, s, "")
 		rs.Spec = &schema.IncludeSpec{
-			Include: s.IncludeSpec.Include,
+			TargetScopeID: s.IncludeSpec.TargetScopeID,
+			Include:       s.IncludeSpec.Include,
 		}
 		v.out = append(v.out, rs)
 		// No depth push: dynamic sites have no eager children.
@@ -435,6 +467,7 @@ func (v *planVisitor) EnterInclude(ctx flowwalk.Ctx, s *schema.Step, childRb *pa
 	if lazyPath, ok := v.lazyAt[s.ID]; ok {
 		rs := v.makeStep(ctx, s, lookupIncludeAlias(ctx.Imports, s.IncludeSpec.Include.Runbook))
 		rs.Spec = &schema.IncludeSpec{
+			TargetScopeID:   s.IncludeSpec.TargetScopeID,
 			Include:         s.IncludeSpec.Include,
 			LazyRunbookPath: lazyPath,
 		}
@@ -474,6 +507,7 @@ func (v *planVisitor) EnterInclude(ctx flowwalk.Ctx, s *schema.Step, childRb *pa
 	// Replace the spec with one carrying the resolved child flow so the
 	// IncludeExecutor can dispatch via SubStepRunner.
 	rs.Spec = &schema.IncludeSpec{
+		TargetScopeID:       s.IncludeSpec.TargetScopeID,
 		Include:             s.IncludeSpec.Include,
 		ResolvedSteps:       childRb.Runbook.Flow,
 		ResolvedRunbookPath: childRb.Source,
@@ -549,6 +583,11 @@ func (v *planVisitor) LeaveInclude(_ flowwalk.Ctx, s *schema.Step, _ *parser.Par
 // depth / displayDepth and the given ctx for parent linkage. includeAlias
 // is filled only for include parent steps.
 func (v *planVisitor) makeStep(ctx flowwalk.Ctx, s *schema.Step, includeAlias string) engine.ResolvedStep {
+	if s.IncludeAlias != "" {
+		includeAlias = s.IncludeAlias
+	} else if s.Type == schema.StepTypeInclude {
+		s.IncludeAlias = includeAlias
+	}
 	return engine.ResolvedStep{
 		ID:               s.ID,
 		Name:             displayName(s),
@@ -560,6 +599,8 @@ func (v *planVisitor) makeStep(ctx flowwalk.Ctx, s *schema.Step, includeAlias st
 		When:             s.When,
 		Retry:            s.Retry,
 		Scope:            s.Scope,
+		LexicalScopeID:   s.LexicalScopeID,
+		ToolBindingID:    s.ToolBindingID,
 		Export:           s.Export,
 		Contract:         s.Contract,
 		RequiredEvidence: s.RequiredEvidence,
@@ -596,6 +637,23 @@ func (v *planVisitor) resolveTool(step *schema.Step) error {
 	}
 	name := step.ToolCall.Tool.Name
 	action := step.ToolCall.Tool.Action
+	if scopes := engine.ToolScopesFromContext(v.ctx); scopes != nil {
+		bound, err := scopes.Resolve(step.LexicalScopeID, name, action)
+		if err != nil {
+			return err
+		}
+		if bound.BindingID != step.ToolBindingID {
+			return fmt.Errorf("tool scope: planning binding mismatch")
+		}
+		def := bound.Definition.Declaration
+		if def == nil {
+			return fmt.Errorf("tool scope: planning requires frozen declaration for %q", name)
+		}
+		if err := def.ValidatePresentations(); err != nil {
+			return err
+		}
+		return checkToolEnvironmentPreflight(step.ID, def, v.p.profile)
+	}
 	def, err := v.p.tools.Lookup(v.ctx, name, action)
 	if err != nil {
 		return &plannerPkg.PlanError{
@@ -623,16 +681,9 @@ func displayName(step *schema.Step) string {
 	return step.ID
 }
 
-// lookupIncludeAlias reverse-looks-up the alias for an include path in an
-// imports map. The map is alias→path; we want path→alias. Returns "" if
-// no alias matches.
+// lookupIncludeAlias uses only the declaring document's import labels.
 func lookupIncludeAlias(imports map[string]string, includePath string) string {
-	for alias, path := range imports {
-		if path == includePath {
-			return alias
-		}
-	}
-	return ""
+	return schema.LocalIncludeAlias(imports, includePath)
 }
 
 // rawSpec is a fallback StepSpec for steps that lack a populated spec pointer.

@@ -1,0 +1,21 @@
+apiVersion: yawr.runbook/v1
+id: lexical-dynamic
+name: Dynamically selected children own their package dependencies
+outputs:
+  scenario: {type: string, value: lexical-dynamic}
+requires:
+  - {package: scope-children, version: "^1.0.0", path: catalog}
+vars:
+  targets: "scope-children/left,scope-children/right,scope-children/left"
+flow:
+  - iterate:
+      id: investigate
+      over: targets
+      as: target
+      steps:
+        - step:
+            id: enter_child
+            type: include
+            include: {runbook_ref: "${target}", resolve_from: catalog}
+  - step: {id: returned_to_router, type: noop}
+  - step: {id: results, type: results, title: Results}

@@ -185,13 +185,18 @@ export function decodeCapabilities(value: unknown, version: 1 | 3 = 1): void {
   const resolverVersion = version === 1 ? 'yawr.core-binding/v1' : `core-binding/v${version}`;
   if (v.schema_version !== schemaVersion || v.resolver_version !== resolverVersion) throw new Error('incompatible-presentation-helper');
   for (const key of ['execution_plan_read', 'execution_plan_write']) {
-    const expected = ['execution-plan/v3'];
+    const expected = version === 3 ? ['execution-plan/v3', 'execution-plan/v4'] : ['execution-plan/v3'];
     const versions = list(v[key], text, expected.length);
     if (versions.length !== expected.length || new Set(versions).size !== expected.length ||
-        !expected.every(item => versions.includes(item))) throw new Error('incompatible-execution-runtime');
+        !expected.every(item => versions.includes(item))) {
+      throw new Error('incompatible-execution-runtime: install the matching YAWR runtime with lexical tool scope support');
+    }
   }
   if (version === 3) {
     const features = list(v.capabilities, text), graphs = list(v.graph_read, text);
+    if (!features.includes('yawr.lexical-tool-scopes/v1')) {
+      throw new Error('incompatible-execution-runtime: install the matching YAWR runtime with lexical tool scope support');
+    }
     if (!['yawr.typed-results/v1', 'yawr.run-results-chunks/v1'].every(item => features.includes(item)) ||
         new Set(features).size !== features.length || graphs.length !== 2 || !graphs.includes('1') || !graphs.includes('3') ||
         v.authoring_request !== 'authoring-request/v3' || v.expression_request !== 'yawr.expression-resolve/v1' ||

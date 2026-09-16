@@ -1,0 +1,5 @@
+apiVersion: yawr.tool-package/v1
+meta: {name: scope-router, version: "1.0.0"}
+exports:
+  tools:
+    - {id: router, path: router.tool.yaml}

@@ -23,6 +23,16 @@ import (
 
 // validatePlan parses every GXL, GIS, and GCP-bearing field in plan.
 func validatePlan(plan *engine.ExecutionPlan) (*engine.ValidatedPlan, error) {
+	if err := ValidateToolScopes(plan); err != nil {
+		return nil, err
+	}
+	if plan.ToolScopes != nil {
+		hash, err := ScopedPlanHash(plan)
+		if err != nil {
+			return nil, err
+		}
+		plan.Metadata.PlanHash = hash
+	}
 	vp := &engine.ValidatedPlan{
 		Source:          plan,
 		RunbookID:       plan.Metadata.RunbookID,
@@ -39,7 +49,10 @@ func validatePlan(plan *engine.ExecutionPlan) (*engine.ValidatedPlan, error) {
 	}
 
 	var errs []engine.PlanValidationError
-	for _, tool := range plan.Tools {
+	for _, tool := range validationToolDefinitions(plan) {
+		if tool == nil {
+			continue
+		}
 		if err := tool.ValidatePresentations(); err != nil {
 			errs = append(errs, validationErr("", "presentation", "", err))
 		}
@@ -317,8 +330,8 @@ func stepBindsCaptureOutput(vp *engine.ValidatedPlan, step engine.ResolvedStep, 
 	if !ok || vp == nil || vp.Source == nil {
 		return false
 	}
-	toolDef, ok := vp.Source.Tools[spec.Tool.Name]
-	if !ok || toolDef == nil {
+	toolDef := stepToolDefinition(vp.Source, step, spec)
+	if toolDef == nil {
 		return false
 	}
 	action, ok := toolDef.Actions[spec.Tool.Action]

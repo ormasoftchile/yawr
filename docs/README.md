@@ -14,3 +14,8 @@ when a summary here is incomplete.
 
 Future work belongs under `docs/proposals` only while it is unresolved. A
 proposal is not a supported feature.
+
+## Proposals and work in progress
+
+- [Included-runbook dependencies and lexical tool scopes](proposals/included-runbook-dependency-scopes.md)
+  - Approved for implementation; not yet a supported feature.

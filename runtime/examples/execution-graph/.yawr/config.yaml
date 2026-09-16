@@ -1,0 +1,5 @@
+apiVersion: yawr.config/v1
+requires:
+  - package: graph-demo
+    version: "^1.0.0"
+    path: ./catalog

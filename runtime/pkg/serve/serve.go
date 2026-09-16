@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"time"
 
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
@@ -28,6 +29,10 @@ type ServerConfig struct {
 
 	// Planner resolves parsed runbooks into execution plans.
 	Planner planner.Planner
+
+	// PrepareRun atomically captures dependencies and returns a scoped plan.
+	// Nil preserves the explicit legacy Parser/Planner integration.
+	PrepareRun func(context.Context, string) (*engine.ExecutionPlan, *parser.ParsedRunbook, error)
 
 	// WorkspaceRoot is the root used for per-run package catalog resolution.
 	// When empty, the server process working directory is used.

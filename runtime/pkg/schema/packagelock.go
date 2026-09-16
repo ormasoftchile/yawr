@@ -42,6 +42,8 @@ const PackageLockAPIVersion = "yawr.package-lock/v1"
 // appended per successful resolution, in resolution order, and persisted
 // in PlanMetadata.DynamicIncludes via engine.RunStore.SaveState.
 type LockedDynamicInclude struct {
+	SchemaVersion      string                        `yaml:"-" json:"schema_version,omitempty"`
+	TargetScopeID      string                        `yaml:"-" json:"target_scope_id,omitempty"`
 	StepID             string                        `yaml:"step_id"          json:"step_id"`
 	QualifiedNodeID    string                        `yaml:"qualified_node_id,omitempty" json:"qualified_node_id,omitempty"`
 	Invocation         int                           `yaml:"invocation,omitempty" json:"invocation,omitempty"`

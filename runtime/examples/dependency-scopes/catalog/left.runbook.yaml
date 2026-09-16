@@ -1,0 +1,17 @@
+apiVersion: yawr.runbook/v1
+id: lexical-left
+name: Left child owns its query binding
+requires:
+  - {package: scope.left, version: "^1.0.0", path: tools/left}
+toolRefs:
+  - {name: query, package: scope.left}
+flow:
+  - step:
+      id: query
+      type: tool
+      tool: {name: query, action: read}
+      capture: {observed: outputs.marker}
+  - step:
+      id: verify_left
+      type: assert
+      assert: [{type: eq, subject: "${observed}", expected: left}]

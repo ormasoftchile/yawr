@@ -39,6 +39,56 @@ types, IDs, statuses, event kinds, schema keys, or opaque interaction tokens.
 Clients reconcile terminal state by exact `node_id`; they must not suffix-match
 `step_id`, because repeated included runbooks may contain the same authored ID.
 
+## Optional live execution graphs
+
+Clients opt in using `--require-capabilities yawr.run-graph/v1` (comma-separated
+with other required capabilities). Older runtimes reject this before execution;
+clients must not silently fall back to an incomplete dynamic graph.
+Without this capability the existing frame stream is unchanged.
+
+On dynamic include resolution, the runtime projects cumulative graphs from the
+frozen execution plan and pinned child closures, including earlier invocations.
+It never reloads current source definitions to describe an executed child.
+
+`run.graph.chunk` carries:
+
+```json
+{
+  "version": "yawr.stdio/v1",
+  "type": "run.graph.chunk",
+  "runID": "run-id",
+  "revision": 1,
+  "digest": "sha256:<digest-of-complete-decoded-body>",
+  "offset": 0,
+  "totalBytes": 12345,
+  "data": "<base64>"
+}
+```
+
+The complete UTF-8 body is `{ "document": <GraphJSON>, "nodeIDs": [...] }`.
+`nodeIDs` identifies the exact dynamic occurrence nodes to merge into the
+existing static preview; IDs are opaque, not inferred from a prefix or filename.
+The revision increases with committed dynamic resolutions and may jump when a
+snapshot already includes multiple resolutions. Maximum decoded body: 32 MiB;
+maximum decoded chunk: 192 KiB. Each wire frame remains below the existing 1 MiB
+limit. Clients require contiguous offsets, one revision/digest/length per
+assembly, a matching SHA-256, valid GraphJSON, and unique existing node bindings.
+Partial graphs must never be displayed. Content is redacted before base64
+encoding; transport IDs remain intact.
+
+The graph is delivered before dependent child events or interactions.
+Child event payloads retain their original `qualified_node_id` and occurrence
+metadata and add `graph_node_id` for that exact retained invocation.
+`interaction.pending.interaction.nodeID` uses the corresponding graph node;
+run/turn IDs and opaque answer tokens are unchanged. The client must not
+suffix-match a repeated child step or substitute an ancestor.
+
+Graph production runs in the protocol consumer, not the execution scheduler.
+Clients may pace visual CURRENT transitions, but must not delay runtime work,
+Results persistence, cancellation or interaction answers. Graph changes do not
+flush a successful visual backlog. History remains until the client explicitly
+resets/disposes its run view.
+
 ## Client-to-Yawr commands
 
 Answer a pending interaction:

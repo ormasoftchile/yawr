@@ -6,15 +6,7 @@ import (
 	"testing"
 )
 
-// TestRun_IncludeClosure_ChildRequires_FailClosed_PKG017 is a §5
-// regression test: an included
-// runbook that declares its own requires: is not lexically merged into
-// the frozen global package set by this runtime revision. Rather than
-// silently resolving it against the root's dynamically-scoped registry
-// This covers the fail-closed include resolution mode.
-// §Includes, Lexical Scoping, and Global Package Set rejects), the run
-// MUST fail closed with a typed, diagnosable PKG-017.
-func TestRun_IncludeClosure_ChildRequires_FailClosed_PKG017(t *testing.T) {
+func TestRun_IncludeClosure_InvalidChildRequiresFailsPreflight(t *testing.T) {
 	dir := makeWorkDir(t)
 	writeFile(t, filepath.Join(dir, "child.runbook.yaml"), `$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
 apiVersion: yawr.runbook/v1
@@ -49,23 +41,18 @@ flow:
 	chdirForTest(t, dir)
 
 	out := captureStderr(t, func() int {
-		return runRun([]string{"runbook.yaml", "--output", "quiet"})
+		return runRun([]string{"runbook.yaml", "--output", "quiet", "--trace", "trace.jsonl"})
 	})
-	if runLast == exitSuccess {
-		t.Fatalf("expected non-zero exit for an included runbook declaring requires:, got 0; output: %s", out)
+	if runLast != exitValidation {
+		t.Fatalf("expected validation failure for missing child package, got %d; output: %s", runLast, out)
 	}
-	if !strings.Contains(out, "PKG-017") {
-		t.Fatalf("expected PKG-017 in output, got: %s", out)
+	if !strings.Contains(out, "PKG-001") || !strings.Contains(out, "acme.child-tools") {
+		t.Fatalf("expected missing child package diagnostic, got: %s", out)
 	}
+	assertNoStructuredDispatch(t)
 }
 
-// TestRun_IncludeClosure_ChildToolRefs_FailClosed_PKG017 is a §5
-// regression test: an included runbook that declares its own toolRefs: is
-// the "dynamic scoping" case the ratified spec explicitly rejects (a
-// child runbook's tool-name meaning must not depend on who included it);
-// this runtime revision fails closed with PKG-017 rather than silently
-// binding the child's toolRefs into the shared, process-global registry.
-func TestRun_IncludeClosure_ChildToolRefs_FailClosed_PKG017(t *testing.T) {
+func TestRun_IncludeClosure_InvalidChildToolRefsFailsPreflight(t *testing.T) {
 	dir := makeWorkDir(t)
 	writeFile(t, filepath.Join(dir, "child.runbook.yaml"), `$schema: "https://schemas.yawr.dev/yawr.runbook/v1.json"
 apiVersion: yawr.runbook/v1
@@ -99,12 +86,13 @@ flow:
 	chdirForTest(t, dir)
 
 	out := captureStderr(t, func() int {
-		return runRun([]string{"runbook.yaml", "--output", "quiet"})
+		return runRun([]string{"runbook.yaml", "--output", "quiet", "--trace", "trace.jsonl"})
 	})
-	if runLast == exitSuccess {
-		t.Fatalf("expected non-zero exit for an included runbook declaring toolRefs:, got 0; output: %s", out)
+	if runLast != exitValidation {
+		t.Fatalf("expected validation failure for unbound child tool, got %d; output: %s", runLast, out)
 	}
-	if !strings.Contains(out, "PKG-017") {
-		t.Fatalf("expected PKG-017 in output, got: %s", out)
+	if !strings.Contains(out, "PKG-011") || !strings.Contains(out, "sometool") {
+		t.Fatalf("expected child-local tool binding diagnostic, got: %s", out)
 	}
+	assertNoStructuredDispatch(t)
 }

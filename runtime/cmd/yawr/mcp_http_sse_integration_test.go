@@ -126,7 +126,7 @@ actions:
 %s`, server.URL, descriptors.String()))
 			writeFile(t, filepath.Join(dir, "profile.yaml"), `apiVersion: yawr.runtime-profile/v1
 id: synthetic
-context: test
+context: headless-server
 attendance: unattended
 approval:
   scope: {allow_read: true, allow_mutating: false, allow_destructive: false}

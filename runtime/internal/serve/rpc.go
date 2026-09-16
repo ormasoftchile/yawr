@@ -847,11 +847,20 @@ func (s *Server) loadPlan(ctx context.Context, path string) (*engine.ExecutionPl
 // vars (a copy if userVars was nil; otherwise userVars mutated in place
 // and returned for convenience).
 func (s *Server) loadPlanAndSeed(ctx context.Context, path string, userVars map[string]string) (*engine.ExecutionPlan, *parser.ParsedRunbook, map[string]string, []parser.ParseWarning, error) {
-	rb, err := s.parser.Parse(ctx, path)
-	if err != nil {
-		return nil, nil, nil, nil, err
+	var rb *parser.ParsedRunbook
+	var plan *engine.ExecutionPlan
+	var err error
+	if s.cfg.PrepareRun != nil {
+		plan, rb, err = s.cfg.PrepareRun(ctx, path)
+		if err == nil && (plan == nil || rb == nil || rb.Runbook == nil) {
+			err = errors.New("serve: run preparation must return a plan and its captured runbook")
+		}
+	} else {
+		rb, err = s.parser.Parse(ctx, path)
+		if err == nil {
+			plan, err = s.planner.Plan(ctx, rb)
+		}
 	}
-	plan, err := s.planner.Plan(ctx, rb)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

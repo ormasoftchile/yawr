@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ormasoftchile/yawr/runtime/internal/adapter"
 	internalparser "github.com/ormasoftchile/yawr/runtime/internal/parser"
 	internalplanner "github.com/ormasoftchile/yawr/runtime/internal/planner"
-	internaltool "github.com/ormasoftchile/yawr/runtime/internal/tool"
 	"github.com/ormasoftchile/yawr/runtime/pkg/engine"
 	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/expand"
@@ -43,7 +43,7 @@ import (
 //   - --package-map wins at YAML selection (which tool definition/package binds).
 //   - --profile parameterizes execution after selection.
 //   - They compose, never compete.
-//   - plan.Tools (post-catalog, post-package-map) is the source of truth.
+//   - immutable file-local bindings are the source of truth.
 func runPlan(args []string) int {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -96,112 +96,12 @@ func runPlan(args []string) int {
 		return exitRuntime
 	}
 
-	// plannerToolRegistry is the schema-level registry the planner uses for
-	// tool/action lookups. For plan we don't need a runtime registry at all.
-	registry, err := newToolRegistry(".")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return exitRuntime
-	}
-
-	parsed, err := parserImpl.Parse(ctx, runbookPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return exitValidation
-	}
-	for _, w := range parsed.Warnings {
-		fmt.Fprintf(os.Stderr, "yawr: warning: %s: %s\n", w.Field, w.Message)
-	}
-
-	// Catalog building + toolRef binding.
-	// Duplicated from run.go (rather than extracted) to avoid destabilising
-	// the run path. Only the planner-schema registry is populated here;
-	// no runtime registry is needed for plan-only analysis.
-	var builtCatalog *pkgcatalog.Catalog
-	if parsed.Runbook != nil {
-		workspaceRoot, wderr := os.Getwd()
-		if wderr != nil {
-			fmt.Fprintln(os.Stderr, wderr)
-			return exitRuntime
-		}
-		projCfg, cfgErr := loadProjectConfig(workspaceRoot)
-		if cfgErr != nil {
-			fmt.Fprintln(os.Stderr, cfgErr)
-			return exitValidation
-		}
-		var projectRequires []*schema.PackageRequirement
-		var projectToolPaths []string
-		if projCfg != nil {
-			projectRequires = projCfg.Requires
-			projectToolPaths = projCfg.ToolPaths
-		}
-		var overrideRequires []*schema.PackageRequirement
-		var overrideToolPaths []string
-		if *packageMapPath != "" {
-			pmCfg, pmErr := loadPackageMap(*packageMapPath)
-			if pmErr != nil {
-				fmt.Fprintln(os.Stderr, pmErr)
-				return exitValidation
-			}
-			if pmCfg != nil {
-				overrideRequires = pmCfg.Requires
-				overrideToolPaths = pmCfg.ToolPaths
-			}
-		}
-		mergedRequires, _ := mergePackageBindings(projectRequires, overrideRequires)
-		mergedToolPaths := mergeToolPaths(projectToolPaths, overrideToolPaths)
-
-		catOpts := adapter.PackageCatalogOptions{
-			WorkspaceRoot:    workspaceRoot,
-			Builtins:         internaltool.NewBuiltinRegistry().All(),
-			ProjectRequires:  mergedRequires,
-			ProjectToolPaths: mergedToolPaths,
-		}
-		cat, catErrs := adapter.BuildPackageCatalog(catOpts, runbookPath, parsed.Runbook.Requires)
-		fatalCatErrs, warnCatErrs := errkit.SplitWarnings(catErrs)
-		if len(fatalCatErrs) > 0 {
-			for _, e := range fatalCatErrs {
-				fmt.Fprintln(os.Stderr, e)
-			}
-			return exitValidation
-		}
-		for _, e := range warnCatErrs {
-			fmt.Fprintln(os.Stderr, e)
-		}
-		builtCatalog = cat
-
-		if len(parsed.Runbook.ToolRefs) > 0 {
-			defs, bindErrs := adapter.ResolveToolRefsViaCatalog(cat, runbookPath, parsed.Runbook.ToolRefs)
-			fatalBind, warnBind := errkit.SplitWarnings(bindErrs)
-			if len(fatalBind) > 0 {
-				for _, e := range fatalBind {
-					fmt.Fprintln(os.Stderr, e)
-				}
-				return exitValidation
-			}
-			for _, e := range warnBind {
-				fmt.Fprintln(os.Stderr, e)
-			}
-			// Populate the planner schema registry only — no runtime registry
-			// is needed for static analysis.
-			for _, def := range defs {
-				schemaDef := schemaToolDefFromRuntime(def)
-				for action := range schemaDef.Actions {
-					registry.tools[schemaDef.Name+"/"+action] = schemaDef
-				}
-			}
-		}
-	}
-
-	// penv carries everything needed to re-run Plan() with different profiles,
-	// enabling both the --show-profiles scan and the config/no-binding-for-profile
-	// alternatives note without repeating catalog/registry setup.
 	penv := &plannerEnv{
-		ctx:    ctx,
-		parsed: parsed,
-		reg:    registry,
-		expand: expandDefault,
-		loader: &fileRunbookLoader{parser: parserImpl},
+		ctx: ctx, expand: expandDefault,
+		prepare: func(profile *schema.RuntimeProfile) (*adapter.PreparedScopedRun, error) {
+			prepared, _, err := prepareScopedCLI(ctx, parserImpl, runbookPath, *packageMapPath, profile)
+			return prepared, err
+		},
 	}
 
 	// ── --show-profiles mode ──────────────────────────────────────────────
@@ -209,17 +109,26 @@ func runPlan(args []string) int {
 	// binding for all toolRefs in this runbook? Always exits 0 (zero matches
 	// is a valid informative answer, not a failure).
 	if *showProfileDirs != "" {
+		prepared, err := penv.prepare(nil)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return exitValidation
+		}
+		printPreparedPlanWarnings(prepared)
 		searchDirs := splitProfileDirs(*showProfileDirs)
 		return runShowProfiles(ctx, penv, runbookPath, searchDirs, *outputFormat)
 	}
 
 	// ── Primary plan run ──────────────────────────────────────────────────
-	routeDocument, routeHashErr := (&graphdoc.Builder{Loader: &cliLoader{p: parserImpl}, Recurse: true}).Build(ctx, parsed)
-	if routeHashErr != nil {
-		fmt.Fprintln(os.Stderr, routeHashErr)
-		return exitValidation
+	prepared, planErr := penv.prepare(runtimeProfile)
+	var plan *engine.ExecutionPlan
+	if planErr == nil {
+		printPreparedPlanWarnings(prepared)
+		planErr = validateDeclaredPlanProfile(prepared)
+		if planErr == nil {
+			plan, planErr = prepared.Plan(ctx, expand.Policy{Default: expandDefault})
+		}
 	}
-	plan, planErr := penv.planWithProfile(runtimeProfile)
 	if planErr != nil {
 		// Collect alternative profiles that would work, for the
 		// config/no-binding-for-profile diagnostic.
@@ -239,12 +148,17 @@ func runPlan(args []string) int {
 	}
 
 	// Plan succeeded — render the full output.
-	routeTestHash, routeHashErr := routeTestPlanHash(routeDocument.Hash, plan, builtCatalog, runtimeProfile)
+	routeDocument, routeHashErr := (&graphdoc.Builder{Loader: prepared.Loader, Recurse: true}).Build(ctx, prepared.Root)
 	if routeHashErr != nil {
 		fmt.Fprintln(os.Stderr, routeHashErr)
 		return exitValidation
 	}
-	out := assemblePlanOutput(plan, runtimeProfile, builtCatalog)
+	routeTestHash, routeHashErr := routeTestPlanHash(routeDocument.Hash, plan, prepared.Catalog, prepared.Profile)
+	if routeHashErr != nil {
+		fmt.Fprintln(os.Stderr, routeHashErr)
+		return exitValidation
+	}
+	out := assemblePlanOutput(plan, prepared.Profile, prepared.Catalog)
 	out.RouteTestHash = routeTestHash
 	if *outputFormat == outputJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -254,6 +168,51 @@ func runPlan(args []string) int {
 		renderPlanOutputText(os.Stdout, out)
 	}
 	return exitSuccess
+}
+
+func printPreparedPlanWarnings(prepared *adapter.PreparedScopedRun) {
+	for _, warning := range prepared.Root.Warnings {
+		fmt.Fprintf(os.Stderr, "yawr: warning: %s: %s\n", warning.Field, warning.Message)
+	}
+	for _, warning := range prepared.Warnings {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+}
+
+// Plan reports configuration compatibility for declared toolRefs, including
+// declarations that the current flow does not invoke.
+func validateDeclaredPlanProfile(prepared *adapter.PreparedScopedRun) error {
+	if prepared.Profile == nil {
+		return nil
+	}
+	snapshot := prepared.Scopes.Export()
+	ids := make([]string, 0, len(snapshot.Bindings))
+	for id := range snapshot.Bindings {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		binding := snapshot.Bindings[id]
+		declaration := snapshot.Definitions[binding.DefinitionID].Declaration
+		if declaration == nil {
+			return errkit.New("SCOPE-002", fmt.Sprintf("tool %q has no captured declaration", binding.LogicalName))
+		}
+		if declaration.Governance == nil || len(declaration.Governance.AllowedEnvironments) == 0 {
+			continue
+		}
+		allowed := false
+		for _, environment := range declaration.Governance.AllowedEnvironments {
+			if environment == string(prepared.Profile.Context) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return errkit.New("PLAN-010", fmt.Sprintf("tool %q declared at %s: context %q is not in allowed-environments %v",
+				binding.LogicalName, binding.DeclarationSite, prepared.Profile.Context, declaration.Governance.AllowedEnvironments))
+		}
+	}
+	return nil
 }
 
 // ── Output types ─────────────────────────────────────────────────────────────
@@ -269,6 +228,16 @@ type planOutput struct {
 }
 
 func routeTestPlanHash(graphHash string, plan *engine.ExecutionPlan, catalog *pkgcatalog.Catalog, profile *schema.RuntimeProfile) (string, error) {
+	executableHash := plan.Metadata.PlanHash
+	if plan.ToolScopes != nil {
+		stable := *plan
+		stable.Metadata.PlannedAt = time.Time{}
+		var err error
+		executableHash, err = internalplanner.ScopedPlanHash(&stable)
+		if err != nil {
+			return "", fmt.Errorf("route test: hash scoped executable: %w", err)
+		}
+	}
 	catalogDigest := plan.Metadata.CatalogDigest
 	if catalogDigest == "" {
 		emptyCatalog := sha256.Sum256(nil)
@@ -297,7 +266,7 @@ func routeTestPlanHash(graphHash string, plan *engine.ExecutionPlan, catalog *pk
 		Tools              map[string]*schema.ToolDef `json:"tools"`
 		Profile            *schema.RuntimeProfile     `json:"profile,omitempty"`
 	}{
-		GraphHash: graphHash, ExecutablePlanHash: plan.Metadata.PlanHash,
+		GraphHash: graphHash, ExecutablePlanHash: executableHash,
 		CatalogDigest: catalogDigest, PackageLockDigest: packageLockDigest,
 		Tools: plan.Tools, Profile: profile,
 	}
@@ -322,10 +291,17 @@ type planPreflightJSON struct {
 }
 
 type planToolJSON struct {
-	Name      string `json:"name"`
-	Package   string `json:"package,omitempty"`
-	Transport string `json:"transport,omitempty"`
-	Status    string `json:"status"`
+	Name                string `json:"name"`
+	Package             string `json:"package,omitempty"`
+	Transport           string `json:"transport,omitempty"`
+	Status              string `json:"status"`
+	ScopeID             string `json:"scope_id,omitempty"`
+	BindingID           string `json:"binding_id,omitempty"`
+	DefinitionID        string `json:"definition_id,omitempty"`
+	CanonicalName       string `json:"canonical_name,omitempty"`
+	Source              string `json:"source,omitempty"`
+	DeclarationSite     string `json:"declaration_site,omitempty"`
+	SelectionProvenance string `json:"selection_provenance,omitempty"`
 }
 
 type planActionJSON struct {
@@ -334,6 +310,9 @@ type planActionJSON struct {
 	Classification string `json:"classification"`
 	Outcome        string `json:"outcome"`
 	DenyReason     string `json:"deny_reason,omitempty"`
+	ScopeID        string `json:"scope_id,omitempty"`
+	BindingID      string `json:"binding_id,omitempty"`
+	Source         string `json:"source,omitempty"`
 }
 
 // planErrorJSON is the JSON envelope for a plan-time failure.
@@ -365,6 +344,11 @@ func assemblePlanOutput(
 		}
 	}
 
+	if plan.ToolScopes != nil {
+		appendScopedPlanOutput(&out, plan, profile)
+		return out
+	}
+
 	// Tool bindings (sorted by name for deterministic output).
 	toolNames := make([]string, 0, len(plan.Tools))
 	for name := range plan.Tools {
@@ -381,8 +365,8 @@ func assemblePlanOutput(
 		}
 		if cat != nil {
 			entries := cat.ByBare(name)
-			if len(entries) > 0 {
-				e := entries[len(entries)-1]
+			if len(entries) == 1 {
+				e := entries[0]
 				if e.PackageName != "" {
 					if e.Version != "" {
 						t.Package = e.PackageName + "@" + e.Version
@@ -435,6 +419,59 @@ func assemblePlanOutput(
 	}
 
 	return out
+}
+
+func appendScopedPlanOutput(out *planOutput, plan *engine.ExecutionPlan, profile *schema.RuntimeProfile) {
+	snapshot := plan.ToolScopes.Export()
+	bindingIDs := make([]string, 0, len(snapshot.Bindings))
+	for id := range snapshot.Bindings {
+		bindingIDs = append(bindingIDs, id)
+	}
+	sourceFor := func(scopeID string) string {
+		return snapshot.Documents[snapshot.Scopes[scopeID].DocumentID].SourceIdentity
+	}
+	sort.Slice(bindingIDs, func(i, j int) bool {
+		left, right := snapshot.Bindings[bindingIDs[i]], snapshot.Bindings[bindingIDs[j]]
+		if a, b := sourceFor(left.ScopeID), sourceFor(right.ScopeID); a != b {
+			return a < b
+		}
+		if left.ScopeID != right.ScopeID {
+			return left.ScopeID < right.ScopeID
+		}
+		return left.LogicalName < right.LogicalName
+	})
+	for _, bindingID := range bindingIDs {
+		binding := snapshot.Bindings[bindingID]
+		definition := snapshot.Definitions[binding.DefinitionID]
+		source := sourceFor(binding.ScopeID)
+		pkg := definition.Runtime.PackageName
+		if pkg != "" && definition.PackageVersion != "" {
+			pkg += "@" + definition.PackageVersion
+		}
+		out.Tools = append(out.Tools, planToolJSON{
+			Name: binding.LogicalName, Package: pkg, Transport: string(definition.Runtime.Transport), Status: "ok",
+			ScopeID: binding.ScopeID, BindingID: bindingID, DefinitionID: binding.DefinitionID,
+			CanonicalName: definition.Runtime.Name, Source: source,
+			DeclarationSite: binding.DeclarationSite, SelectionProvenance: binding.SelectionProvenance,
+		})
+		declaration := definition.Declaration
+		actionNames := make([]string, 0, len(declaration.Actions))
+		for name := range declaration.Actions {
+			actionNames = append(actionNames, name)
+		}
+		sort.Strings(actionNames)
+		for _, name := range actionNames {
+			action := declaration.Actions[name]
+			classification := "missing"
+			if action != nil && action.Classification != nil && *action.Classification != "" {
+				classification = *action.Classification
+			}
+			outcome, reason := computeActionApprovalOutcome(profile, declaration.Governance, action)
+			out.Actions = append(out.Actions, planActionJSON{Tool: binding.LogicalName, Action: name,
+				Classification: classification, Outcome: string(outcome), DenyReason: reason,
+				ScopeID: binding.ScopeID, BindingID: bindingID, Source: source})
+		}
+	}
 }
 
 // resolveTransportMode returns the effective transport mode string from a
@@ -566,20 +603,29 @@ func renderPlanErrorJSON(w *os.File, err error, alts []string) {
 
 // ── Profile scan helpers ───────────────────────────────────────────────────────
 
-// plannerEnv carries everything needed to re-run Plan() with different
-// profiles. Building catalog and registry is expensive; we do it once and
-// then swap only the Profile field for each candidate.
+// Each profile analysis gets its own frozen configuration and scope identities.
+// The explicit legacy fields remain for legacy planner test fixtures.
 type plannerEnv struct {
-	ctx    context.Context
-	parsed *parserpkg.ParsedRunbook
-	reg    *plannerToolRegistry
-	expand expand.Mode
-	loader plannerpkg.RunbookLoader
+	prepare func(*schema.RuntimeProfile) (*adapter.PreparedScopedRun, error)
+	ctx     context.Context
+	parsed  *parserpkg.ParsedRunbook
+	reg     *plannerToolRegistry
+	expand  expand.Mode
+	loader  plannerpkg.RunbookLoader
 }
 
-// planWithProfile constructs a fresh planner with the given profile and
-// runs Plan(). The catalog and registry are shared from penv.
+// planWithProfile never reuses scopes frozen for a different profile.
 func (penv *plannerEnv) planWithProfile(profile *schema.RuntimeProfile) (*engine.ExecutionPlan, error) {
+	if penv.prepare != nil {
+		prepared, err := penv.prepare(profile)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateDeclaredPlanProfile(prepared); err != nil {
+			return nil, err
+		}
+		return prepared.Plan(penv.ctx, expand.Policy{Default: penv.expand})
+	}
 	pl := internalplanner.New(plannerpkg.Config{
 		Loader:       penv.loader,
 		Tools:        penv.reg,
@@ -764,6 +810,10 @@ func renderPlanOutputText(w *os.File, r planOutput) {
 				pkg = "workspace"
 			}
 			fmt.Fprintf(w, "  %-*s  %-*s  %-*s  %s\n", nameW, t.Name, pkgW, pkg, transW, t.Transport, t.Status)
+			if t.ScopeID != "" {
+				fmt.Fprintf(w, "    scope: %s; source: %s\n", t.ScopeID, t.Source)
+				fmt.Fprintf(w, "    binding: %s; definition: %s at %s\n", t.BindingID, t.CanonicalName, t.SelectionProvenance)
+			}
 		}
 		fmt.Fprintln(w)
 	}
@@ -796,6 +846,9 @@ func renderPlanOutputText(w *os.File, r planOutput) {
 			outcome = a.Outcome + " (" + a.DenyReason + ")"
 		}
 		fmt.Fprintf(w, "  %-*s  %-*s  %-*s  %s\n", toolW, a.Tool, actionW, a.Action, classW, a.Classification, outcome)
+		if a.ScopeID != "" {
+			fmt.Fprintf(w, "    scope: %s; source: %s\n", a.ScopeID, a.Source)
+		}
 	}
 }
 

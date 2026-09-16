@@ -14,6 +14,10 @@ import (
 )
 
 func (s *Server) contextWithPerRunCatalog(ctx context.Context, plan *engine.ExecutionPlan, parsed *parser.ParsedRunbook, runbookPath string) (context.Context, []parser.ParseWarning, error) {
+	if plan != nil && plan.ToolScopes != nil {
+		ctx = engine.WithToolScopes(ctx, plan.ToolScopes)
+		return internalexecutor.WithRunResolver(ctx, adapter.NewFrozenScopedIncludeResolver()), nil, nil
+	}
 	if parsed == nil || parsed.Runbook == nil {
 		return ctx, nil, nil
 	}
@@ -48,6 +52,8 @@ func (s *Server) contextWithPerRunCatalog(ctx context.Context, plan *engine.Exec
 			return
 		}
 		plan.Metadata.DynamicIncludes = append(plan.Metadata.DynamicIncludes, schema.LockedDynamicInclude{
+			SchemaVersion:      pin.SchemaVersion,
+			TargetScopeID:      pin.TargetScopeID,
 			StepID:             pin.StepID,
 			QualifiedNodeID:    pin.QualifiedNodeID,
 			Invocation:         pin.Invocation,

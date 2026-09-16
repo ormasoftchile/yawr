@@ -2,12 +2,68 @@ package engine
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 )
 
 type toolPresentationKey struct{}
 type committedPresentationToolsKey struct{}
+type planStepPresentationKey struct{}
+
+type stepPresentationIdentity struct{ scope, step string }
+type stepPresentationMetadata struct{ name, includeAlias string }
+
+func WithPlanStepPresentation(ctx context.Context, steps []ResolvedStep) context.Context {
+	metadata := make(map[stepPresentationIdentity]stepPresentationMetadata)
+	if inherited, ok := ctx.Value(planStepPresentationKey{}).(map[stepPresentationIdentity]stepPresentationMetadata); ok {
+		for key, value := range inherited {
+			metadata[key] = value
+		}
+	}
+	for _, step := range steps {
+		metadata[stepPresentationIdentity{step.LexicalScopeID, step.ID}] = stepPresentationMetadata{step.Name, step.IncludeAlias}
+	}
+	return context.WithValue(ctx, planStepPresentationKey{}, metadata)
+}
+
+func ApplyPlanStepPresentation(ctx context.Context, step *ResolvedStep) {
+	metadata, _ := ctx.Value(planStepPresentationKey{}).(map[stepPresentationIdentity]stepPresentationMetadata)
+	if value, ok := metadata[stepPresentationIdentity{step.LexicalScopeID, step.ID}]; ok {
+		step.Name = value.name
+		step.IncludeAlias = value.includeAlias
+	}
+}
+
+func FrozenToolDefinition(plan *ExecutionPlan, step ResolvedStep) (*schema.ToolDef, error) {
+	spec, ok := step.Spec.(*schema.ToolCallSpec)
+	if plan == nil || !ok || spec == nil {
+		return nil, fmt.Errorf("engine: frozen tool definition requires a tool step and plan")
+	}
+	if plan.ToolScopes == nil {
+		if step.LexicalScopeID != "" || step.ToolBindingID != "" {
+			return nil, fmt.Errorf("engine: scoped step has no frozen scope set")
+		}
+		return schema.CloneToolDef(plan.Tools[spec.Tool.Name]), nil
+	}
+	action := spec.Tool.Action
+	if action == "" {
+		action = "run"
+	}
+	bound, err := plan.ToolScopes.Resolve(step.LexicalScopeID, spec.Tool.Name, action)
+	if err != nil {
+		return nil, err
+	}
+	if step.ToolBindingID != bound.BindingID || bound.Definition.Declaration == nil {
+		return nil, fmt.Errorf("engine: frozen tool binding does not match step owner")
+	}
+	return bound.Definition.Declaration, nil
+}
+
 type ToolPresentationBinding struct {
+	ScopeID          string
+	BindingID        string
+	DefinitionID     string
 	ToolID           string
 	Action           string
 	Definition       *schema.ToolDef

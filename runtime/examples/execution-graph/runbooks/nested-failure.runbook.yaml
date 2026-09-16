@@ -1,0 +1,11 @@
+apiVersion: yawr.runbook/v1
+id: graph-nested-failure
+name: Dynamic failure keeps the deepest location
+flow:
+  - step:
+      id: investigate
+      type: include
+      include:
+        runbook_ref: graph-demo/fail
+        resolve_from: catalog
+  - step: {id: must_not_run, type: noop}

@@ -107,7 +107,7 @@ func (e *IterateExecutor) executeSequential(ctx context.Context, step engine.Res
 		}
 
 		results, err := e.runner(ctx, SubStepParent{
-			ID: step.ID, Kind: "iterate", IterationIndex: iterations, NestDepth: step.NestDepth + 1,
+			ID: step.ID, Kind: "iterate", IterationIndex: iterations, NestDepth: step.NestDepth + 1, RootScopeID: step.LexicalScopeID,
 		}, spec.Steps, copyVars(workingVars))
 		if err != nil {
 			if emit != nil {
@@ -305,7 +305,8 @@ func (e *IterateExecutor) executeConcurrent(ctx context.Context, step engine.Res
 
 			// Run iteration steps
 			results, err := e.runner(engine.WithConcurrentExecution(runCtx), SubStepParent{
-				ID: step.ID, Kind: "iterate", IterationIndex: iterNum, NestDepth: step.NestDepth + 1,
+				RootScopeID: step.LexicalScopeID,
+				ID:          step.ID, Kind: "iterate", IterationIndex: iterNum, NestDepth: step.NestDepth + 1,
 			}, spec.Steps, iterVars)
 
 			// Determine per-iteration status before merging into shared state.

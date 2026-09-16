@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { launchXtsWithHandoff } = require('../out/xtsHandoff');
+const { launchXtsWithHandoff, xtsParameterArguments } = require('../out/xtsHandoff');
 
 function createCancellation() {
   let cancelled = false;
@@ -30,7 +30,7 @@ function createCancellation() {
 }
 
 function createHarness(overrides = {}) {
-  const calls = { dispatches: 0, errors: [], reminders: 0 };
+  const calls = { dispatches: 0, verifications: 0, errors: [], reminders: 0 };
   const dependencies = {
     dispatch: async () => {
       calls.dispatches++;
@@ -38,10 +38,12 @@ function createHarness(overrides = {}) {
       if (overrides.dispatch) return overrides.dispatch(calls);
       return Object.prototype.hasOwnProperty.call(overrides, 'dispatchResult')
         ? overrides.dispatchResult
-        : { status: 'opened' };
+        : undefined;
     },
-    parseAcknowledgment: overrides.parseAcknowledgment ??
-      ((value) => value && typeof value.status === 'string' ? value : undefined),
+    verifyView: async () => {
+      calls.verifications++;
+      return overrides.verifyView ? overrides.verifyView() : 'opened';
+    },
     showDispatchError: (message) => { calls.errors.push(message); },
     showReminder: () => { calls.reminders++; },
   };
@@ -59,10 +61,11 @@ async function launch(overrides = {}) {
   return { ...harness, cancellation, result };
 }
 
-test('confirmed XTS handoff dispatches and returns the canonical acknowledgment', async () => {
+test('void XTS command completes only after operator verification of the real view', async () => {
   const { calls, result } = await launch();
   assert.equal(calls.dispatches, 1);
   assert.equal(calls.reminders, 1);
+  assert.equal(calls.verifications, 1);
   assert.deepEqual(result, { status: 'completed', result: { status: 'opened' } });
 });
 
@@ -133,10 +136,11 @@ test('focus=false still dispatches only after the handler-authorized handoff and
   assert.equal(result.status, 'completed');
 });
 
-test('non-opened and failed launches do not show a reminder', async () => {
-  const nonOpened = await launch({ dispatchResult: { status: 'view-not-found' } });
+test('operator-reported startup failure and command exceptions cannot report opened', async () => {
+  const nonOpened = await launch({ verifyView: async () => 'failed' });
   assert.equal(nonOpened.calls.reminders, 0);
-  assert.deepEqual(nonOpened.result, { status: 'completed', result: { status: 'view-not-found' } });
+  assert.equal(nonOpened.result.status, 'failed');
+  assert.equal(nonOpened.result.result, undefined);
 
   const failed = await launch({ dispatchError: new Error('boom') });
   assert.equal(failed.calls.reminders, 0);
@@ -144,15 +148,43 @@ test('non-opened and failed launches do not show a reminder', async () => {
   assert.equal(failed.result.status, 'failed');
 });
 
-test('missing or invalid acknowledgments fail closed', async () => {
-  const missing = await launch({ dispatchResult: null });
-  assert.equal(missing.result.status, 'failed');
-  assert.equal(missing.calls.errors.length, 1);
+test('dispatch return values never replace real-view verification or prematurely acknowledge', async () => {
+  for (const dispatchResult of [undefined, null, { status: 'opened' }, { status: 'view-not-found' }]) {
+    let verifyStarted, release;
+    const started = new Promise(resolve => { verifyStarted = resolve; });
+    const verified = new Promise(resolve => { release = resolve; });
+    let settled = false;
+    const pending = launch({ dispatchResult, verifyView: () => { verifyStarted(); return verified; } })
+      .then(value => { settled = true; return value; });
+    await started;
+    await new Promise(setImmediate);
+    assert.equal(settled, false);
+    release('opened');
+    assert.equal((await pending).result.result.status, 'opened');
+  }
+});
 
-  const invalid = await launch({
-    dispatchResult: { status: 'not-allowlisted' },
-    parseAcknowledgment: () => undefined,
-  });
-  assert.equal(invalid.result.status, 'failed');
-  assert.equal(invalid.calls.errors.length, 1);
+test('verification errors and cancellation never report opened', async () => {
+  const failed = await launch({ verifyView: async () => { throw new Error('view check failed'); } });
+  assert.equal(failed.result.status, 'failed');
+  const cancelled = await launch({ verifyView: async () => 'cancelled' });
+  assert.equal(cancelled.result.status, 'execution-not-started');
+  assert.equal(cancelled.calls.reminders, 0);
+});
+
+test('XTS CLI parameters preserve environment, server and database exactly', () => {
+  assert.equal(xtsParameterArguments('ProdEus1a', { server: 'server-859807057', database: 'database-859807057' }),
+    '-p environment:ProdEus1a -p server:server-859807057 -p database:database-859807057');
+  // Current XTS parses values up to the next "-p"; it does not unquote shell strings.
+  const args = xtsParameterArguments('ProdEus1a', { server: 'host\\instance', database: 'Database With Spaces', count: 3 });
+  const parsed = Object.fromEntries([...args.matchAll(/-p\s+(\w+):([^\s]+(?:\s+(?!-p\s)[^\s]*)*)/gi)]
+    .map(match => [match[1], match[2].trim()]));
+  assert.deepEqual(parsed, { environment: 'ProdEus1a', server: 'host\\instance', database: 'Database With Spaces', count: '3' });
+});
+
+test('ambiguous CLI parameters are rejected rather than changing the requested environment or values', () => {
+  for (const parameters of [{ environment: 'other' }, { server: 'host -p environment:other' },
+    { server: ' host' }, { database: '' }, { 'bad-name': 'value' }, { server: {} }]) {
+    assert.throws(() => xtsParameterArguments('ProdEus1a', parameters));
+  }
 });

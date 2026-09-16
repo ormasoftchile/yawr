@@ -66,7 +66,8 @@ test('current graph invalidation includes authored tool saves and map, not unrel
     path.join(project, 'other.runbook.yaml')]) assert.equal(changed(file), false, file);
   const source = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
   assert.match(source, /if \(graphSourceChanged\([\s\S]*?\)\) requestReload\(\)/);
-  assert.match(source, /const requestReload = \(\) => \{\s+if \(runStarting \|\| runSession \|\| investigationClient \|\| investigationDescriptor\)/);
+  assert.match(source, /const requestReload = \(\) => \{\s+if \(runStarting \|\| runSession \|\| investigationClient \|\| investigationDescriptor \|\| retainExecutionGraph\)/);
+  assert.match(source, /if \(!reloadPending \|\| disposed \|\| retainExecutionGraph\) return/);
 });
 
 test('loadGraphDocument executes graphjson and validates stdout', async () => {

@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.17 (review candidate)
+
+- Allows included runbooks to declare their own `requires` and `toolRefs`.
+  Package sources and file-local tool bindings are frozen before execution;
+  lazy, dynamic, parallel, and tool-backed children cannot inherit private
+  aliases or rebind another runbook's tools.
+- Bundles the matching lexical-scope runtime with v4 executable snapshots,
+  scoped resume/replay and editor metadata. Legacy saved-run readers remain
+  explicit; older helpers cannot silently run the new contract.
+- Retains dynamic child graphs inside parallel branches and tool substitutions,
+  including distinct repeated execution occurrences and post-run history.
+  Adds five zero-input success examples and two intentional preflight failures.
+- Preserves VS Code 1.136.2 compatibility and the accepted single-CURRENT pacing,
+  including default 200 ms, configured 500 ms, ordered Results, and urgent bypasses.
+
+## 0.2.16
+
+- Reveals dynamic child and grandchild runbooks during normal graphical runs,
+  using bounded, verified graph updates from frozen runtime definitions.
+- Preserves distinct repeated invocations, post-run runbook navigation,
+  chronological execution history and observed return edges.
+- Keeps the pacing queue as the sole CURRENT owner. Graph growth anchors the
+  existing current location; success still drains playback and urgent states
+  bypass it immediately.
+- Bundles the matching `yawr.run-graph/v1` runtime. VS Code 1.136.2 remains
+  supported. Adds self-contained examples and real-runtime/editor regressions.
+
+## 0.2.15
+
+- Uses the current XTS `xts.openViewByPath(relativePath, args)` command, preserving
+  relative filenames and forwarding environment and view parameters as CLI-style
+  `-p name:value` arguments.
+- Accepts the command's `void` return without treating it as evidence of an
+  opened view. The host action waits for an explicit in-panel operator readiness
+  check; startup failures, exceptions, cancellation, and stale responses cannot
+  silently become a successful handoff.
+- Preserves VS Code 1.136.2 compatibility and the accepted single-CURRENT pacing.
+
 ## 0.2.14
 
 - Fixes animated viewport callbacks losing their browser `Window` receiver;
