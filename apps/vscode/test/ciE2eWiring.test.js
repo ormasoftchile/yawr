@@ -24,7 +24,8 @@ test('VS Code test configuration exposes source and production-surface labels', 
 
   assert.match(config, /label:\s*['"]source['"]/);
   assert.match(config, /label:\s*['"]production-surface['"]/);
-  assert.equal((config.match(/version:\s*['"]1\.136\.2['"]/g) || []).length, 2);
+  assert.match(config, /const vscodeVersion = environmentValue\('TEST_VSCODE_VERSION'\) \?\? '1\.136\.2'/);
+  assert.equal((config.match(/version:\s*vscodeVersion/g) || []).length, 2);
   assert.equal(manifest.engines.vscode, '^1.136.2');
   const harness = JSON.parse(fs.readFileSync(path.join(root, 'test', 'vsix-harness', 'package.json'), 'utf8'));
   assert.equal(harness.engines.vscode, manifest.engines.vscode);
@@ -54,7 +55,7 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(bounded, /taskkill\.exe/);
   assert.match(bounded, /process\.kill\(-pid, 'SIGKILL'\)/);
   const runner = fs.readFileSync(path.join(root, 'scripts', 'run-vscode-test.mjs'), 'utf8');
-  assert.match(runner, /version:\s*['"]1\.136\.2['"]/);
+  assert.match(runner, /version:\s*process\.env\.YAWR_TEST_VSCODE_VERSION \?\? '1\.136\.2'/);
   assert.match(runner, /preserveFailureEvidence\(runRoot,\s*\{\s*failure,\s*repositoryRoot\s*\}\)/);
   assert.match(runner, /failure evidence artifact: \$\{evidence\.artifactId\}/);
   assert.match(runner, /installedExtensionDirectory/);
@@ -67,6 +68,8 @@ test('VS Code test configuration exposes source and production-surface labels', 
   assert.match(runner, /archive\.file\('extension\/bin\/win32-x64\/yawr\.exe'\)/);
   assert.match(runner, /YAWR_EXPECTED_STANDALONE_SHA256/);
   const productionSurface = fs.readFileSync(path.join(root, 'test', 'suite', 'productionSurface.test.ts'), 'utf8');
+  assert.match(productionSurface, /EXPECTED_VSCODE_VERSION = process\.env\.YAWR_TEST_VSCODE_VERSION \?\? '1\.136\.2'/);
+  assert.equal((productionSurface.match(/assert\.(?:equal|strictEqual)\(vscode\.version, EXPECTED_VSCODE_VERSION/g) || []).length, 3);
   assert.match(productionSurface, /executeCommand<typeof result>\('yawr\.runCurrentRunbook'\)/);
   assert.doesNotMatch(productionSurface, /spawn\(helper/);
   assert.doesNotMatch(runner, /failure evidence: \$\{evidencePath\}/);

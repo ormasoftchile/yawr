@@ -24,7 +24,6 @@ type ScopedRunbookLoader struct {
 	documents       map[string]*pkgcatalog.DependencyDocument
 	owners          map[string][]string
 	discoveryScopes map[string]string
-	pathAliases     map[string]string
 }
 
 func scopedPathKey(path string) string {
@@ -36,7 +35,10 @@ func scopedPathKey(path string) string {
 }
 
 func (loader *ScopedRunbookLoader) Load(ctx context.Context, path string) (*parser.ParsedRunbook, error) {
-	identity := loader.capturedPath(path)
+	identity, err := loader.closure.SourceIdentity(path)
+	if err != nil {
+		return nil, err
+	}
 	parsed, err := loader.closure.Load(ctx, identity)
 	if err != nil {
 		return nil, err
@@ -56,7 +58,10 @@ func (loader *ScopedRunbookLoader) LoadScope(ctx context.Context, path, scopeID 
 	if loader.documents[scopeID] == nil {
 		return nil, fmt.Errorf("scoped loader: unknown scope %q", scopeID)
 	}
-	identity := loader.capturedPath(path)
+	identity, err := loader.closure.SourceIdentity(path)
+	if err != nil {
+		return nil, err
+	}
 	parsed, err := loader.closure.Load(ctx, identity)
 	if err != nil {
 		return nil, err
@@ -69,27 +74,6 @@ func (loader *ScopedRunbookLoader) LoadScope(ctx context.Context, path, scopeID 
 		return nil, err
 	}
 	return loader.loadParsed(ctx, parsed, scopeID)
-}
-
-// Resolve only aliases captured before preflight. Parsed Source remains the
-// requested display path; it is never used as the document ownership key.
-func (loader *ScopedRunbookLoader) capturedPath(path string) string {
-	key := scopedPathKey(path)
-	if canonical, ok := loader.pathAliases[key]; ok {
-		return canonical
-	}
-	for parent := filepath.Dir(key); ; parent = filepath.Dir(parent) {
-		if canonical, ok := loader.pathAliases[parent]; ok {
-			relative, err := filepath.Rel(parent, key)
-			if err == nil {
-				return filepath.Join(canonical, relative)
-			}
-		}
-		if parent == filepath.Dir(parent) {
-			break
-		}
-	}
-	return path
 }
 
 func (loader *ScopedRunbookLoader) loadParsed(ctx context.Context, parsed *parser.ParsedRunbook, scopeID string) (*parser.ParsedRunbook, error) {

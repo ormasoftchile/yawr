@@ -137,7 +137,36 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 						}
 						next := map[string]bool{}
 						for _, node := range update.Document.Nodes {
+							if next[node.ID] {
+								t.Fatalf("duplicate execution graph node %s", node.ID)
+							}
 							next[node.ID] = true
+						}
+						groups := map[string]bool{}
+						frames := map[string]bool{}
+						for _, frame := range update.Document.Frames {
+							if frames[frame.ID] || frame.ParentIncludeNodeID != "" && !next[frame.ParentIncludeNodeID] {
+								t.Fatalf("invalid execution frame identity: %+v", frame)
+							}
+							frames[frame.ID] = true
+						}
+						for _, group := range update.Document.Groups {
+							if groups[group.ID] || !next[group.ParentNodeID] || !frames[group.FrameID] {
+								t.Fatalf("invalid execution group identity: %+v", group)
+							}
+							groups[group.ID] = true
+						}
+						for _, node := range update.Document.Nodes {
+							group, _ := node.Data["group_id"].(string)
+							frame, _ := node.Data["frame_id"].(string)
+							if node.ParentNode != group || group != "" && !groups[group] || !frames[frame] {
+								t.Fatalf("invalid execution node ownership: %+v", node)
+							}
+						}
+						for _, edge := range update.Document.Edges {
+							if !next[edge.Source] || !next[edge.Target] {
+								t.Fatalf("invalid execution edge identity: %+v", edge)
+							}
 						}
 						for id := range known {
 							if !next[id] {

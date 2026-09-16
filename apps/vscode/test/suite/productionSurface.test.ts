@@ -8,6 +8,7 @@ import { isAbsolute, join, relative } from 'node:path';
 import { connectGraphObserver } from './graphPlaybackObserver';
 
 const EXTENSION_ID = 'ormasoftchile.yawr-preview';
+const EXPECTED_VSCODE_VERSION = process.env.YAWR_TEST_VSCODE_VERSION ?? '1.136.2';
 const canonicalWebviewViewType = (viewType: string) => viewType.replace(/^mainThreadWebview-/, '');
 const RENDER_TELEMETRY_SCHEMA = 'yawr.render-telemetry/v1';
 
@@ -44,9 +45,12 @@ suite('Installed VSIX production surface', () => {
     { label: 'lexically scoped included runbooks', directory: 'dependency-scopes', entry: ['dynamic.runbook.yaml'],
       title: 'Dynamically selected children own their package dependencies',
       steps: 15, nodes: 13, runbooks: 7, evidence: 'dependency-scopes-500ms.json' },
+    { label: 'tool substitutions beneath eager and lazy static includes', directory: 'dependency-scopes',
+      entry: ['static-and-lazy.runbook.yaml'], title: 'File-local query bindings across eager and lazy children',
+      steps: 14, nodes: 14, runbooks: 7, evidence: 'dependency-scopes-static-500ms.json' },
   ]) test(`${scenario.label} form one paced CURRENT stream and retain the complete return history`, async function () {
     this.timeout(60_000);
-    assert.equal(vscode.version, '1.136.2');
+    assert.equal(vscode.version, EXPECTED_VSCODE_VERSION);
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);
     await extension.activate();
@@ -126,7 +130,7 @@ suite('Installed VSIX production surface', () => {
 
   for (const configuredInterval of [undefined, 500]) test(`one canonical CURRENT stream covers the entire installed runtime run and completion backlog at ${configuredInterval ?? 'default 200'}ms`, async function () {
     this.timeout(60_000);
-    assert.strictEqual(vscode.version, '1.136.2', 'compatibility requires the actual minimum supported host');
+    assert.strictEqual(vscode.version, EXPECTED_VSCODE_VERSION, 'qualification requires the exact requested host');
     const interval = configuredInterval ?? 200;
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);
@@ -228,7 +232,7 @@ flow:
   });
 
   test('loads the deployed extension and opens the graph preview fixture', async () => {
-    assert.strictEqual(vscode.version, '1.136.2');
+    assert.strictEqual(vscode.version, EXPECTED_VSCODE_VERSION);
     const stateRoot = process.env.YAWR_TEST_STATE_ROOT;
     assert.ok(stateRoot, 'installed VSIX validation requires YAWR_TEST_STATE_ROOT');
     const stateFile = join(stateRoot, 'diagnostic-state.json');

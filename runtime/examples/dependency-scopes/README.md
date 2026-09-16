@@ -1,6 +1,6 @@
 # Included runbooks with file-local tools
 
-These are verification fixtures for the 0.2.17 dependency-scope review candidate.
+These are verification fixtures for the 0.2.18 dependency-scope review candidate.
 They require its matching runtime and extension; published YAWR 0.2.16 does not
 support this contract. The candidate's VSIX bundles the required helper.
 
@@ -50,6 +50,11 @@ After installing the qualified matching extension/runtime:
 4. After completion, navigate back through the runbook history. Earlier
    children and repeated dynamic occurrences must remain inspectable.
 
+The static-and-lazy example must show all 14 steps and retain seven runbook
+invocations, including the tool-backed runbooks inside both included children.
+Version 0.2.18 fixes the qualified group-parent references that caused 0.2.17
+to reject this execution graph despite successful headless execution.
+
 For pacing checks, use the default 200 ms, then set
 `yawr.preview.minimumStepDisplayMs` to 500. Ordinary CURRENT transitions must
 remain a single ordered stream, including Results. Parallel execution order is
@@ -73,4 +78,13 @@ and runbook bodies, not a late filesystem read. The presentation regression
 checks each child's own tool metadata, including dirty editor overlays.
 The stdio regression checks that every executed step has a graph node before
 its start event, including dynamic includes inside parallel branches and tool
-substitutions.
+substitutions. It also validates every emitted group, frame, node parent, and
+edge reference. The Windows scoped-loader regression resolves a captured
+short-path alias outside the entrypoint directory after the source is deleted.
+
+The installed-VSIX suite runs the unmodified static-and-lazy example through
+**Yawr: Run Current Runbook**, with no helper or package-map override. Maintainers
+can set `YAWR_TEST_VSCODE_VERSION=1.137.0` when running
+`npm run extension:validate:vsix` to qualify the reported host; the default
+remains the minimum supported VS Code 1.136.2. This is test-harness configuration,
+not a setting required by runbook callers.

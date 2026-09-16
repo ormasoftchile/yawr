@@ -51,15 +51,6 @@ func PrepareScopedRun(ctx context.Context, options ScopedRunOptions) (*PreparedS
 	if err != nil {
 		return nil, err
 	}
-	entrypointAlias := options.Entrypoint
-	entrypointIdentity := options.Entrypoint
-	if options.Catalog.Source == nil && filepath.IsAbs(options.Entrypoint) {
-		canonical, err := filepath.EvalSymlinks(options.Entrypoint)
-		if err != nil {
-			return nil, err
-		}
-		entrypointIdentity = canonical
-	}
 	closure, issues := pkgcatalog.BuildClosure(ctx, pkgcatalog.ClosureOptions{
 		Catalog: options.Catalog, Entrypoint: options.Entrypoint, Parser: options.Parser,
 	})
@@ -70,6 +61,10 @@ func PrepareScopedRun(ctx context.Context, options ScopedRunOptions) (*PreparedS
 	if closure == nil || closure.Catalog == nil {
 		return nil, fmt.Errorf("scoped preparation: dependency closure is missing")
 	}
+	entrypointIdentity, err := closure.SourceIdentity(options.Entrypoint)
+	if err != nil {
+		return nil, err
+	}
 	snapshot := toolscope.Snapshot{
 		Version: toolscope.Version, CatalogDigest: closure.Catalog.CatalogDigest(),
 		ProfileDigest: toolscope.ProfileDigest(profile),
@@ -78,11 +73,7 @@ func PrepareScopedRun(ctx context.Context, options ScopedRunOptions) (*PreparedS
 		DynamicTargets: map[string]toolscope.Target{},
 	}
 	loader := &ScopedRunbookLoader{closure: closure, documents: map[string]*pkgcatalog.DependencyDocument{},
-		owners: map[string][]string{}, discoveryScopes: map[string]string{},
-		pathAliases: map[string]string{
-			scopedPathKey(entrypointAlias):               entrypointIdentity,
-			scopedPathKey(filepath.Dir(entrypointAlias)): filepath.Dir(entrypointIdentity),
-		}}
+		owners: map[string][]string{}, discoveryScopes: map[string]string{}}
 	var rootScope string
 	root, err := closure.Load(ctx, options.Entrypoint)
 	if err != nil {

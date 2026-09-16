@@ -78,7 +78,8 @@ func appendToolInvocationGraph(document *graphjson.Document, child graphjson.Doc
 	}
 	document.Groups = append(document.Groups, graphdoc.Group{
 		ID: entryGroup, Kind: graphdoc.GroupIncludeFrame, ParentNodeID: parentID,
-		FrameID: frameID("frame:root"),
+		FrameID: frameID("frame:root"), QualifiedID: entryGroup,
+		QualifiedParentNodeID: parentID, QualifiedFrameID: frameID("frame:root"),
 	})
 	entered := false
 	for _, node := range child.Nodes {

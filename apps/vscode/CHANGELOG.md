@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.18 (review candidate)
+
+- Preserves qualified graph group, frame, and parent identities for frozen tool
+  substitutions beneath eager and lazy static includes. The installed execution
+  event stream passes the existing strict graph validation.
+- Resolves scoped ownership through the frozen source alias table, including
+  Windows short paths outside the entrypoint directory. Display paths remain
+  intact and execution does not reread source files.
+- Adds installed-VSIX coverage for the unmodified static-and-lazy dependency
+  example, including all 14 ordered CURRENT steps and seven retained runbooks.
+  The pacing implementation, compatibility floor, and dependency contract are
+  unchanged.
+
 ## 0.2.17 (review candidate)
 
 - Allows included runbooks to declare their own `requires` and `toolRefs`.

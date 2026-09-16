@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const environmentValue = (suffix) => process.env[`YAWR_${suffix}`];
 const testGrep = environmentValue('TEST_GREP');
+const vscodeVersion = environmentValue('TEST_VSCODE_VERSION') ?? '1.136.2';
 
 // Extension-host integration test configuration.
 //
@@ -58,7 +59,7 @@ export default defineConfig([
     // extensionDevelopmentPath (the package root). Used by HAB-E2E-02 and all
     // other suite tests that do not require an installed VSIX.
     label: 'source',
-    version: '1.136.2',
+    version: vscodeVersion,
     files: [
       'out/test/suite/extension.test.js',
       'out/test/suite/hostActionBridge.test.js',
@@ -92,7 +93,7 @@ export default defineConfig([
     //
     // Run via: vscode-test --label production-surface
     label: 'production-surface',
-    version: '1.136.2',
+    version: vscodeVersion,
     files: 'out/test/suite/productionSurface.test.js',
     extensionDevelopmentPath: [vsixHarnessPath],
     workspaceFolder: productionWorkspace,

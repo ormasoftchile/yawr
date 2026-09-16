@@ -114,7 +114,7 @@ try {
   await writeDiagnosticState({ label });
   if (label === 'download') {
     const vscodeExecutable = await downloadAndUnzipVSCode({
-      version: '1.136.2',
+      version: process.env.YAWR_TEST_VSCODE_VERSION ?? '1.136.2',
       cachePath: join(root, '.vscode-test'),
     });
     await writeFile(process.env.YAWR_VSCODE_PATH_FILE || vscodePathFile, vscodeExecutable);

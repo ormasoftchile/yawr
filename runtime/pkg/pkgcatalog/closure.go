@@ -87,14 +87,11 @@ func (c *DependencyClosure) Load(ctx context.Context, path string) (*parser.Pars
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	key, err := c.snapshot.capturedPath(path)
+	key, err := c.SourceIdentity(path)
 	if err != nil {
 		return nil, err
 	}
-	captured, ok := c.snapshot.files[key]
-	if !ok || captured.err != nil {
-		return nil, errkit.New("SCOPE-002", fmt.Sprintf("source %q is not in the frozen dependency closure", path))
-	}
+	captured := c.snapshot.files[key]
 	parsed, err := c.parser.ParseBytes(ctx, append([]byte(nil), captured.data...))
 	if err == nil && (parsed == nil || parsed.Runbook == nil) {
 		return nil, errkit.New("SCOPE-002", "captured dependency source has no parsed runbook")
@@ -103,6 +100,20 @@ func (c *DependencyClosure) Load(ctx context.Context, path string) (*parser.Pars
 		parsed.Source, err = filepath.Abs(path)
 	}
 	return parsed, err
+}
+
+// SourceIdentity resolves only aliases captured during preflight. It uses the
+// same frozen identity as Load without consulting the current filesystem.
+func (c *DependencyClosure) SourceIdentity(path string) (string, error) {
+	key, err := c.snapshot.capturedPath(path)
+	if err != nil {
+		return "", err
+	}
+	captured, ok := c.snapshot.files[key]
+	if !ok || captured.err != nil {
+		return "", errkit.New("SCOPE-002", fmt.Sprintf("source %q is not in the frozen dependency closure", path))
+	}
+	return key, nil
 }
 
 type closureFile struct {
@@ -187,6 +198,13 @@ func (s *closureSource) path(path string) (string, error) {
 		s.paths = map[string]string{}
 	}
 	s.paths[alias], s.paths[key] = key, key
+	// Includes may address captured siblings through the entrypoint's short
+	// directory spelling even when that directory is outside the workspace.
+	if parent := filepath.Dir(abs); parent != abs {
+		if _, err := s.path(parent); err != nil {
+			return "", err
+		}
+	}
 	return key, nil
 }
 
