@@ -154,6 +154,25 @@ tail as `skipped` with reason `terminal`, so resumption cannot execute it.
 A single `execution/frame-returned` trace event records the skipped step IDs
 without exceeding the bounded checkpoint trace outbox.
 
+## Dry-run coverage
+
+`yawr dry-run` crosses no transport and expands no substituted action, so no
+step produces a declared payload. To keep the capture surface identical to a
+real run, a dry-run stands in for each action's declared `outputs:` contract:
+every non-optional declared name takes its declared type's zero value, an
+enum-constrained string takes its first declared member, and nested
+`outputs.<a>.<b>` capture paths are materialized with `null` leaves. Without
+the stand-in, every legal capture from a tool step fails with
+`GCP-RESOLVE-002`, which leaves no static gate for a tool-bearing runbook.
+
+The stand-in is not a dispatch. Each tool step still reports `dry_run: true`
+and `would_execute: tool`, and the synthesized values carry no information
+about what the action would return: a dry-run checks binding, resolution, and
+capture wiring, never results. Capture paths whose shape the declaration does
+not describe — GDP indexing such as `outputs.rows[0].name`, optional segments,
+or a path descending into a declared scalar — are left alone and still report
+`GCP-RESOLVE-002`.
+
 ## Failure and operator boundaries
 
 A failed substituted child remains a failed tool result. Available declared
@@ -167,6 +186,24 @@ that lookup branch long enough to retain all associations, but the containing
 iteration and public call still fail. Execution completion is never a
 replacement for domain statuses such as no-data, blocked, negative, unsupported,
 or missing.
+
+A failed **native** dispatch produced no payload at all, so there is nothing to
+type-check. Its captures are still bound, so an `on_error: continue` successor
+can reference every name without a template error, but each source is bound to
+the value that source actually holds:
+
+| capture source | value after a failed native dispatch |
+|---|---|
+| `stdout`, `stderr` | `""` |
+| `exit_code` | `-1` |
+| `outputs.<name>` | `null` |
+
+`null` rather than `""` is what makes the failure guard writable. Comparing a
+declared `boolean` output against `true` raises `GXL-TYPE-001` when the capture
+holds a string, which makes the only branch reachable on that path dead code.
+`null` compares cleanly against any scalar (`spec/grammar/gxl.ebnf` §5.2), so
+both `condition: 'ok != true'` and `condition: 'ok == null'` evaluate.
+Capturing `exit_code` remains the most direct success test for a native action.
 
 An operator collector inside a substituted tool produces no final public output
 while waiting. Durable restart republishes the same pending turn; only the

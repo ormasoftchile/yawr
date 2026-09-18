@@ -298,22 +298,30 @@ func (r *DryRunExecutorRegistry) Lookup(kind string) engine.StepExecutor {
 	if exec == nil {
 		return nil
 	}
-	return &DryRunExecutor{kind: kind}
+	return &DryRunExecutor{kind: kind, inner: exec}
+}
+
+// declaredOutputsProvider is implemented by the real tool executor. It reports
+// an action's declared outputs: contract without dispatching the action, which
+// is what lets a dry-run stand in for a result it never produced.
+type declaredOutputsProvider interface {
+	DeclaredOutputs(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (map[string]*schema.ArgDef, error)
 }
 
 // DryRunExecutor returns a simulated StepResult without side effects.
 type DryRunExecutor struct {
-	kind string
+	kind  string
+	inner engine.StepExecutor
 }
 
-func (d *DryRunExecutor) Execute(_ context.Context, step engine.ResolvedStep, _ map[string]any) (*engine.StepResult, error) {
+func (d *DryRunExecutor) Execute(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
 	now := time.Now()
 	output := map[string]any{"dry_run": true, "would_execute": d.kind}
 	if d.kind == "host_action" {
 		output["status"] = string(hostaction.StatusUnsupported)
 		output["result"] = map[string]any{"status": string(hostaction.StatusUnsupported)}
 	}
-	return &engine.StepResult{
+	result := &engine.StepResult{
 		StepID:      step.ID,
 		Status:      engine.StepStatusCompleted,
 		Outcome:     engine.StepOutcomeSuccess,
@@ -322,7 +330,30 @@ func (d *DryRunExecutor) Execute(_ context.Context, step engine.ResolvedStep, _ 
 		CompletedAt: now,
 		DurationMs:  0,
 		Vars:        map[string]any{},
-	}, nil
+	}
+	// A dry-run dispatches nothing and expands no substituted action, so the
+	// action's declared outputs: contract is never satisfied by a real
+	// payload. Stand in for it from the frozen declaration, otherwise every
+	// legal capture reading outputs.<name> fails with GCP-RESOLVE-002 and
+	// dry-run cannot gate any tool-bearing runbook.
+	//
+	// Resolution failure is not a dry-run failure: this mode has never
+	// resolved tool bindings, and starting to reject runbooks here would
+	// trade one false negative for another. The capture then reports the
+	// missing output exactly as it does today.
+	if provider, ok := d.inner.(declaredOutputsProvider); ok {
+		if declared, err := provider.DeclaredOutputs(ctx, step, vars); err == nil {
+			if synthesized := internalexecutor.SynthesizeDeclaredOutputs(declared, step.Capture); synthesized != nil {
+				for name, value := range synthesized {
+					output[name] = value
+				}
+				// A bare `outputs` capture reads the validated public
+				// projection, not the raw output map.
+				result.PublicOutputs = synthesized
+			}
+		}
+	}
+	return result, nil
 }
 
 func buildToolRegistry(scanDir string, excludeTestTools bool) (*internaltool.OverlayRegistry, error) {

@@ -59,6 +59,12 @@ yawr serve                      Start JSON-RPC server
 yawr version                    Print version
 ```
 
+`dry-run` dispatches nothing and expands no substituted action; it stands in
+for each action's declared `outputs:` so that captures resolve exactly as they
+would in a real run. See
+[dry-run coverage](docs/structured-values.md#dry-run-coverage) for what the
+stand-in does and does not establish.
+
 ### Tool packages
 
 `yawr run`/`yawr dry-run` load the project's package bindings from

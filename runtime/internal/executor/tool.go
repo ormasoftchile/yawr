@@ -259,14 +259,24 @@ func (e *ToolExecutor) Execute(ctx context.Context, step engine.ResolvedStep, va
 				failed.Output[k] = v
 			}
 		}
-		// Still populate captures with empty/zero values so downstream steps
-		// that use on_error: continue can reference these keys without template errors.
+		// Still populate captures so downstream steps that use
+		// on_error: continue can reference these keys without template
+		// errors. The process channels keep their concrete zero values --
+		// they are untyped text and a numeric exit status, and both exist
+		// even for a failed dispatch. A capture reading the action's
+		// declared outputs: contract becomes null instead: no value was
+		// produced, and "" would misreport the declared type, making the
+		// only guard reachable on this path unwritable (comparing a
+		// declared boolean output against true raises GXL-TYPE-001).
+		// null compares cleanly against any scalar (gxl.ebnf 5.2).
 		for name, source := range step.Capture {
-			switch source {
-			case "stdout", "stderr":
+			switch {
+			case source == "stdout" || source == "stderr":
 				failed.Vars[name] = ""
-			case "exitCode", "exit_code":
+			case source == "exitCode" || source == "exit_code":
 				failed.Vars[name] = -1
+			case capturesDeclaredOutput(source):
+				failed.Vars[name] = nil
 			default:
 				failed.Vars[name] = ""
 			}

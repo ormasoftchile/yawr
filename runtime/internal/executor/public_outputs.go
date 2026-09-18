@@ -17,6 +17,14 @@ func capturesWholeOutputs(step engine.ResolvedStep) bool {
 	return false
 }
 
+// capturesDeclaredOutput reports whether a capture source reads the action's
+// declared outputs: contract (the GCP "outputs" source prefix, gcp.ebnf 3.4a)
+// rather than a process channel or a parsed stdout projection.
+func capturesDeclaredOutput(source string) bool {
+	source = strings.TrimSpace(source)
+	return source == "outputs" || strings.HasPrefix(source, "outputs.")
+}
+
 func projectPublicOutputs(declarations map[string]*schema.ArgDef, raw map[string]any) (map[string]any, error) {
 	if len(declarations) == 0 {
 		return nil, fmt.Errorf("outputs: a declared semantic output contract is required")
