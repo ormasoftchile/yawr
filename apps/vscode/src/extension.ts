@@ -103,6 +103,13 @@ import {
   firstLine,
   warningLines,
 } from './enumInputs';
+import {
+  discoverSavedRuns,
+  loadSavedRunState,
+  resolveRunIdentityFromPath,
+  type LoadedSavedRun,
+  type SavedRunSummary,
+} from './savedRunLoader';
 
 const pexec = promisify(execFile);
 
@@ -129,6 +136,7 @@ let output: vscode.OutputChannel | null = null;
 // context through every call site.
 let extensionContext: vscode.ExtensionContext | null = null;
 let directGraphPanel: vscode.WebviewPanel | undefined;
+let activeLoadSavedRun: ((runID?: string, runDir?: string) => Promise<void>) | undefined;
 let mcpBridge: McpBridge | null = null;
 let mcpBridgeStarting: Promise<McpBridge> | null = null;
 
@@ -148,6 +156,7 @@ interface DirectGraphTestHooks {
     args: string[],
     options: Parameters<typeof spawn>[2],
   ) => ReturnType<typeof spawn>;
+  loadSavedRun?: (runDir?: string, runID?: string) => Promise<LoadedSavedRun | undefined>;
 }
 
 interface ProductionRunResult {
@@ -388,6 +397,16 @@ export async function activate(context: vscode.ExtensionContext) {
     participant,
     vscode.commands.registerCommand('yawr.preview', () => previewProse()),
     vscode.commands.registerCommand('yawr.previewGraph', () => previewGraph()),
+    vscode.commands.registerCommand('yawr.loadRun', (runID?: string, runDir?: string) => {
+      if (activeLoadSavedRun) {
+        return activeLoadSavedRun(typeof runID === 'string' ? runID : undefined, typeof runDir === 'string' ? runDir : undefined);
+      }
+      return previewGraph().then(() => {
+        if (activeLoadSavedRun) {
+          return activeLoadSavedRun(typeof runID === 'string' ? runID : undefined, typeof runDir === 'string' ? runDir : undefined);
+        }
+      });
+    }),
     vscode.commands.registerCommand('yawr.runCurrentRunbook', () => runCurrentRunbook()),
     ...(context.extensionMode === vscode.ExtensionMode.Test
       ? [
@@ -1847,6 +1866,197 @@ async function openDirectGraphPanelForRunbook(
     }
   };
 
+  const loadSavedRun = async (explicitRunID?: string, explicitRunDir?: string): Promise<void> => {
+    try {
+      if (runStarting || (runSession && !runSession.isFinished()) || investigationStarting || (investigationClient && !closedInvestigationStatus(investigationState?.sessionStatus))) {
+        void vscode.window.showWarningMessage('A run or investigation session is currently active. Stop or reset it before loading a saved run.');
+        return;
+      }
+      if (runSession?.isFinished()) {
+        runSession.dispose();
+        runSession = undefined;
+        runBridge?.dispose();
+        runBridge = undefined;
+      }
+      if (investigationClient && (investigationClient.isFinished() || closedInvestigationStatus(investigationState?.sessionStatus))) {
+        investigationClient.dispose();
+        investigationClient = undefined;
+        investigationDescriptor = undefined;
+      }
+      if (investigationDescriptor && !investigationClient) {
+        investigationDescriptor = undefined;
+      }
+
+      if (testHooks?.loadSavedRun) {
+        const loaded = await testHooks.loadSavedRun(explicitRunDir, explicitRunID);
+        if (!loaded || disposed) return;
+        currentDocument = loaded.document;
+        retainExecutionGraph = true;
+        runStarting = false;
+        invalidateHostActionRun();
+        activeHostActionRunID = loaded.runID;
+        publish({
+          type: 'run.loaded',
+          document: loaded.document,
+          runID: loaded.runID,
+          status: loaded.status,
+          error: loaded.error,
+          events: loaded.events,
+          steps: loaded.steps,
+          resultsAvailability: loaded.resultsAvailability,
+        });
+        return;
+      }
+
+      let runID = explicitRunID;
+      let runDir = explicitRunDir;
+
+      if (!runID || !runDir) {
+        const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
+        const projectRoot = currentProjectRoot ?? presentationProjectRoot(
+          runbookPath,
+          workspaceFolders,
+          path.dirname(runbookPath),
+          getSetting('packageMap', resource, ''),
+        );
+        const candidateDirs: string[] = Array.from(new Set([
+          path.join(projectRoot, '.runbook', 'runs'),
+          path.join(path.dirname(runbookPath), '.runbook', 'runs'),
+          ...workspaceFolders.map((f) => path.join(f, '.runbook', 'runs')),
+        ]));
+
+        const discovered = await discoverSavedRuns(candidateDirs);
+
+        interface SavedRunQuickPickItem extends vscode.QuickPickItem {
+          runID?: string;
+          runDir?: string;
+          isBrowse?: boolean;
+        }
+
+        const items: SavedRunQuickPickItem[] = [];
+        const currentNorm = path.normalize(runbookPath);
+        const currentBase = path.basename(runbookPath);
+        const currentRuns: SavedRunSummary[] = [];
+        const otherRuns: SavedRunSummary[] = [];
+
+        for (const run of discovered) {
+          const runNorm = run.runbookPath ? path.normalize(run.runbookPath) : '';
+          if (runNorm === currentNorm || runNorm.endsWith(currentBase)) {
+            currentRuns.push(run);
+          } else {
+            otherRuns.push(run);
+          }
+        }
+
+        const formatItem = (run: SavedRunSummary, isCurrentRunbook: boolean): SavedRunQuickPickItem => {
+          const statusIcon = run.status === 'completed' ? '$(check)'
+            : run.status === 'failed' ? '$(error)'
+            : run.status === 'cancelled' ? '$(circle-slash)'
+            : '$(history)';
+          const timeStr = run.startedAt ? new Date(run.startedAt).toLocaleString() : 'Unknown date';
+          const stepsStr = run.stepCount !== undefined ? `${run.stepCount} steps` : '';
+          const tag = isCurrentRunbook ? '(current runbook)' : (run.runbookPath ? path.basename(run.runbookPath) : '');
+          return {
+            label: `${statusIcon} ${run.runID}`,
+            description: `${run.status ?? 'unknown'} • ${timeStr} ${tag ? `• ${tag}` : ''}`,
+            detail: `${run.runDir}${stepsStr ? ` • ${stepsStr}` : ''}`,
+            runID: run.runID,
+            runDir: run.runDir,
+          };
+        };
+
+        if (currentRuns.length > 0) {
+          items.push({ label: 'Current Runbook', kind: vscode.QuickPickItemKind.Separator });
+          items.push(...currentRuns.map((r) => formatItem(r, true)));
+        }
+        if (otherRuns.length > 0) {
+          items.push({ label: 'Other Runs', kind: vscode.QuickPickItemKind.Separator });
+          items.push(...otherRuns.map((r) => formatItem(r, false)));
+        }
+
+        items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+        items.push({
+          label: '$(folder-opened) Browse for run directory or trace...',
+          description: 'Select a run directory, trace.jsonl, or checkpoint file from disk',
+          isBrowse: true,
+        });
+
+        const selected = await vscode.window.showQuickPick(items, {
+          placeHolder: 'Select a saved run to load in the graph view',
+          matchOnDescription: true,
+          matchOnDetail: true,
+        });
+
+        if (!selected) return;
+
+        if (selected.isBrowse) {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Load Run',
+            title: 'Select run directory or trace/checkpoint file',
+          });
+          if (!uris || uris.length === 0) return;
+          const identity = resolveRunIdentityFromPath(uris[0].fsPath);
+          if (!identity) {
+            void vscode.window.showErrorMessage(`Selected path does not appear to be a valid Yawr run: ${uris[0].fsPath}`);
+            return;
+          }
+          runID = identity.runID;
+          runDir = identity.runDir;
+        } else if (selected.runID && selected.runDir) {
+          runID = selected.runID;
+          runDir = selected.runDir;
+        } else {
+          return;
+        }
+      }
+
+      if (disposed) return;
+
+      const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath);
+      const projectRoot = currentProjectRoot ?? presentationProjectRoot(
+        runbookPath,
+        workspaceFolders,
+        path.dirname(runbookPath),
+        getSetting('packageMap', resource, ''),
+      );
+      const configuredBinary = getSetting('binaryPath', resource, 'yawr');
+      const binary = await resolveBinary(configuredBinary, output!, projectRoot, workspaceFolders);
+
+      const loaded = await loadSavedRunState(
+        binary,
+        runDir,
+        runID,
+        (cmd, args) => pexec(cmd, args, { cwd: projectRoot, maxBuffer: 32 * 1024 * 1024 }),
+      );
+
+      if (disposed) return;
+
+      currentDocument = loaded.document;
+      retainExecutionGraph = true;
+      runStarting = false;
+      invalidateHostActionRun();
+      activeHostActionRunID = loaded.runID;
+
+      publish({
+        type: 'run.loaded',
+        document: loaded.document,
+        runID: loaded.runID,
+        status: loaded.status,
+        error: loaded.error,
+        events: loaded.events,
+        steps: loaded.steps,
+        resultsAvailability: loaded.resultsAvailability,
+      });
+    } catch (error) {
+      const message = deriveFailureMessage(error);
+      output?.appendLine(`[yawr load run] ${message}`);
+      void vscode.window.showErrorMessage(`Failed to load saved run: ${message}`);
+    }
+  };
+
   const messageSub = panel.webview.onDidReceiveMessage((message: unknown) => {
     if (typeof message !== 'object' || message === null || Array.isArray(message)) return;
     const candidate = message as Record<string, unknown>;
@@ -1971,6 +2181,12 @@ async function openDirectGraphPanelForRunbook(
       void startRun(candidate.inputs, candidate.debug);
       return;
     }
+    if (candidate.type === 'run.load-request') {
+      const explicitRunID = typeof candidate.runID === 'string' ? candidate.runID : undefined;
+      const explicitRunDir = typeof candidate.runDir === 'string' ? candidate.runDir : undefined;
+      void loadSavedRun(explicitRunID, explicitRunDir);
+      return;
+    }
     if (candidate.type === 'run.command') {
       if (typeof candidate.command === 'object' && candidate.command !== null && !Array.isArray(candidate.command)) {
         const command = candidate.command as Record<string, unknown>;
@@ -1988,7 +2204,18 @@ async function openDirectGraphPanelForRunbook(
       runBridge = undefined;
       activeRouteTest = undefined;
       retainExecutionGraph = false;
-      if (sourceDocument) currentDocument = sourceDocument;
+      if (sourceDocument) {
+        currentDocument = sourceDocument;
+        latestMessage = {
+          type: 'graph',
+          document: sourceDocument,
+          style: currentStyle,
+          routeTests: [],
+          planHash: currentPlanHash,
+          activeRunID: undefined,
+          sessionID: undefined,
+        };
+      }
       applyDeferredReload();
       return;
     }
@@ -2064,8 +2291,12 @@ async function openDirectGraphPanelForRunbook(
     if (directGraphPanel === panel) {
       directGraphPanel = undefined;
     }
+    if (activeLoadSavedRun === loadSavedRun) {
+      activeLoadSavedRun = undefined;
+    }
     rejectProductionRun(new Error('Yawr run panel was disposed before terminal completion.'));
   });
+  activeLoadSavedRun = loadSavedRun;
   void reload().then(() => reconnectInvestigation());
   return panel;
 }

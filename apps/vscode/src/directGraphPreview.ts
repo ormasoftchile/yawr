@@ -147,6 +147,10 @@ export function graphPreviewArgs(runbookPath: string, packageMapPath?: string): 
     ...(packageMapPath ? ['--package-map', packageMapPath] : []), runbookPath];
 }
 
+export function savedRunPreviewArgs(runDir: string, runID: string): string[] {
+  return ['preview', '--format', 'graphjson', '--run-dir', runDir, '--run-id', runID];
+}
+
 export type GraphPreviewExecutor = (
   binary: string,
   args: string[],
