@@ -27361,6 +27361,17 @@
     ["line", { x1: "4", x2: "4", y1: "22", y2: "15", key: "1cm3nv" }]
   ]);
 
+  // ../../node_modules/lucide-react/dist/esm/icons/folder-open.js
+  var FolderOpen = createLucideIcon("FolderOpen", [
+    [
+      "path",
+      {
+        d: "m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2",
+        key: "usdka0"
+      }
+    ]
+  ]);
+
   // ../../node_modules/lucide-react/dist/esm/icons/git-branch.js
   var GitBranch = createLucideIcon("GitBranch", [
     ["line", { x1: "6", x2: "6", y1: "3", y2: "15", key: "17qcm7" }],
@@ -39130,6 +39141,7 @@
     onCloseSession,
     onRequestGraphRevision,
     onDebugRun,
+    onLoadRun,
     onReset,
     onCancel,
     onSubmitInteraction,
@@ -39847,6 +39859,17 @@
         },
         /* @__PURE__ */ import_react15.default.createElement(Bug, { "aria-hidden": "true" }),
         /* @__PURE__ */ import_react15.default.createElement("span", null, "Debug Run")
+      ) : null, !runActive && !sessionID ? /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          className: "load-run",
+          type: "button",
+          disabled: routeTestReviewOpen || reloading,
+          title: "Load an already run state",
+          onClick: onLoadRun
+        },
+        /* @__PURE__ */ import_react15.default.createElement(FolderOpen, { "aria-hidden": "true" }),
+        /* @__PURE__ */ import_react15.default.createElement("span", null, "Load run...")
       ) : null, !runActive && (sessionID ? sessionClosed || !sessionAttached && !runStarting : isTerminalRunStatus(runStatus) || routeTestOutcome !== void 0) ? /* @__PURE__ */ import_react15.default.createElement("button", { className: "reset-run", type: "button", onClick: () => {
         setRouteTestEditor(void 0);
         onReset();
@@ -40508,6 +40531,42 @@
             setRunStatus("failed");
             setRunError((current) => current ?? (message.code === 0 ? "Yawr exited before sending run.finished." : `Yawr exited with code ${message.code ?? "unknown"}`));
           }
+        } else if (message.type === "run.loaded") {
+          directDocumentRef.current = message.document;
+          sourceDocumentRef.current = sourceDocumentRef.current ?? message.document;
+          setDocument(message.document);
+          setRunID(message.runID);
+          runIDRef.current = message.runID;
+          directRunScopeRef.current = message.runID;
+          pacer.bypass();
+          const successful = ["completed", "resolved"].includes(message.status);
+          clearActiveRun(successful);
+          if (successful) pacer.complete();
+          runFinishedRef.current = true;
+          setRunStarting(false);
+          setRouteTestRunning(false);
+          setRunStatus(message.status);
+          setRunError(message.error);
+          setResults(message.resultsAvailability ?? { state: "unavailable", reason: "runtime-did-not-deliver-results" });
+          const binding = message.document.presentation_state?.plan_snapshot_digest ?? message.document.display_plan_snapshot_digest ?? message.document.execution_plan_hash ?? "missing-binding";
+          let nextNodes = {};
+          if (message.document.presentation_state) {
+            nextNodes = applyDirectRetainedDocument({}, message.document);
+          }
+          if (Array.isArray(message.events)) {
+            for (const event2 of message.events) {
+              if (event2 && event2.kind && event2.kind.startsWith("step/")) {
+                nextNodes = applyRuntimeEvent(nextNodes, event2, binding);
+              }
+            }
+          }
+          if (Array.isArray(message.steps)) {
+            nextNodes = applyTerminalSteps(nextNodes, message.steps, binding, message.runID);
+          }
+          setRuntimeNodes(nextNodes);
+          setExecutionNodeID(void 0);
+          setLoading(false);
+          setError(void 0);
         } else if (message.type === "route-tests") {
           setRouteTests(message.routeTests);
         } else if (message.type === "route-test.saved") {
@@ -40750,6 +40809,10 @@
       setRouteTestOutcome(void 0);
       setRouteTestError(void 0);
     };
+    const loadRun = () => {
+      if (runStarting || runID && !isTerminalRunStatus(runStatus) || sessionID) return;
+      vscode.postMessage({ type: "run.load-request" });
+    };
     const submitInteraction = (answer) => {
       if (!pending2 || !runID) return;
       vscode.postMessage(sessionID ? {
@@ -40779,6 +40842,8 @@
           setInputValues((current) => ({ ...current, [message.name]: message.value ?? "" }));
         } else if (message.action === "run") {
           startRun(false);
+        } else if (message.action === "load-run") {
+          loadRun();
         } else if (message.action === "debug") {
           startRun(true);
         } else if (message.action === "reset") {
@@ -40949,6 +41014,7 @@
           originalNodeID
         }),
         onDebugRun: () => startRun(true),
+        onLoadRun: loadRun,
         onReset: resetRun,
         onCancel: cancelRun,
         onSubmitInteraction: submitInteraction,
@@ -41066,6 +41132,7 @@ lucide-react/dist/esm/icons/circle-dot.js:
 lucide-react/dist/esm/icons/clock-3.js:
 lucide-react/dist/esm/icons/file-input.js:
 lucide-react/dist/esm/icons/flag.js:
+lucide-react/dist/esm/icons/folder-open.js:
 lucide-react/dist/esm/icons/git-branch.js:
 lucide-react/dist/esm/icons/list-checks.js:
 lucide-react/dist/esm/icons/locate-fixed.js:

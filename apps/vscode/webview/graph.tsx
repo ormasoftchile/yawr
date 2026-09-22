@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import { ArrowLeft, ArrowRight, Bug, CheckCircle2, CircleDot, LocateFixed, PanelRight, Play, RotateCcw, Square, Workflow } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bug, CheckCircle2, CircleDot, FolderOpen, LocateFixed, PanelRight, Play, RotateCcw, Square, Workflow } from 'lucide-react';
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ReactFlow, {
@@ -98,6 +98,16 @@ type HostMessage =
   | { type: 'graph.reload-state'; active: boolean }
   | { type: 'error'; message: string }
   | { type: 'run.starting'; routeTest?: boolean; minimumStepDisplayMs?: number }
+  | {
+      type: 'run.loaded';
+      document: GraphDocument;
+      runID: string;
+      status: string;
+      error?: string;
+      events?: RuntimeEvent[];
+      steps?: StdioFrame['steps'];
+      resultsAvailability?: ResultsAvailability;
+    }
   | { type: 'run.frame'; frame: StdioFrame }
   | { type: 'run.error'; message: string }
   | { type: 'run.stderr'; text: string }
@@ -114,7 +124,7 @@ type HostMessage =
   | { type: 'route-test.error'; message: string }
   | {
       type: 'test.action';
-      action: 'select-history' | 'select-runbook' | 'sample-execution-transition' | 'inspect-graph-visibility' | 'inspect-results' | 'set-graph-viewport' | 'set-input' | 'run' | 'debug' | 'reset' | 'cancel' | 'answer' | 'toggle-breakpoint' | 'select-node' | 'inspect-expressions' | 'run-route-test' | 'save-route-test' | 'save-route-test-result' | 'click-button' | 'click-route-test-checkbox' | 'toggle-choice' | 'set-collector-field';
+      action: 'select-history' | 'select-runbook' | 'sample-execution-transition' | 'inspect-graph-visibility' | 'inspect-results' | 'set-graph-viewport' | 'set-input' | 'run' | 'debug' | 'reset' | 'cancel' | 'answer' | 'toggle-breakpoint' | 'select-node' | 'inspect-expressions' | 'run-route-test' | 'save-route-test' | 'save-route-test-result' | 'click-button' | 'click-route-test-checkbox' | 'toggle-choice' | 'set-collector-field' | 'load-run';
       name?: string;
       value?: string;
       answer?: Record<string, unknown>;
@@ -1650,6 +1660,7 @@ function GraphView({
   onCloseSession,
   onRequestGraphRevision,
   onDebugRun,
+  onLoadRun,
   onReset,
   onCancel,
   onSubmitInteraction,
@@ -1698,6 +1709,7 @@ function GraphView({
   onCloseSession(status: 'resolved' | 'escalated' | 'cancelled' | 'abandoned'): void;
   onRequestGraphRevision(requestID: string, segmentID: string, revision: number, originalNodeID: string): void;
   onDebugRun(): void;
+  onLoadRun?(): void;
   onReset(): void;
   onCancel(): void;
   onSubmitInteraction(answer: Record<string, unknown>): void;
@@ -2379,6 +2391,17 @@ function GraphView({
               onClick={onDebugRun}
             >
               <Bug aria-hidden="true" /><span>Debug Run</span>
+            </button>
+          ) : null}
+          {!runActive && !sessionID ? (
+            <button
+              className="load-run"
+              type="button"
+              disabled={routeTestReviewOpen || reloading}
+              title="Load an already run state"
+              onClick={onLoadRun}
+            >
+              <FolderOpen aria-hidden="true" /><span>Load run...</span>
             </button>
           ) : null}
           {!runActive && (sessionID
@@ -3093,6 +3116,44 @@ function App() {
             ? 'Yawr exited before sending run.finished.'
             : `Yawr exited with code ${message.code ?? 'unknown'}`));
         }
+      } else if (message.type === 'run.loaded') {
+        directDocumentRef.current = message.document;
+        sourceDocumentRef.current = sourceDocumentRef.current ?? message.document;
+        setDocument(message.document);
+        setRunID(message.runID);
+        runIDRef.current = message.runID;
+        directRunScopeRef.current = message.runID;
+        pacer.bypass();
+        const successful = ['completed', 'resolved'].includes(message.status);
+        clearActiveRun(successful);
+        if (successful) pacer.complete();
+        runFinishedRef.current = true;
+        setRunStarting(false);
+        setRouteTestRunning(false);
+        setRunStatus(message.status);
+        setRunError(message.error);
+        setResults(message.resultsAvailability ?? { state: 'unavailable', reason: 'runtime-did-not-deliver-results' });
+        const binding = message.document.presentation_state?.plan_snapshot_digest ??
+          message.document.display_plan_snapshot_digest ??
+          message.document.execution_plan_hash ?? 'missing-binding';
+        let nextNodes: Record<string, RuntimeNodeState> = {};
+        if (message.document.presentation_state) {
+          nextNodes = applyDirectRetainedDocument({}, message.document) as Record<string, RuntimeNodeState>;
+        }
+        if (Array.isArray(message.events)) {
+          for (const event of message.events) {
+            if (event && event.kind && event.kind.startsWith('step/')) {
+              nextNodes = applyRuntimeEvent(nextNodes, event, binding);
+            }
+          }
+        }
+        if (Array.isArray(message.steps)) {
+          nextNodes = applyTerminalSteps(nextNodes, message.steps, binding, message.runID);
+        }
+        setRuntimeNodes(nextNodes);
+        setExecutionNodeID(undefined);
+        setLoading(false);
+        setError(undefined);
       } else if (message.type === 'route-tests') {
         setRouteTests(message.routeTests);
       } else if (message.type === 'route-test.saved') {
@@ -3357,6 +3418,11 @@ function App() {
     setRouteTestError(undefined);
   };
 
+  const loadRun = () => {
+    if (runStarting || (runID && !isTerminalRunStatus(runStatus)) || sessionID) return;
+    vscode.postMessage({ type: 'run.load-request' });
+  };
+
   const submitInteraction = (answer: Record<string, unknown>) => {
     if (!pending || !runID) return;
     vscode.postMessage(sessionID ? {
@@ -3387,6 +3453,8 @@ function App() {
         setInputValues((current) => ({ ...current, [message.name!]: message.value ?? '' }));
       } else if (message.action === 'run') {
         startRun(false);
+      } else if (message.action === 'load-run') {
+        loadRun();
       } else if (message.action === 'debug') {
         startRun(true);
       } else if (message.action === 'reset') {
@@ -3562,6 +3630,7 @@ function App() {
         type: 'session.graph-revision', requestID, segmentID, revision, originalNodeID,
       })}
       onDebugRun={() => startRun(true)}
+      onLoadRun={loadRun}
       onReset={resetRun}
       onCancel={cancelRun}
       onSubmitInteraction={submitInteraction}

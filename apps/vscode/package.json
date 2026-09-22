@@ -20,6 +20,7 @@
     "onLanguage:yaml",
     "onCommand:yawr.preview",
     "onCommand:yawr.previewGraph",
+    "onCommand:yawr.loadRun",
     "onCommand:yawr.runCurrentRunbook",
     "onCommand:yawr.validateInputs",
     "onCommand:yawr.showServerLog",
@@ -56,6 +57,10 @@
         "command": "yawr.previewGraph",
         "title": "Yawr: Open Runbook Graph (React Flow)",
         "icon": "$(type-hierarchy-sub)"
+      },
+      {
+        "command": "yawr.loadRun",
+        "title": "Yawr: Load Saved Run..."
       },
       {
         "command": "yawr.runCurrentRunbook",
