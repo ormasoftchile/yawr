@@ -62,11 +62,11 @@ func TestDetailsForStepEmitsKindSpecificOperatorData(t *testing.T) {
 		{
 			name: "host action",
 			step: &schema.Step{ID: "open", Type: schema.StepTypeHostAction, HostActionSpec: &schema.HostActionSpec{HostAction: schema.HostActionConfig{
-				Capability: "xts.open-view", Request: map[string]any{"view_path": "health.xts", "token": "must-hide"},
+				Capability: "external-view.open", Request: map[string]any{"view_path": "health.view", "token": "must-hide"},
 			}}},
-			want: map[string]any{"kind": "host_action", "capability": "xts.open-view", "request": []any{
+			want: map[string]any{"kind": "host_action", "capability": "external-view.open", "request": []any{
 				map[string]any{"name": "token", "value": "<redacted>", "redacted": true},
-				map[string]any{"name": "view_path", "value": "health.xts"},
+				map[string]any{"name": "view_path", "value": "health.view"},
 			}},
 		},
 		{

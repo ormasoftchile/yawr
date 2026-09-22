@@ -37605,11 +37605,11 @@
     return value;
   }
 
-  // src/xtsViewVerification.ts
-  function matchesXtsViewCheck(value, expected) {
+  // src/externalViewVerification.ts
+  function matchesExternalViewCheck(value, expected) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
     const candidate = value;
-    return candidate.type === "yawr.xts.verify-view" && Object.keys(candidate).length === 7 && ["capability", "runId", "turnId", "correlationId", "previewSessionId", "requestId"].every((key) => candidate[key] === expected[key]);
+    return candidate.type === "yawr.external-view.verify-view" && Object.keys(candidate).length === 7 && ["capability", "runId", "turnId", "correlationId", "previewSessionId", "requestId"].every((key) => candidate[key] === expected[key]);
   }
 
   // src/collectorFieldValues.ts
@@ -37769,7 +37769,7 @@
           });
         } else if (kind === "host_action") {
           const capability = hostCapability(condition.node);
-          const result = condition.status === "completed" ? capability === "xts.open-view" ? { status: condition.nestedStatus } : parseObject(condition.objectValue, `${nodeTitle(condition.node)} result`) : void 0;
+          const result = condition.status === "completed" ? capability === "external-view.open" ? { status: condition.nestedStatus } : parseObject(condition.objectValue, `${nodeTitle(condition.node)} result`) : void 0;
           (artifact.host_action_responses ??= []).push({
             at: selectorForNode(condition.node),
             capability,
@@ -37882,7 +37882,7 @@
       return /* @__PURE__ */ import_react14.default.createElement("section", { className: "route-test-pane", "aria-label": "Route test running" }, /* @__PURE__ */ import_react14.default.createElement("h2", null, targetName), /* @__PURE__ */ import_react14.default.createElement("p", null, runStarting ? "Starting route test..." : "Testing the saved route toward this step."), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", className: "danger", onClick: onStop }, "Stop test"));
     }
     if (stage === "review") {
-      return /* @__PURE__ */ import_react14.default.createElement("section", { className: "route-test-pane", "aria-label": "Check route" }, /* @__PURE__ */ import_react14.default.createElement("strong", { className: "route-test-review-safety" }, "No external actions will run."), /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-stepper" }, /* @__PURE__ */ import_react14.default.createElement("strong", null, "1 Set conditions"), /* @__PURE__ */ import_react14.default.createElement("strong", null, "2 Check route")), /* @__PURE__ */ import_react14.default.createElement("h2", null, targetName), /* @__PURE__ */ import_react14.default.createElement("p", null, "Yawr will stop before this step. XTS, commands, tools, transfers, and connectors are blocked."), /* @__PURE__ */ import_react14.default.createElement("ol", { className: "route-test-review-list" }, conditions.filter((condition) => condition.enabled).map((condition) => /* @__PURE__ */ import_react14.default.createElement("li", { key: condition.node.id }, /* @__PURE__ */ import_react14.default.createElement("strong", null, nodeTitle(condition.node)), /* @__PURE__ */ import_react14.default.createElement("span", null, conditionSummary(condition), " \xB7 ", sourceSummary(condition.source)))), /* @__PURE__ */ import_react14.default.createElement("li", null, /* @__PURE__ */ import_react14.default.createElement("strong", null, targetName), /* @__PURE__ */ import_react14.default.createElement("span", null, "Stop before this step"))), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Reviewed by"), /* @__PURE__ */ import_react14.default.createElement("input", { value: reviewer, onChange: (event) => setReviewer(event.target.value) })), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-ack" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: acknowledged, onChange: (event) => setAcknowledged(event.target.checked) }), /* @__PURE__ */ import_react14.default.createElement("span", null, "This tests the runbook route, not Azure or the external service.")), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-ack" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: sensitivityReviewed, onChange: (event) => setSensitivityReviewed(event.target.checked) }), /* @__PURE__ */ import_react14.default.createElement("span", null, "I reviewed the saved values. They contain no credentials, tokens, customer data, or raw XTS output.")), localError || error ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "interaction-error", role: "alert" }, localError ?? error) : null, /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-actions" }, /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", className: "primary", disabled: !acknowledged || !sensitivityReviewed || runStarting, onClick: run }, "Run route test"), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", onClick: () => setStage("conditions") }, "Edit conditions"), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", onClick: save }, "Save draft")));
+      return /* @__PURE__ */ import_react14.default.createElement("section", { className: "route-test-pane", "aria-label": "Check route" }, /* @__PURE__ */ import_react14.default.createElement("strong", { className: "route-test-review-safety" }, "No external actions will run."), /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-stepper" }, /* @__PURE__ */ import_react14.default.createElement("strong", null, "1 Set conditions"), /* @__PURE__ */ import_react14.default.createElement("strong", null, "2 Check route")), /* @__PURE__ */ import_react14.default.createElement("h2", null, targetName), /* @__PURE__ */ import_react14.default.createElement("p", null, "Yawr will stop before this step. External views, commands, tools, transfers, and connectors are blocked."), /* @__PURE__ */ import_react14.default.createElement("ol", { className: "route-test-review-list" }, conditions.filter((condition) => condition.enabled).map((condition) => /* @__PURE__ */ import_react14.default.createElement("li", { key: condition.node.id }, /* @__PURE__ */ import_react14.default.createElement("strong", null, nodeTitle(condition.node)), /* @__PURE__ */ import_react14.default.createElement("span", null, conditionSummary(condition), " \xB7 ", sourceSummary(condition.source)))), /* @__PURE__ */ import_react14.default.createElement("li", null, /* @__PURE__ */ import_react14.default.createElement("strong", null, targetName), /* @__PURE__ */ import_react14.default.createElement("span", null, "Stop before this step"))), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Reviewed by"), /* @__PURE__ */ import_react14.default.createElement("input", { value: reviewer, onChange: (event) => setReviewer(event.target.value) })), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-ack" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: acknowledged, onChange: (event) => setAcknowledged(event.target.checked) }), /* @__PURE__ */ import_react14.default.createElement("span", null, "This tests the runbook route, not Azure or the external service.")), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-ack" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: sensitivityReviewed, onChange: (event) => setSensitivityReviewed(event.target.checked) }), /* @__PURE__ */ import_react14.default.createElement("span", null, "I reviewed the saved values. They contain no credentials, tokens, customer data, or raw external view output.")), localError || error ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "interaction-error", role: "alert" }, localError ?? error) : null, /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-actions" }, /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", className: "primary", disabled: !acknowledged || !sensitivityReviewed || runStarting, onClick: run }, "Run route test"), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", onClick: () => setStage("conditions") }, "Edit conditions"), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", onClick: save }, "Save draft")));
     }
     return /* @__PURE__ */ import_react14.default.createElement("section", { className: "route-test-pane", "aria-label": "Set route-test conditions" }, /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-stepper" }, /* @__PURE__ */ import_react14.default.createElement("strong", null, "1 Set conditions"), /* @__PURE__ */ import_react14.default.createElement("span", null, "2 Check route")), /* @__PURE__ */ import_react14.default.createElement("h2", null, "Test reaching ", targetName), needsReview ? /* @__PURE__ */ import_react14.default.createElement("p", { className: "route-test-warning" }, "The runbook changed. Review these conditions before running again.") : null, blockers.length > 0 ? /* @__PURE__ */ import_react14.default.createElement("p", { className: "route-test-warning" }, "This route cannot run yet: ", blockers.join("; "), ".") : null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Route test name"), /* @__PURE__ */ import_react14.default.createElement("input", { value: name, onChange: (event) => setName(event.target.value) })), graphInputs(document2).length > 0 ? /* @__PURE__ */ import_react14.default.createElement("fieldset", { className: "route-test-group" }, /* @__PURE__ */ import_react14.default.createElement("legend", null, "Runbook inputs"), graphInputs(document2).filter((input) => input.type !== "secret").map((input) => /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field", key: input.name }, /* @__PURE__ */ import_react14.default.createElement("span", null, input.name), /* @__PURE__ */ import_react14.default.createElement("input", { value: inputs[input.name] ?? "", onChange: (event) => setInputs((current) => ({ ...current, [input.name]: event.target.value })) }))), graphInputs(document2).some((input) => input.type === "secret") ? /* @__PURE__ */ import_react14.default.createElement("p", null, "Secret inputs are not saved in route tests.") : null) : null, /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-conditions" }, conditions.length === 0 ? /* @__PURE__ */ import_react14.default.createElement("p", null, "This route reaches the selected step using only Yawr logic.") : null, conditions.map((condition) => /* @__PURE__ */ import_react14.default.createElement(ConditionEditor, { key: condition.node.id, condition, onChange: (patch) => updateCondition(condition.node.id, patch) }))), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-ack" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: sensitivityReviewed, onChange: (event) => setSensitivityReviewed(event.target.checked) }), /* @__PURE__ */ import_react14.default.createElement("span", null, "I reviewed the saved values. They contain no credentials, tokens, customer data, or raw external output.")), localError || error ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "interaction-error", role: "alert" }, localError ?? error) : null, /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-actions" }, /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", className: "primary", disabled: !sensitivityReviewed || blockers.length > 0, onClick: check }, "Check this route"), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", disabled: !sensitivityReviewed, onClick: save }, "Save draft"), /* @__PURE__ */ import_react14.default.createElement("button", { type: "button", onClick: onClose }, "Close")));
   }
@@ -37890,7 +37890,7 @@
     const kind = nodeKind2(condition.node);
     const capability = hostCapability(condition.node);
     const details = condition.node.data.details;
-    return /* @__PURE__ */ import_react14.default.createElement("article", { className: `route-test-condition${condition.enabled ? " enabled" : ""}` }, /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-enable" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: condition.enabled, onChange: (event) => onChange({ enabled: event.target.checked }) }), /* @__PURE__ */ import_react14.default.createElement("span", null, /* @__PURE__ */ import_react14.default.createElement("strong", null, nodeTitle(condition.node)), /* @__PURE__ */ import_react14.default.createElement("small", null, kindLabels[kind] ?? kind))), condition.enabled && kind === "host_action" ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-condition-fields" }, /* @__PURE__ */ import_react14.default.createElement("p", null, "Source: ", sourceSummary(condition.source)), capability === "xts.open-view" ? /* @__PURE__ */ import_react14.default.createElement("p", null, "XTS will not open in this route test.") : null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Assume host result"), /* @__PURE__ */ import_react14.default.createElement("select", { value: condition.status, onChange: (event) => onChange({ status: event.target.value }) }, ["completed", "failed", "timed-out", "execution-not-started", "unsupported"].map((status) => /* @__PURE__ */ import_react14.default.createElement("option", { key: status }, status)))), condition.status === "completed" && capability === "xts.open-view" ? /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Assume XTS launch result"), /* @__PURE__ */ import_react14.default.createElement("select", { value: condition.nestedStatus, onChange: (event) => onChange({ nestedStatus: event.target.value }) }, ["opened", "view-not-found", "environment-not-found", "invalid-parameters", "execution-not-started"].map((status) => /* @__PURE__ */ import_react14.default.createElement("option", { key: status }, status)))) : condition.status === "completed" ? /* @__PURE__ */ import_react14.default.createElement(JSONField, { label: "Saved result", value: condition.objectValue, onChange: (objectValue) => onChange({ objectValue }) }) : null) : null, condition.enabled && (kind === "cli" || kind === "tool") ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-condition-fields" }, /* @__PURE__ */ import_react14.default.createElement("p", null, "Source: ", sourceSummary(condition.source)), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Saved result status"), /* @__PURE__ */ import_react14.default.createElement("select", { value: condition.status, onChange: (event) => onChange({ status: event.target.value }) }, /* @__PURE__ */ import_react14.default.createElement("option", { value: "completed" }, "completed"), /* @__PURE__ */ import_react14.default.createElement("option", { value: "failed" }, "failed"), /* @__PURE__ */ import_react14.default.createElement("option", { value: "skipped" }, "skipped"))), /* @__PURE__ */ import_react14.default.createElement(JSONField, { label: "Saved result", value: condition.objectValue, onChange: (objectValue) => onChange({ objectValue }) })) : null, condition.enabled && kind === "collector" ? /* @__PURE__ */ import_react14.default.createElement("fieldset", { className: "route-test-condition-fields" }, /* @__PURE__ */ import_react14.default.createElement("legend", null, "Saved findings"), /* @__PURE__ */ import_react14.default.createElement("p", null, "Source: ", sourceSummary(condition.source)), collectorFields(condition.node).map((field2) => /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field", key: field2.name }, /* @__PURE__ */ import_react14.default.createElement("span", null, field2.label ?? field2.name, field2.required ? " *" : ""), field2.ephemeral ? /* @__PURE__ */ import_react14.default.createElement("small", null, "Ephemeral field cannot be saved in a route test.") : null, field2.type === "boolean" ? /* @__PURE__ */ import_react14.default.createElement(
+    return /* @__PURE__ */ import_react14.default.createElement("article", { className: `route-test-condition${condition.enabled ? " enabled" : ""}` }, /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-enable" }, /* @__PURE__ */ import_react14.default.createElement("input", { type: "checkbox", checked: condition.enabled, onChange: (event) => onChange({ enabled: event.target.checked }) }), /* @__PURE__ */ import_react14.default.createElement("span", null, /* @__PURE__ */ import_react14.default.createElement("strong", null, nodeTitle(condition.node)), /* @__PURE__ */ import_react14.default.createElement("small", null, kindLabels[kind] ?? kind))), condition.enabled && kind === "host_action" ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-condition-fields" }, /* @__PURE__ */ import_react14.default.createElement("p", null, "Source: ", sourceSummary(condition.source)), capability === "external-view.open" ? /* @__PURE__ */ import_react14.default.createElement("p", null, "External view will not open in this route test.") : null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Assume host result"), /* @__PURE__ */ import_react14.default.createElement("select", { value: condition.status, onChange: (event) => onChange({ status: event.target.value }) }, ["completed", "failed", "timed-out", "execution-not-started", "unsupported"].map((status) => /* @__PURE__ */ import_react14.default.createElement("option", { key: status }, status)))), condition.status === "completed" && capability === "external-view.open" ? /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Assume external view launch result"), /* @__PURE__ */ import_react14.default.createElement("select", { value: condition.nestedStatus, onChange: (event) => onChange({ nestedStatus: event.target.value }) }, ["opened", "view-not-found", "environment-not-found", "invalid-parameters", "execution-not-started"].map((status) => /* @__PURE__ */ import_react14.default.createElement("option", { key: status }, status)))) : condition.status === "completed" ? /* @__PURE__ */ import_react14.default.createElement(JSONField, { label: "Saved result", value: condition.objectValue, onChange: (objectValue) => onChange({ objectValue }) }) : null) : null, condition.enabled && (kind === "cli" || kind === "tool") ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "route-test-condition-fields" }, /* @__PURE__ */ import_react14.default.createElement("p", null, "Source: ", sourceSummary(condition.source)), /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field" }, /* @__PURE__ */ import_react14.default.createElement("span", null, "Saved result status"), /* @__PURE__ */ import_react14.default.createElement("select", { value: condition.status, onChange: (event) => onChange({ status: event.target.value }) }, /* @__PURE__ */ import_react14.default.createElement("option", { value: "completed" }, "completed"), /* @__PURE__ */ import_react14.default.createElement("option", { value: "failed" }, "failed"), /* @__PURE__ */ import_react14.default.createElement("option", { value: "skipped" }, "skipped"))), /* @__PURE__ */ import_react14.default.createElement(JSONField, { label: "Saved result", value: condition.objectValue, onChange: (objectValue) => onChange({ objectValue }) })) : null, condition.enabled && kind === "collector" ? /* @__PURE__ */ import_react14.default.createElement("fieldset", { className: "route-test-condition-fields" }, /* @__PURE__ */ import_react14.default.createElement("legend", null, "Saved findings"), /* @__PURE__ */ import_react14.default.createElement("p", null, "Source: ", sourceSummary(condition.source)), collectorFields(condition.node).map((field2) => /* @__PURE__ */ import_react14.default.createElement("label", { className: "route-test-field", key: field2.name }, /* @__PURE__ */ import_react14.default.createElement("span", null, field2.label ?? field2.name, field2.required ? " *" : ""), field2.ephemeral ? /* @__PURE__ */ import_react14.default.createElement("small", null, "Ephemeral field cannot be saved in a route test.") : null, field2.type === "boolean" ? /* @__PURE__ */ import_react14.default.createElement(
       "input",
       {
         type: "checkbox",
@@ -38044,7 +38044,7 @@
   }
   function conditionSummary(condition) {
     const kind = nodeKind2(condition.node);
-    if (kind === "host_action" && hostCapability(condition.node) === "xts.open-view") return `Assume XTS launch result: ${condition.nestedStatus}`;
+    if (kind === "host_action" && hostCapability(condition.node) === "external-view.open") return `Assume external view launch result: ${condition.nestedStatus}`;
     if (kind === "collector") return `Saved findings: ${Object.values(condition.values).join(", ")}`;
     if (kind === "choice") return `Saved choice: ${condition.selected.join(", ")}`;
     if (kind === "decision") return `Saved decision: ${condition.label}`;
@@ -38400,15 +38400,15 @@
     interaction,
     onSubmit,
     onConfirmHostAction,
-    xtsOpened,
-    xtsViewCheck,
-    onVerifyXtsView
+    externalViewOpened,
+    externalViewCheck,
+    onVerifyExternalView
   }) {
     const [selected, setSelected] = (0, import_react15.useState)([]);
     const [values, setValues] = (0, import_react15.useState)(() => {
       const initial = {};
       for (const field2 of interaction.fields ?? []) {
-        if (field2.default !== void 0) initial[field2.name] = field2.default;
+        initial[field2.name] = field2.default ?? "";
       }
       return initial;
     });
@@ -38423,9 +38423,9 @@
       onSubmit(answer);
     };
     if (interaction.kind === "host_action") {
-      const isXts = interaction.host_action?.capability === "xts.open-view";
-      if (!isXts) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "interaction-wait", role: "status" }, "Opening host view...");
-      return /* @__PURE__ */ import_react15.default.createElement("section", { className: "interaction-pane host-action-pane", "aria-label": isXts ? "Open XTS view" : "Open host view" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")), /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, isXts ? "Actual run \xB7 XTS" : "Host action"), /* @__PURE__ */ import_react15.default.createElement("h2", null, interaction.title ?? interaction.stepID), interaction.prompt ? /* @__PURE__ */ import_react15.default.createElement("p", null, interaction.prompt) : null, isXts ? /* @__PURE__ */ import_react15.default.createElement("p", null, "VS Code will switch to XTS. Review the view, then return here to record your findings.") : null, xtsViewCheck ? /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement("p", null, "XTS launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded with the requested environment and parameters. Do not confirm a startup, authentication, or loading error."), /* @__PURE__ */ import_react15.default.createElement("dl", null, /* @__PURE__ */ import_react15.default.createElement("dt", null, "View"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.view_path ?? "")), /* @__PURE__ */ import_react15.default.createElement("dt", null, "Environment"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.environment ?? "")), Object.entries(recordValue(interaction.host_action?.request.parameters) ?? {}).map(([name, value]) => /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, { key: name }, /* @__PURE__ */ import_react15.default.createElement("dt", null, name), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(value))))), /* @__PURE__ */ import_react15.default.createElement(
+      const isExternalView = interaction.host_action?.capability === "external-view.open";
+      if (!isExternalView) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "interaction-wait", role: "status" }, "Opening host view...");
+      return /* @__PURE__ */ import_react15.default.createElement("section", { className: "interaction-pane host-action-pane", "aria-label": isExternalView ? "Open external view" : "Open host view" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "1 Open external view"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")), /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, isExternalView ? "Actual run \xB7 External view" : "Host action"), /* @__PURE__ */ import_react15.default.createElement("h2", null, interaction.title ?? interaction.stepID), interaction.prompt ? /* @__PURE__ */ import_react15.default.createElement("p", null, interaction.prompt) : null, isExternalView ? /* @__PURE__ */ import_react15.default.createElement("p", null, "VS Code will switch to the external view. Review the view, then return here to record your findings.") : null, externalViewCheck ? /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement("p", null, "External view launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded with the requested environment and parameters. Do not confirm a startup, authentication, or loading error."), /* @__PURE__ */ import_react15.default.createElement("dl", null, /* @__PURE__ */ import_react15.default.createElement("dt", null, "View"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.view_path ?? "")), /* @__PURE__ */ import_react15.default.createElement("dt", null, "Environment"), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(interaction.host_action?.request.environment ?? "")), Object.entries(recordValue(interaction.host_action?.request.parameters) ?? {}).map(([name, value]) => /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, { key: name }, /* @__PURE__ */ import_react15.default.createElement("dt", null, name), /* @__PURE__ */ import_react15.default.createElement("dd", null, String(value))))), /* @__PURE__ */ import_react15.default.createElement(
         "button",
         {
           type: "button",
@@ -38433,10 +38433,10 @@
           disabled: verificationSubmitted,
           onClick: () => {
             setVerificationSubmitted(true);
-            onVerifyXtsView("opened");
+            onVerifyExternalView("opened");
           }
         },
-        "XTS view is ready"
+        "External view is ready"
       ), /* @__PURE__ */ import_react15.default.createElement(
         "button",
         {
@@ -38445,10 +38445,10 @@
           disabled: verificationSubmitted,
           onClick: () => {
             setVerificationSubmitted(true);
-            onVerifyXtsView("failed");
+            onVerifyExternalView("failed");
           }
         },
-        "XTS failed to open"
+        "External view failed to open"
       )) : /* @__PURE__ */ import_react15.default.createElement(
         "button",
         {
@@ -38460,7 +38460,7 @@
             onConfirmHostAction(interaction);
           }
         },
-        submitting ? "Opening XTS..." : /* @__PURE__ */ import_react15.default.createElement("span", null, "Open XTS")
+        submitting ? "Opening external view..." : /* @__PURE__ */ import_react15.default.createElement("span", null, "Open external view")
       ));
     }
     if (interaction.kind === "approval") {
@@ -38516,7 +38516,7 @@
       },
       /* @__PURE__ */ import_react15.default.createElement("strong", null, optionText(route)),
       route.hint ? /* @__PURE__ */ import_react15.default.createElement("small", null, route.hint) : null
-    ))) : null, interaction.kind === "collector" && collectorReview ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "collector-review review-before-submit", "aria-label": "Review collected answers" }, xtsOpened ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("span", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("strong", null, "3 Review")) : null, /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, "Collected in this actual run"), /* @__PURE__ */ import_react15.default.createElement("h3", null, "Review answers"), /* @__PURE__ */ import_react15.default.createElement("dl", null, (interaction.fields ?? []).map((field2) => /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, { key: field2.name }, /* @__PURE__ */ import_react15.default.createElement("dt", null, field2.label ?? field2.display_name ?? field2.name), /* @__PURE__ */ import_react15.default.createElement("dd", null, formatCollectorReviewValue(field2, collectorReview[field2.name]))))), /* @__PURE__ */ import_react15.default.createElement("p", null, "Saving submits these answers and resumes the run. The next route may depend on them."), /* @__PURE__ */ import_react15.default.createElement("div", { className: "debug-actions" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", className: "primary", disabled: submitting, onClick: () => submit({ kind: "collector", values: collectorReview }) }, "Save answers and continue"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: submitting, onClick: () => setCollectorReview(void 0) }, "Edit answers"))) : interaction.kind === "collector" ? /* @__PURE__ */ import_react15.default.createElement("form", { onSubmit: (event) => {
+    ))) : null, interaction.kind === "collector" && collectorReview ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "collector-review review-before-submit", "aria-label": "Review collected answers" }, externalViewOpened ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("span", null, "1 Open external view"), /* @__PURE__ */ import_react15.default.createElement("span", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("strong", null, "3 Review")) : null, /* @__PURE__ */ import_react15.default.createElement("span", { className: "interaction-kind" }, "Collected in this actual run"), /* @__PURE__ */ import_react15.default.createElement("h3", null, "Review answers"), /* @__PURE__ */ import_react15.default.createElement("dl", null, (interaction.fields ?? []).map((field2) => /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, { key: field2.name }, /* @__PURE__ */ import_react15.default.createElement("dt", null, field2.label ?? field2.display_name ?? field2.name), /* @__PURE__ */ import_react15.default.createElement("dd", null, formatCollectorReviewValue(field2, collectorReview[field2.name]))))), /* @__PURE__ */ import_react15.default.createElement("p", null, "Saving submits these answers and resumes the run. The next route may depend on them."), /* @__PURE__ */ import_react15.default.createElement("div", { className: "debug-actions" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", className: "primary", disabled: submitting, onClick: () => submit({ kind: "collector", values: collectorReview }) }, "Save answers and continue"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: submitting, onClick: () => setCollectorReview(void 0) }, "Edit answers"))) : interaction.kind === "collector" ? /* @__PURE__ */ import_react15.default.createElement("form", { onSubmit: (event) => {
       event.preventDefault();
       try {
         setValidationError(void 0);
@@ -38524,7 +38524,7 @@
       } catch (error) {
         setValidationError(error instanceof Error ? error.message : String(error));
       }
-    } }, xtsOpened ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("span", null, "1 Open XTS"), /* @__PURE__ */ import_react15.default.createElement("strong", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")) : null, (interaction.fields ?? []).map((field2) => /* @__PURE__ */ import_react15.default.createElement("label", { className: "collector-field", "data-field-name": field2.name, key: field2.name }, /* @__PURE__ */ import_react15.default.createElement("span", null, field2.label ?? field2.display_name ?? field2.name, field2.required ? " *" : ""), field2.type === "boolean" ? /* @__PURE__ */ import_react15.default.createElement(
+    } }, externalViewOpened ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "actual-run-stepper", "aria-label": "Actual run progress" }, /* @__PURE__ */ import_react15.default.createElement("span", null, "1 Open external view"), /* @__PURE__ */ import_react15.default.createElement("strong", null, "2 Answer questions"), /* @__PURE__ */ import_react15.default.createElement("span", null, "3 Review")) : null, (interaction.fields ?? []).map((field2) => /* @__PURE__ */ import_react15.default.createElement("label", { className: "collector-field", "data-field-name": field2.name, key: field2.name }, /* @__PURE__ */ import_react15.default.createElement("span", null, field2.label ?? field2.display_name ?? field2.name, field2.required ? " *" : ""), field2.type === "boolean" ? /* @__PURE__ */ import_react15.default.createElement(
       "input",
       {
         type: "checkbox",
@@ -39144,9 +39144,9 @@
     routeTestError,
     onSaveRouteTest,
     onRunRouteTest,
-    xtsOpened,
-    xtsViewCheck,
-    onVerifyXtsView
+    externalViewOpened,
+    externalViewCheck,
+    onVerifyExternalView
   }) {
     const runtimeNodes = (0, import_react15.useMemo)(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document2), [observedRuntimeNodes, runStatus, document2]);
     const [selectedId, setSelectedId] = (0, import_react15.useState)();
@@ -39898,7 +39898,7 @@
       )), issueSelection && !selected ? /* @__PURE__ */ import_react15.default.createElement("span", { role: "status" }, "Historical graph unavailable \u2014 occurrence remains in the issue index.") : null) : null,
       /* @__PURE__ */ import_react15.default.createElement("div", { className: "workflow-summary", role: "status" }, progressCounts.total, " canonical steps \xB7 ", progressCounts.completed, " done \xB7 ", progressCounts.issues, " issues \xB7 ", progressCounts.skipped, " skipped \xB7 ", progressCounts.running, " running \xB7 ", progressCounts.remaining, " ", isExecutionEnded(runStatus) ? "without final status" : "remaining", " \xB7 ", workflow.segments.size, " visual technical groups \xB7 hidden is not skipped"),
       routeTargetID && routeProjection ? /* @__PURE__ */ import_react15.default.createElement("section", { className: "route-view-strip", "aria-label": `Routes through ${routeTargetName}` }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-copy" }, /* @__PURE__ */ import_react15.default.createElement("strong", null, "Showing routes through: ", routeTargetName), /* @__PURE__ */ import_react15.default.createElement("span", null, routeProjection.predecessorCount, " steps lead to it, ", routeProjection.successorCount, " follow it, ", routeProjection.boundaryEdges.length, " hidden dependencies")), /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-view-actions" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-scope", role: "radiogroup", "aria-label": "Visible routes" }, /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "through", onClick: () => setRouteScope("through") }, "Through this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "to", onClick: () => setRouteScope("to") }, "To this step"), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", role: "radio", "aria-checked": routeScope === "from", onClick: () => setRouteScope("from") }, "From this step")), /* @__PURE__ */ import_react15.default.createElement("button", { type: "button", disabled: routeActionsDisabled, onClick: showFullGraph }, "Show full graph"))) : null,
-      currentRouteTestEditor ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-test-global-safety", role: "status" }, routeTestOutcome?.passed ? "Route test completed - external actions were blocked" : routeTestRunning ? "Testing route - XTS and external actions are blocked" : "Reviewing route test - protected execution starts only when you run this route test") : null,
+      currentRouteTestEditor ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "route-test-global-safety", role: "status" }, routeTestOutcome?.passed ? "Route test completed - external actions were blocked" : routeTestRunning ? "Testing route - external views and external actions are blocked" : "Reviewing route test - protected execution starts only when you run this route test") : null,
       /* @__PURE__ */ import_react15.default.createElement(
         "div",
         {
@@ -40024,9 +40024,9 @@
             interaction: pending2,
             onSubmit: onSubmitInteraction,
             onConfirmHostAction,
-            xtsOpened,
-            xtsViewCheck,
-            onVerifyXtsView
+            externalViewOpened,
+            externalViewCheck,
+            onVerifyExternalView
           }
         ) : currentRouteTestEditor && routeTarget && routeTestContext ? /* @__PURE__ */ import_react15.default.createElement(
           RouteTestPane,
@@ -40176,8 +40176,8 @@
     const [routeTestOutcome, setRouteTestOutcome] = (0, import_react15.useState)();
     const [routeTestRunning, setRouteTestRunning] = (0, import_react15.useState)(false);
     const [routeTestError, setRouteTestError] = (0, import_react15.useState)();
-    const [xtsOpened, setXtsOpened] = (0, import_react15.useState)(false);
-    const [xtsViewCheck, setXtsViewCheck] = (0, import_react15.useState)();
+    const [externalViewOpened, setExternalViewOpened] = (0, import_react15.useState)(false);
+    const [externalViewCheck, setExternalViewCheck] = (0, import_react15.useState)();
     const pendingRef = (0, import_react15.useRef)();
     const resolvedTurnsRef = (0, import_react15.useRef)(/* @__PURE__ */ new Set());
     const runIDRef = (0, import_react15.useRef)();
@@ -40211,10 +40211,10 @@
     const clearActiveRun = (preserveVisualPlayback = false) => {
       if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
       hostRequestRef.current = void 0;
-      setXtsViewCheck(void 0);
+      setExternalViewCheck(void 0);
       pendingRef.current = void 0;
       runIDRef.current = void 0;
-      setXtsOpened(false);
+      setExternalViewOpened(false);
       setPending(void 0);
       setRunID(void 0);
     };
@@ -40514,18 +40514,18 @@
           setRouteTestError(void 0);
         } else if (message.type === "route-test.error") {
           setRouteTestError(message.message);
-        } else if (message.type === "yawr.xts.verify-view") {
+        } else if (message.type === "yawr.external-view.verify-view") {
           const hostRequest = hostRequestRef.current;
           const interaction = pendingRef.current;
           if (!hostRequest || !interaction || interaction.kind !== "host_action" || interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID || runIDRef.current !== hostRequest.runID) return;
-          if (matchesXtsViewCheck(message, {
+          if (matchesExternalViewCheck(message, {
             capability: hostRequest.capability,
             runId: hostRequest.runID,
             turnId: hostRequest.turnID,
             correlationId: hostRequest.correlationID,
             previewSessionId: hostSessionRef.current,
             requestId: hostRequest.requestID
-          })) setXtsViewCheck(message);
+          })) setExternalViewCheck(message);
         } else if (message.type === "yawr.host-action.ack" || message.type === "yawr.host-action.cancel") {
           const response = parseHostActionResponse(message);
           if (!response) return;
@@ -40535,9 +40535,9 @@
           if (response.previewSessionId !== hostSessionRef.current || interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID || interaction.host_action.capability !== hostRequest.capability || response.correlationId !== hostRequest.correlationID || response.requestId !== hostRequest.requestID) return;
           if (response.type === "yawr.host-action.ack" && (response.runId !== hostRequest.runID || response.turnId !== hostRequest.turnID || response.capability !== hostRequest.capability)) return;
           if (runIDRef.current !== hostRequest.runID) return;
-          setXtsViewCheck(void 0);
+          setExternalViewCheck(void 0);
           if (response.type === "yawr.host-action.ack" && response.status === "completed" && response.result?.status === "opened") {
-            setXtsOpened(true);
+            setExternalViewOpened(true);
           }
           const answer = {
             kind: "host_action",
@@ -40616,7 +40616,7 @@
       });
     };
     (0, import_react15.useEffect)(() => {
-      if (!pending2 || pending2.kind !== "host_action" || !pending2.host_action || !runID || pending2.host_action.capability === "xts.open-view") return;
+      if (!pending2 || pending2.kind !== "host_action" || !pending2.host_action || !runID || pending2.host_action.capability === "external-view.open") return;
       dispatchHostAction(pending2, false);
     }, [pending2?.turnID, runID]);
     const startRun = (debugMode = false) => {
@@ -40906,7 +40906,7 @@
         });
       });
       return () => cancelAnimationFrame(frame2);
-    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, xtsViewCheck, testMode]);
+    }, [document2, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending2?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, externalViewCheck, testMode]);
     if (loading) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "Loading runbook...");
     if (error) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state error", role: "alert" }, error);
     if (!document2) return /* @__PURE__ */ import_react15.default.createElement("div", { className: "state", role: "status" }, "No graph loaded");
@@ -40970,11 +40970,11 @@
           setRouteTestError(void 0);
           vscode.postMessage({ type: "route-test.run", artifact });
         },
-        xtsOpened,
-        xtsViewCheck,
-        onVerifyXtsView: (status) => {
-          if (!xtsViewCheck || xtsViewCheck.runId !== runIDRef.current || xtsViewCheck.turnId !== pendingRef.current?.turnID || xtsViewCheck.requestId !== hostRequestRef.current?.requestID) return;
-          vscode.postMessage({ ...xtsViewCheck, type: "yawr.xts.view-verified", status });
+        externalViewOpened,
+        externalViewCheck,
+        onVerifyExternalView: (status) => {
+          if (!externalViewCheck || externalViewCheck.runId !== runIDRef.current || externalViewCheck.turnId !== pendingRef.current?.turnID || externalViewCheck.requestId !== hostRequestRef.current?.requestID) return;
+          vscode.postMessage({ ...externalViewCheck, type: "yawr.external-view.view-verified", status });
         }
       }
     );

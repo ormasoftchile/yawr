@@ -42,12 +42,12 @@ func TestRouteTest_UsesNormalCaptureAndBranchThenStopsBeforeTarget(t *testing.T)
 	scheduler, err := routetest.NewScheduler(routetest.Scenario{
 		Target: routetest.Selector{CallPath: []string{"route_finding"}, Step: "dangerous_command", Phase: "before", Invocation: 1, Attempt: 1},
 		HostActionResponses: []routetest.HostActionBinding{{
-			At: routetest.Selector{CallPath: []string{"inspect_replication"}, Step: "open_xts_view", Phase: "execute", Invocation: 1, Attempt: 1}, Capability: "xts.open-view",
+			At: routetest.Selector{CallPath: []string{"inspect_replication"}, Step: "open_external_view", Phase: "execute", Invocation: 1, Attempt: 1}, Capability: "external-view.open",
 			Response: routetest.HostActionResponse{Status: "completed", Result: map[string]any{"status": "opened"}}, Review: review,
 		}},
 		InteractionAnswers: []routetest.InteractionBinding{{
-			At: routetest.Selector{CallPath: []string{"inspect_replication", "handle_xts_launch"}, Step: "record_findings", Phase: "execute", Invocation: 1, Attempt: 1}, Kind: "collector",
-			Values: map[string]any{"xts_check_primary_health": "unavailable"}, Review: review,
+			At: routetest.Selector{CallPath: []string{"inspect_replication", "handle_external_view_launch"}, Step: "record_findings", Phase: "execute", Invocation: 1, Attempt: 1}, Kind: "collector",
+			Values: map[string]any{"extview_check_primary_health": "unavailable"}, Review: review,
 		}},
 	})
 	if err != nil {
@@ -59,30 +59,30 @@ func TestRouteTest_UsesNormalCaptureAndBranchThenStopsBeforeTarget(t *testing.T)
 	childPath := filepath.Join(dir, "inspect-replication.runbook.yaml")
 	childRunbook := strings.ReplaceAll(`apiVersion: yawr.runbook/v1
 id: inspect-replication
-name: Inspect replication in XTS
+name: Inspect replication in external view
 kind: composable
 flow:
 	- step:
-			id: open_xts_view
+			id: open_external_view
 			type: host_action
 			host_action:
-				capability: xts.open-view
-				request: { view_path: replicas.xts }
+				capability: external-view.open
+				request: { view_path: replicas.view }
 			capture:
-				xts_check_host_status: outputs.status
-				xts_check_launch_status: outputs.result.status
+				extview_check_host_status: outputs.status
+				extview_check_launch_status: outputs.result.status
 	- step:
-			id: handle_xts_launch
+			id: handle_external_view_launch
 			type: branch
 			branches:
-				- condition: xts_check_host_status == "completed" and xts_check_launch_status == "opened"
+				- condition: extview_check_host_status == "completed" and extview_check_launch_status == "opened"
 					steps:
 						- step:
 								id: record_findings
 								type: collector
 								prompt: Record findings
 								fields:
-									- name: xts_check_primary_health
+									- name: extview_check_primary_health
 										type: select
 										label: Primary health
 										required: true
@@ -92,9 +92,9 @@ flow:
 				- else: true
 					steps:
 						- step:
-								id: xts_blocked
+								id: extview_blocked
 								type: end
-								outcome: { category: blocked, code: xts-not-opened }
+								outcome: { category: blocked, code: external-view-not-opened }
 `, "\t", "  ")
 	if err := os.WriteFile(childPath, []byte(childRunbook), 0o600); err != nil {
 		t.Fatalf("WriteFile child: %v", err)
@@ -110,7 +110,7 @@ flow:
 			include:
 				runbook: inspect-replication.runbook.yaml
 			capture:
-				replication_primary_health: xts_check_primary_health
+				replication_primary_health: extview_check_primary_health
 	- step:
 			id: route_finding
 			type: branch

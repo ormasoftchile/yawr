@@ -1383,7 +1383,7 @@ suite('Yawr extension smoke tests', () => {
     }
   });
 
-  for (const viewReady of [true, false]) test(`direct XTS handoff waits for real-view verification (${viewReady ? 'ready' : 'startup failed'})`, async function () {
+  for (const viewReady of [true, false]) test(`direct external view handoff waits for real-view verification (${viewReady ? 'ready' : 'startup failed'})`, async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
@@ -1391,11 +1391,11 @@ suite('Yawr extension smoke tests', () => {
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder, 'the Extension Host test requires a workspace folder');
-    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-xts-review.runbook.yaml');
+    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-external-view-review.runbook.yaml');
     const fixtureUri = vscode.Uri.joinPath(workspaceFolder.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
     const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
     fixture.inputs = [];
-    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-xts-review\nsteps: []\n'));
+    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-external-view-review\nsteps: []\n'));
 
     const answers: Array<Record<string, unknown>> = [];
     const fakeChild = new EventEmitter() as EventEmitter & {
@@ -1428,15 +1428,15 @@ suite('Yawr extension smoke tests', () => {
           answers.push(answer);
           if (answer.kind === 'host_action') {
             if (answer.status !== 'completed') {
-              writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-xts' });
-              writeFrame({ type: 'run.finished', runID: 'run-xts', status: 'failed' });
+              writeFrame({ type: 'interaction.resolved', runID: 'run-extview', turnID: 'turn-extview' });
+              writeFrame({ type: 'run.finished', runID: 'run-extview', status: 'failed' });
             } else {
-              writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-xts' });
+              writeFrame({ type: 'interaction.resolved', runID: 'run-extview', turnID: 'turn-extview' });
               writeFrame({
-                type: 'interaction.pending', runID: 'run-xts', turnID: 'turn-findings',
+                type: 'interaction.pending', runID: 'run-extview', turnID: 'turn-findings',
                 interaction: {
-                  type: 'pending', runID: 'run-xts', turnID: 'turn-findings', stepID: 'record_findings', kind: 'collector',
-                  title: 'Record GEODR classification', prompt: 'Review XTS, then record the operator classification.',
+                  type: 'pending', runID: 'run-extview', turnID: 'turn-findings', stepID: 'record_findings', kind: 'collector',
+                  title: 'Record Failover classification', prompt: 'Review external view, then record the operator classification.',
                   fields: [{
                     name: 'primary_health', type: 'select', label: 'Primary health', required: true,
                     options: [{ value: 'unavailable', label: 'Unavailable' }, { value: 'healthy', label: 'Healthy' }],
@@ -1445,8 +1445,8 @@ suite('Yawr extension smoke tests', () => {
               });
             }
           } else if (answer.kind === 'collector') {
-            writeFrame({ type: 'interaction.resolved', runID: 'run-xts', turnID: 'turn-findings' });
-            writeFrame({ type: 'run.finished', runID: 'run-xts', status: 'completed' });
+            writeFrame({ type: 'interaction.resolved', runID: 'run-extview', turnID: 'turn-findings' });
+            writeFrame({ type: 'run.finished', runID: 'run-extview', status: 'completed' });
             setImmediate(() => {
               fakeChild.exitCode = 0;
               fakeChild.emit('exit', 0, null);
@@ -1458,12 +1458,12 @@ suite('Yawr extension smoke tests', () => {
       }
     });
 
-    let xtsDispatches = 0;
-    let xtsAcks = 0;
-    let xtsReminders = 0;
+    let externalViewDispatches = 0;
+    let externalViewAcks = 0;
+    let externalViewReminders = 0;
     const dispatchedArguments: unknown[][] = [];
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', (...args: unknown[]) => {
-      xtsDispatches += 1;
+    const externalViewCommand = vscode.commands.registerCommand('externalView.openByPath', (...args: unknown[]) => {
+      externalViewDispatches += 1;
       dispatchedArguments.push(args);
     });
     const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>(
@@ -1471,19 +1471,19 @@ suite('Yawr extension smoke tests', () => {
       runbookUri.fsPath,
       {
         documentLoader: async () => fixture,
-        onHostActionAck: () => { xtsAcks += 1; },
-        showXtsReminder: () => { xtsReminders += 1; },
+        onHostActionAck: () => { externalViewAcks += 1; },
+        showExternalViewReminder: () => { externalViewReminders += 1; },
         spawnRun: () => {
           setImmediate(() => {
-            writeFrame({ type: 'run.started', runID: 'run-xts', status: 'running' });
+            writeFrame({ type: 'run.started', runID: 'run-extview', status: 'running' });
             writeFrame({
-              type: 'interaction.pending', runID: 'run-xts', turnID: 'turn-xts',
+              type: 'interaction.pending', runID: 'run-extview', turnID: 'turn-extview',
               interaction: {
-                type: 'pending', runID: 'run-xts', turnID: 'turn-xts', stepID: 'open_xts_view', kind: 'host_action',
-                correlationID: 'corr-xts', title: 'Open replication view',
+                type: 'pending', runID: 'run-extview', turnID: 'turn-extview', stepID: 'open_external_view', kind: 'host_action',
+                correlationID: 'corr-extview', title: 'Open replication view',
                 host_action: {
-                  capability: 'xts.open-view',
-                  request: { view_path: 'Database Replicas.xts', environment: 'ProdEus1a',
+                  capability: 'external-view.open',
+                  request: { view_path: 'Database Replicas.view', environment: 'ProdEus1a',
                     parameters: { server: 'server-859807057', database: 'database-859807057' }, focus: true },
                 },
               },
@@ -1516,44 +1516,44 @@ suite('Yawr extension smoke tests', () => {
       });
 
     try {
-      await waitForUI((state) => state.runButtonCount === 1, 'direct XTS graph did not render');
+      await waitForUI((state) => state.runButtonCount === 1, 'direct external view graph did not render');
       const hostPending = waitForUI(
-        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open XTS') === true,
-        'XTS interaction did not wait behind Open XTS',
+        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open external view') === true,
+        'External view interaction did not wait behind Open external view',
       );
       await panel.webview.postMessage({ type: 'test.action', action: 'run' });
       await hostPending;
-      assert.strictEqual(xtsDispatches, 0, 'XTS dispatched before explicit panel confirmation');
+      assert.strictEqual(externalViewDispatches, 0, 'External view dispatched before explicit panel confirmation');
 
       const verificationPending = waitForUI(
-        state => state.pendingKind === 'host_action' && state.visibleButtons?.includes('XTS view is ready') === true,
+        state => state.pendingKind === 'host_action' && state.visibleButtons?.includes('External view is ready') === true,
         'void command did not leave the run at view verification',
       );
-      const openClicked = waitForDOM((state) => state.clicked === 'Open XTS', 'Open XTS button was not clicked');
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
+      const openClicked = waitForDOM((state) => state.clicked === 'Open external view', 'Open external view button was not clicked');
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open external view' });
       assert.strictEqual((await openClicked).found, true);
       await verificationPending;
-      assert.deepStrictEqual(dispatchedArguments, [['Database Replicas.xts',
+      assert.deepStrictEqual(dispatchedArguments, [['Database Replicas.view',
         '-p environment:ProdEus1a -p server:server-859807057 -p database:database-859807057']]);
-      assert.strictEqual(xtsAcks, 0, 'command dispatch is not evidence of an opened view');
+      assert.strictEqual(externalViewAcks, 0, 'command dispatch is not evidence of an opened view');
       assert.strictEqual(answers.length, 0, 'runtime must remain at the operator interaction');
-      assert.strictEqual(xtsReminders, 0);
+      assert.strictEqual(externalViewReminders, 0);
       if (!viewReady) {
         const failed = waitForUI(state => state.runStatus === 'failed', 'startup failure was not surfaced');
-        await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'XTS failed to open' });
+        await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'External view failed to open' });
         await failed;
         assert.strictEqual(answers.length, 1);
         assert.strictEqual(answers[0].status, 'failed');
         assert.strictEqual(answers[0].result, undefined);
-        assert.strictEqual(xtsReminders, 0);
+        assert.strictEqual(externalViewReminders, 0);
         return;
       }
       const collectorPending = waitForUI((state) => state.pendingKind === 'collector', 'collector did not follow verified readiness');
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'XTS view is ready' });
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'External view is ready' });
       await collectorPending;
-      assert.strictEqual(xtsDispatches, 1);
-      assert.strictEqual(xtsAcks, 1, 'verified XTS readiness must traverse the production host-action transport');
-      assert.strictEqual(xtsReminders, 1, 'verified focused XTS view must traverse the production reminder path');
+      assert.strictEqual(externalViewDispatches, 1);
+      assert.strictEqual(externalViewAcks, 1, 'verified external view readiness must traverse the production host-action transport');
+      assert.strictEqual(externalViewReminders, 1, 'verified focused external view must traverse the production reminder path');
       assert.strictEqual(answers.filter(answer => answer.kind === 'collector').length, 0,
         'the run must wait for operator classification after the view is ready');
 
@@ -1574,12 +1574,12 @@ suite('Yawr extension smoke tests', () => {
       assert.deepStrictEqual(collectorAnswers[0].values, { primary_health: 'unavailable' });
     } finally {
       panel.dispose();
-      xtsCommand.dispose();
+      externalViewCommand.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
     }
   });
 
-  test('unexpected run exit invalidates a stale Open XTS action', async function () {
+  test('unexpected run exit invalidates a stale Open external view action', async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
@@ -1587,11 +1587,11 @@ suite('Yawr extension smoke tests', () => {
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder, 'the Extension Host test requires a workspace folder');
-    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-xts-unexpected-exit.runbook.yaml');
+    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-external-view-unexpected-exit.runbook.yaml');
     const fixtureUri = vscode.Uri.joinPath(workspaceFolder.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
     const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
     fixture.inputs = [];
-    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-xts-unexpected-exit\nsteps: []\n'));
+    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-external-view-unexpected-exit\nsteps: []\n'));
 
     const answers: Array<Record<string, unknown>> = [];
     const fakeChild = new EventEmitter() as EventEmitter & {
@@ -1624,19 +1624,19 @@ suite('Yawr extension smoke tests', () => {
       }
     });
 
-    let xtsDispatches = 0;
-    let xtsAcks = 0;
-    let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
-      xtsDispatches += 1;
+    let externalViewDispatches = 0;
+    let externalViewAcks = 0;
+    let externalViewReminders = 0;
+    const externalViewCommand = vscode.commands.registerCommand('externalView.openByPath', () => {
+      externalViewDispatches += 1;
     });
     const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>(
       'yawr.test.openDirectGraphPanel',
       runbookUri.fsPath,
       {
         documentLoader: async () => fixture,
-        onHostActionAck: () => { xtsAcks += 1; },
-        showXtsReminder: () => { xtsReminders += 1; },
+        onHostActionAck: () => { externalViewAcks += 1; },
+        showExternalViewReminder: () => { externalViewReminders += 1; },
         spawnRun: () => {
           setImmediate(() => {
             writeFrame({ type: 'run.started', runID: 'run-unexpected-exit', status: 'running' });
@@ -1644,11 +1644,11 @@ suite('Yawr extension smoke tests', () => {
               type: 'interaction.pending', runID: 'run-unexpected-exit', turnID: 'turn-unexpected-exit',
               interaction: {
                 type: 'pending', runID: 'run-unexpected-exit', turnID: 'turn-unexpected-exit',
-                stepID: 'open_xts_view', kind: 'host_action', correlationID: 'corr-unexpected-exit',
-                title: 'Open generic XTS view',
+                stepID: 'open_external_view', kind: 'host_action', correlationID: 'corr-unexpected-exit',
+                title: 'Open generic external view',
                 host_action: {
-                  capability: 'xts.open-view',
-                  request: { view_path: 'custom/path.xts', environment: 'Canary', parameters: {}, focus: true },
+                  capability: 'external-view.open',
+                  request: { view_path: 'custom/path.view', environment: 'Canary', parameters: {}, focus: true },
                 },
               },
             });
@@ -1680,10 +1680,10 @@ suite('Yawr extension smoke tests', () => {
       });
 
     try {
-      await waitForUI((state) => state.runButtonCount === 1, 'direct XTS graph did not render');
+      await waitForUI((state) => state.runButtonCount === 1, 'direct external view graph did not render');
       const hostPending = waitForUI(
-        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open XTS') === true,
-        'XTS interaction did not become pending',
+        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open external view') === true,
+        'External view interaction did not become pending',
       );
       await panel.webview.postMessage({ type: 'test.action', action: 'run' });
       await hostPending;
@@ -1695,38 +1695,38 @@ suite('Yawr extension smoke tests', () => {
       fakeChild.emit('close', 17, null);
       const failedState = await failed;
 
-      const staleClick = waitForDOM((state) => state.clicked === 'Open XTS', 'stale XTS click was not observed');
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
+      const staleClick = waitForDOM((state) => state.clicked === 'Open external view', 'stale external view click was not observed');
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open external view' });
       const staleClickState = await staleClick;
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
       assert.deepStrictEqual({
         runID: failedState.runID,
         pendingKind: failedState.pendingKind,
-        openXtsVisible: failedState.visibleButtons?.includes('Open XTS') === true,
+        openExternalViewVisible: failedState.visibleButtons?.includes('Open external view') === true,
         staleButtonFound: staleClickState.found,
-        xtsDispatches,
-        xtsAcks,
+        externalViewDispatches,
+        externalViewAcks,
         answers: answers.length,
-        xtsReminders,
+        externalViewReminders,
       }, {
         runID: undefined,
         pendingKind: undefined,
-        openXtsVisible: false,
+        openExternalViewVisible: false,
         staleButtonFound: false,
-        xtsDispatches: 0,
-        xtsAcks: 0,
+        externalViewDispatches: 0,
+        externalViewAcks: 0,
         answers: 0,
-        xtsReminders: 0,
+        externalViewReminders: 0,
       });
     } finally {
       panel.dispose();
-      xtsCommand.dispose();
+      externalViewCommand.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
     }
   });
 
-  test('Reset cancels an in-flight XTS action and rejects a stale Open XTS click', async function () {
+  test('Reset cancels an in-flight external view action and rejects a stale Open external view click', async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
@@ -1734,11 +1734,11 @@ suite('Yawr extension smoke tests', () => {
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder, 'the Extension Host test requires a workspace folder');
-    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-xts-reset.runbook.yaml');
+    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-external-view-reset.runbook.yaml');
     const fixtureUri = vscode.Uri.joinPath(workspaceFolder.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
     const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
     fixture.inputs = [];
-    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-xts-reset\nsteps: []\n'));
+    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-external-view-reset\nsteps: []\n'));
 
     const answers: Array<Record<string, unknown>> = [];
     const fakeChild = new EventEmitter() as EventEmitter & {
@@ -1775,11 +1775,11 @@ suite('Yawr extension smoke tests', () => {
     const dispatching = new Promise<void>((resolve) => { dispatchStarted = resolve; });
     let resolveDispatch!: (value: unknown) => void;
     const delayedDispatch = new Promise<unknown>((resolve) => { resolveDispatch = resolve; });
-    let xtsDispatches = 0;
-    let xtsAcks = 0;
-    let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
-      xtsDispatches += 1;
+    let externalViewDispatches = 0;
+    let externalViewAcks = 0;
+    let externalViewReminders = 0;
+    const externalViewCommand = vscode.commands.registerCommand('externalView.openByPath', () => {
+      externalViewDispatches += 1;
       dispatchStarted();
       return delayedDispatch;
     });
@@ -1788,19 +1788,19 @@ suite('Yawr extension smoke tests', () => {
       runbookUri.fsPath,
       {
         documentLoader: async () => fixture,
-        onHostActionAck: () => { xtsAcks += 1; },
-        showXtsReminder: () => { xtsReminders += 1; },
+        onHostActionAck: () => { externalViewAcks += 1; },
+        showExternalViewReminder: () => { externalViewReminders += 1; },
         spawnRun: () => {
           setImmediate(() => {
             writeFrame({ type: 'run.started', runID: 'run-reset', status: 'running' });
             writeFrame({
               type: 'interaction.pending', runID: 'run-reset', turnID: 'turn-reset',
               interaction: {
-                type: 'pending', runID: 'run-reset', turnID: 'turn-reset', stepID: 'open_xts_view',
-                kind: 'host_action', correlationID: 'corr-reset', title: 'Open generic XTS view',
+                type: 'pending', runID: 'run-reset', turnID: 'turn-reset', stepID: 'open_external_view',
+                kind: 'host_action', correlationID: 'corr-reset', title: 'Open generic external view',
                 host_action: {
-                  capability: 'xts.open-view',
-                  request: { view_path: 'custom/path.xts', environment: 'Canary', parameters: {}, focus: true },
+                  capability: 'external-view.open',
+                  request: { view_path: 'custom/path.view', environment: 'Canary', parameters: {}, focus: true },
                 },
               },
             });
@@ -1832,17 +1832,17 @@ suite('Yawr extension smoke tests', () => {
       });
 
     try {
-      await waitForUI((state) => state.runButtonCount === 1, 'direct XTS graph did not render');
+      await waitForUI((state) => state.runButtonCount === 1, 'direct external view graph did not render');
       const hostPending = waitForUI(
-        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open XTS') === true,
-        'XTS interaction did not become pending',
+        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open external view') === true,
+        'External view interaction did not become pending',
       );
       await panel.webview.postMessage({ type: 'test.action', action: 'run' });
       await hostPending;
 
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open external view' });
       await dispatching;
-      assert.strictEqual(xtsDispatches, 1, 'the regression requires an in-flight XTS dispatch');
+      assert.strictEqual(externalViewDispatches, 1, 'the regression requires an in-flight external view dispatch');
 
       const failed = waitForUI(
         (state) => state.runStatus === 'failed' && state.resetButtonCount === 1,
@@ -1855,8 +1855,8 @@ suite('Yawr extension smoke tests', () => {
       await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Reset' });
       await reset;
 
-      const staleClick = waitForDOM((state) => state.clicked === 'Open XTS', 'post-Reset stale click was not observed');
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
+      const staleClick = waitForDOM((state) => state.clicked === 'Open external view', 'post-Reset stale click was not observed');
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open external view' });
       const staleClickState = await staleClick;
       resolveDispatch({ status: 'opened' });
       await delayedDispatch;
@@ -1864,21 +1864,21 @@ suite('Yawr extension smoke tests', () => {
 
       assert.deepStrictEqual({
         staleButtonFound: staleClickState.found,
-        dispatchesAfterStaleClick: xtsDispatches,
-        xtsAcks,
+        dispatchesAfterStaleClick: externalViewDispatches,
+        externalViewAcks,
         answers: answers.length,
-        xtsReminders,
+        externalViewReminders,
       }, {
         staleButtonFound: false,
         dispatchesAfterStaleClick: 1,
-        xtsAcks: 0,
+        externalViewAcks: 0,
         answers: 0,
-        xtsReminders: 0,
+        externalViewReminders: 0,
       });
     } finally {
       resolveDispatch({ status: 'opened' });
       panel.dispose();
-      xtsCommand.dispose();
+      externalViewCommand.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
     }
   });
@@ -1945,7 +1945,7 @@ suite('Yawr extension smoke tests', () => {
     const dispatching = new Promise<void>((resolve) => { dispatchStarted = resolve; });
     let resolveDispatch!: (value: unknown) => void;
     const delayedDispatch = new Promise<unknown>((resolve) => { resolveDispatch = resolve; });
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
+    const externalViewCommand = vscode.commands.registerCommand('externalView.openByPath', () => {
       dispatchStarted();
       return delayedDispatch;
     });
@@ -1976,11 +1976,11 @@ suite('Yawr extension smoke tests', () => {
             writeFrame(newChild, {
               type: 'interaction.pending', runID: 'run-new', turnID: 'turn-new',
               interaction: {
-                type: 'pending', runID: 'run-new', turnID: 'turn-new', stepID: 'open_xts_view',
-                kind: 'host_action', correlationID: 'corr-new', title: 'Open generic XTS view',
+                type: 'pending', runID: 'run-new', turnID: 'turn-new', stepID: 'open_external_view',
+                kind: 'host_action', correlationID: 'corr-new', title: 'Open generic external view',
                 host_action: {
-                  capability: 'xts.open-view',
-                  request: { view_path: 'custom/path.xts', environment: 'Canary', parameters: {}, focus: true },
+                  capability: 'external-view.open',
+                  request: { view_path: 'custom/path.view', environment: 'Canary', parameters: {}, focus: true },
                 },
               },
             });
@@ -2025,7 +2025,7 @@ suite('Yawr extension smoke tests', () => {
       );
       await panel.webview.postMessage({ type: 'test.action', action: 'run' });
       await newWaiting;
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open external view' });
       await dispatching;
 
       const liveDocument = await vscode.workspace.openTextDocument(runbookUri);
@@ -2044,12 +2044,12 @@ suite('Yawr extension smoke tests', () => {
         'replacement run was failed or reset by the superseded child close',
       );
       const verificationPending = waitForUI(
-        state => state.visibleButtons?.includes('XTS view is ready') === true,
+        state => state.visibleButtons?.includes('External view is ready') === true,
         'replacement run did not reach real-view verification',
       );
       resolveDispatch(undefined);
       await verificationPending;
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'XTS view is ready' });
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'External view is ready' });
       const answer = await Promise.race([
         newAnswer,
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('replacement host action did not complete')), 10_000)),
@@ -2069,12 +2069,12 @@ suite('Yawr extension smoke tests', () => {
     } finally {
       resolveDispatch({ status: 'opened' });
       panel.dispose();
-      xtsCommand.dispose();
+      externalViewCommand.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
     }
   });
 
-  for (const duringVerification of [false, true]) test(`cancelling XTS during ${duringVerification ? 'view verification' : 'command dispatch'} cannot ack or show a reminder`, async function () {
+  for (const duringVerification of [false, true]) test(`cancelling external view during ${duringVerification ? 'view verification' : 'command dispatch'} cannot ack or show a reminder`, async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
@@ -2082,11 +2082,11 @@ suite('Yawr extension smoke tests', () => {
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder, 'the Extension Host test requires a workspace folder');
-    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-xts-cancel.runbook.yaml');
+    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'direct-external-view-cancel.runbook.yaml');
     const fixtureUri = vscode.Uri.joinPath(workspaceFolder.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
     const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
     fixture.inputs = [];
-    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-xts-cancel\nsteps: []\n'));
+    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: direct-external-view-cancel\nsteps: []\n'));
 
     const answers: Array<Record<string, unknown>> = [];
     const fakeChild = new EventEmitter() as EventEmitter & {
@@ -2119,7 +2119,7 @@ suite('Yawr extension smoke tests', () => {
         if (command.type === 'interaction.answer') answers.push(command.answer as Record<string, unknown>);
         if (command.type === 'run.cancel') {
           runCancelReceived();
-          writeFrame({ type: 'run.finished', runID: 'run-cancel-xts', status: 'cancelled' });
+          writeFrame({ type: 'run.finished', runID: 'run-cancel-extview', status: 'cancelled' });
         }
         newline = commandBuffer.indexOf('\n');
       }
@@ -2129,11 +2129,11 @@ suite('Yawr extension smoke tests', () => {
     const dispatching = new Promise<void>((resolve) => { dispatchStarted = resolve; });
     let resolveDispatch!: (value: unknown) => void;
     const delayedDispatch = new Promise<unknown>((resolve) => { resolveDispatch = resolve; });
-    let xtsDispatches = 0;
-    let xtsAcks = 0;
-    let xtsReminders = 0;
-    const xtsCommand = vscode.commands.registerCommand('xts.openViewByPath', () => {
-      xtsDispatches += 1;
+    let externalViewDispatches = 0;
+    let externalViewAcks = 0;
+    let externalViewReminders = 0;
+    const externalViewCommand = vscode.commands.registerCommand('externalView.openByPath', () => {
+      externalViewDispatches += 1;
       dispatchStarted();
       return delayedDispatch;
     });
@@ -2142,19 +2142,19 @@ suite('Yawr extension smoke tests', () => {
       runbookUri.fsPath,
       {
         documentLoader: async () => fixture,
-        onHostActionAck: () => { xtsAcks += 1; },
-        showXtsReminder: () => { xtsReminders += 1; },
+        onHostActionAck: () => { externalViewAcks += 1; },
+        showExternalViewReminder: () => { externalViewReminders += 1; },
         spawnRun: () => {
           setImmediate(() => {
-            writeFrame({ type: 'run.started', runID: 'run-cancel-xts', status: 'running' });
+            writeFrame({ type: 'run.started', runID: 'run-cancel-extview', status: 'running' });
             writeFrame({
-              type: 'interaction.pending', runID: 'run-cancel-xts', turnID: 'turn-cancel-xts',
+              type: 'interaction.pending', runID: 'run-cancel-extview', turnID: 'turn-cancel-extview',
               interaction: {
-                type: 'pending', runID: 'run-cancel-xts', turnID: 'turn-cancel-xts', stepID: 'open_xts_view', kind: 'host_action',
-                correlationID: 'corr-cancel-xts', title: 'Open generic XTS view',
+                type: 'pending', runID: 'run-cancel-extview', turnID: 'turn-cancel-extview', stepID: 'open_external_view', kind: 'host_action',
+                correlationID: 'corr-cancel-extview', title: 'Open generic external view',
                 host_action: {
-                  capability: 'xts.open-view',
-                  request: { view_path: 'custom/path.xts', environment: 'Canary', parameters: { arbitrary_name: 'arbitrary-value' }, focus: true },
+                  capability: 'external-view.open',
+                  request: { view_path: 'custom/path.view', environment: 'Canary', parameters: { arbitrary_name: 'arbitrary-value' }, focus: true },
                 },
               },
             });
@@ -2177,20 +2177,20 @@ suite('Yawr extension smoke tests', () => {
       });
 
     try {
-      await waitForUI((state) => state.runButtonCount === 1, 'direct XTS cancellation graph did not render');
+      await waitForUI((state) => state.runButtonCount === 1, 'direct external view cancellation graph did not render');
       const hostPending = waitForUI(
-        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open XTS') === true,
-        'XTS cancellation interaction did not wait behind Open XTS',
+        (state) => state.pendingKind === 'host_action' && state.visibleButtons?.includes('Open external view') === true,
+        'External view cancellation interaction did not wait behind Open external view',
       );
       await panel.webview.postMessage({ type: 'test.action', action: 'run' });
       await hostPending;
 
-      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open XTS' });
+      await panel.webview.postMessage({ type: 'test.action', action: 'click-button', name: 'Open external view' });
       await dispatching;
-      assert.strictEqual(xtsDispatches, 1, 'the regression requires an in-flight XTS dispatch');
+      assert.strictEqual(externalViewDispatches, 1, 'the regression requires an in-flight external view dispatch');
       if (duringVerification) {
         const verifying = waitForUI(
-          state => state.visibleButtons?.includes('XTS view is ready') === true,
+          state => state.visibleButtons?.includes('External view is ready') === true,
           'the regression requires pending operator verification',
         );
         resolveDispatch(undefined);
@@ -2200,20 +2200,20 @@ suite('Yawr extension smoke tests', () => {
       const cancelledUI = waitForUI((state) => state.runStatus === 'cancelled', 'run did not settle as cancelled');
       await panel.webview.postMessage({ type: 'test.action', action: 'cancel' });
       await runCancelled;
-      assert.ok(!(await cancelledUI).visibleButtons?.includes('XTS view is ready'),
+      assert.ok(!(await cancelledUI).visibleButtons?.includes('External view is ready'),
         'a cancelled run must not expose a stale readiness confirmation');
 
       resolveDispatch(undefined);
       await delayedDispatch;
       await new Promise<void>((resolve) => setImmediate(resolve));
 
-      assert.strictEqual(answers.length, 0, 'cancelled XTS dispatch must not answer the run interaction');
-      assert.strictEqual(xtsAcks, 0, 'cancelled XTS dispatch must not emit a host-action acknowledgment');
-      assert.strictEqual(xtsReminders, 0, 'cancelled XTS dispatch must not show the return-to-Yawr reminder');
+      assert.strictEqual(answers.length, 0, 'cancelled external view dispatch must not answer the run interaction');
+      assert.strictEqual(externalViewAcks, 0, 'cancelled external view dispatch must not emit a host-action acknowledgment');
+      assert.strictEqual(externalViewReminders, 0, 'cancelled external view dispatch must not show the return-to-Yawr reminder');
     } finally {
       resolveDispatch(undefined);
       panel.dispose();
-      xtsCommand.dispose();
+      externalViewCommand.dispose();
       await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
     }
   });

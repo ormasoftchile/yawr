@@ -89,8 +89,8 @@ import {
   validateRouteTestAgainstDocument,
 } from './routeTestArtifacts';
 import type { RouteTestArtifact } from './routeTestTypes';
-import { launchXtsWithHandoff, xtsParameterArguments } from './xtsHandoff';
-import { waitForXtsViewVerification } from './xtsViewVerification';
+import { launchExternalViewWithHandoff, externalViewParameterArguments } from './externalViewHandoff';
+import { waitForExternalViewVerification } from './externalViewVerification';
 import {
   CANCELLED,
   UNSET,
@@ -137,7 +137,7 @@ interface DirectGraphTestHooks {
   beforeSpawn?: () => Promise<void>;
   onStartSettled?: () => void;
   onHostActionAck?: (ack: HostActionAckEnvelope) => void;
-  showXtsReminder?: () => void;
+  showExternalViewReminder?: () => void;
   spawnRun?: (
     binary: string,
     args: string[],
@@ -434,7 +434,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Production capability registry — identical to the one in previewGraph().
         const testRegistry = new Map<string, HostActionRegistration>([
           ['test.echo', { handler: testEchoHandler }],
-          ['xts.open-view', { handler: makeXtsOpenViewHandler(panel), timeoutMs: XTS_HOST_ACTION_TIMEOUT_MS }],
+          ['external-view.open', { handler: makeExternalViewOpenHandler(panel), timeoutMs: EXTERNAL_VIEW_HOST_ACTION_TIMEOUT_MS }],
         ]);
         const testBridge = createHostActionBridge(
           testRegistry,
@@ -722,17 +722,17 @@ function reportEngineFailure(step: string, err: unknown) {
   });
 }
 
-// XTS capability handler factory. The host validates and forwards an arbitrary
+// External view capability handler factory. The host validates and forwards an arbitrary
 // view request; product-owned view paths and parameters stay in runbooks.
 
-const XTS_HOST_ACTION_TIMEOUT_MS = 310_000;
+const EXTERNAL_VIEW_HOST_ACTION_TIMEOUT_MS = 310_000;
 
-function makeXtsOpenViewHandler(
+function makeExternalViewOpenHandler(
   panel: vscode.WebviewPanel,
   consumePanelConfirmation: (requestId: string) => boolean = () => false,
   showReminder: () => void = () => {
     void vscode.window.showInformationMessage(
-      'XTS is open. Review the view, then return to the Yawr preview to record your finding.',
+      'External view is open. Review the view, then return to the Yawr preview to record your finding.',
     );
   },
 ): HostActionHandler {
@@ -752,7 +752,7 @@ function makeXtsOpenViewHandler(
     }
     let parameters: string;
     try {
-      parameters = xtsParameterArguments(environment, params);
+      parameters = externalViewParameterArguments(environment, params);
     } catch (error) {
       return { status: 'failed', error: { code: 'INVALID_REQUEST', message: deriveFailureMessage(error) } };
     }
@@ -760,22 +760,28 @@ function makeXtsOpenViewHandler(
     if (!panelConfirmed) {
       return {
         status: 'execution-not-started',
-        error: { code: 'CONFIRMATION_REQUIRED', message: 'Confirm the XTS launch in the Yawr preview.' },
+        error: { code: 'CONFIRMATION_REQUIRED', message: 'Confirm the external view launch in the Yawr preview.' },
       };
     }
-    return launchXtsWithHandoff(
+    return launchExternalViewWithHandoff(
       focus,
       args.cancellationToken,
       {
         dispatch: async () => {
-          const xts = vscode.extensions.getExtension('microsoft.xts4vscode');
-          if (xts && !xts.isActive) await xts.activate();
+          // window-scoped: external view dispatch is configured for the active window
+          const config = vscode.workspace.getConfiguration('yawr');
+          const command = config.get<string>('externalView.openCommand', 'externalView.openByPath');
+          const extensionId = config.get<string>('externalView.extensionId', '');
+          if (extensionId) {
+            const ext = vscode.extensions.getExtension(extensionId);
+            if (ext && !ext.isActive) await ext.activate();
+          }
           if (args.cancellationToken.isCancellationRequested) return;
-          await vscode.commands.executeCommand('xts.openViewByPath', viewPath, parameters);
+          await vscode.commands.executeCommand(command, viewPath, parameters);
         },
-        verifyView: () => waitForXtsViewVerification(args, panel.webview),
+        verifyView: () => waitForExternalViewVerification(args, panel.webview),
         showDispatchError: (message) => {
-          void vscode.window.showErrorMessage(`Yawr could not open the XTS view: ${message}`);
+          void vscode.window.showErrorMessage(`Yawr could not open the external view: ${message}`);
         },
         showReminder,
       },
@@ -1487,7 +1493,7 @@ async function openDirectGraphPanelForRunbook(
         !expectedFields.every((field) => Object.prototype.hasOwnProperty.call(value, field)) ||
         value.type !== 'yawr.host-action.confirmed-request' ||
         value.version !== 'yawr.host-action/v1' ||
-        value.capability !== 'xts.open-view') return false;
+        value.capability !== 'external-view.open') return false;
     for (const field of expectedFields.slice(3)) {
       const item = value[field];
       if (typeof item !== 'string' || item.length === 0 || item.length > 1024) return false;
@@ -1499,7 +1505,7 @@ async function openDirectGraphPanelForRunbook(
 
   const hostActionRegistry = new Map<string, HostActionRegistration>([
     ['test.echo', { handler: testEchoHandler }],
-    ['xts.open-view', { handler: makeXtsOpenViewHandler(panel, consumePanelConfirmation, testHooks?.showXtsReminder), timeoutMs: XTS_HOST_ACTION_TIMEOUT_MS }],
+    ['external-view.open', { handler: makeExternalViewOpenHandler(panel, consumePanelConfirmation, testHooks?.showExternalViewReminder), timeoutMs: EXTERNAL_VIEW_HOST_ACTION_TIMEOUT_MS }],
   ]);
   const hostActionTransport = webviewPanelTransport(panel, () => !disposed && directGraphPanel === panel);
   const hostActions = createHostActionBridge(
@@ -1531,7 +1537,14 @@ async function openDirectGraphPanelForRunbook(
       });
       return;
     }
-    if ((runStarting || runSession || investigationClient || investigationDescriptor) && reservedRevision === undefined) {
+    if (runSession?.isFinished()) {
+      runSession.dispose();
+      runSession = undefined;
+    }
+    if (investigationDescriptor && !investigationClient) {
+      investigationDescriptor = undefined;
+    }
+    if ((runStarting || (runSession && !runSession.isFinished()) || investigationClient) && reservedRevision === undefined) {
       void panel.webview.postMessage({ type: 'run.error', message: 'A run is already active.' });
       return;
     }

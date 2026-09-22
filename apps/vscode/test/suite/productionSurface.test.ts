@@ -288,7 +288,7 @@ flow:
     assert.strictEqual(properties['yawr.binaryPath']?.default, 'yawr');
     assert.strictEqual(properties['yawr.serverUrl'], undefined);
     assert.strictEqual(properties['yawr.autoStartServer'], undefined);
-    assert.strictEqual(properties['yawr.xts.showHandoffConfirmation'], undefined);
+    assert.strictEqual(properties['yawr.externalView.showHandoffConfirmation'], undefined);
     const helperUri = vscode.Uri.joinPath(extension.extensionUri, 'bin', 'win32-x64', 'yawr.exe');
     if (process.platform === 'win32' && process.arch === 'x64') {
       await vscode.workspace.fs.stat(helperUri);

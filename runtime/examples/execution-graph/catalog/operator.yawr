@@ -10,10 +10,10 @@ flow:
   - step:
       id: operator_classification
       type: choice
-      title: Operator GEODR classification
+      title: Operator failover classification
       prompt: This is local sample data only. Classify the evidence to let the parent continue.
       variable: classification
       options:
         - {value: healthy, label: Healthy}
-        - {value: geodr, label: GEODR investigation required}
+        - {value: failover, label: Failover investigation required}
   - step: {id: classification_recorded, type: noop}

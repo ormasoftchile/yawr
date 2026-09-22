@@ -5,9 +5,32 @@
       "name": "Run Yawr Extension",
       "type": "extensionHost",
       "request": "launch",
+      "noDebug": true,
       "args": [
-        "--extensionDevelopmentPath=${workspaceFolder}/apps/vscode"
+        "--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
+        "--disable-extensions",
+        "${workspaceFolder}/runtime/examples"
       ],
+      "env": {
+        "PATH": "${workspaceFolder}/runtime:${env:PATH}"
+      },
+      "outFiles": [
+        "${workspaceFolder}/apps/vscode/out/**/*.js"
+      ],
+      "preLaunchTask": "Extension: Compile"
+    },
+    {
+      "name": "Debug Yawr Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/apps/vscode",
+        "--disable-extensions",
+        "${workspaceFolder}/runtime/examples"
+      ],
+      "env": {
+        "PATH": "${workspaceFolder}/runtime:${env:PATH}"
+      },
       "outFiles": [
         "${workspaceFolder}/apps/vscode/out/**/*.js"
       ],

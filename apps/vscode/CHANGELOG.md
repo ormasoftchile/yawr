@@ -29,7 +29,7 @@
 
 ## 0.2.15
 
-- Uses the current XTS `xts.openViewByPath(relativePath, args)` command, preserving
+- Uses the external view open command (`externalView.openByPath(relativePath, args)` by default), preserving
   relative filenames and forwarding environment and view parameters as CLI-style
   `-p name:value` arguments.
 - Accepts the command's `void` return without treating it as evidence of an

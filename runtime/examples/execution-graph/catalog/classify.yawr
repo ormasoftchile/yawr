@@ -3,4 +3,4 @@ id: graph-classify
 name: Classification grandchild
 flow:
   - step: {id: inspect_replication, type: noop, title: Inspect sample replication evidence}
-  - step: {id: classify_geodr, type: noop, title: Classify sample GEODR evidence}
+  - step: {id: classify_failover, type: noop, title: Classify sample failover evidence}

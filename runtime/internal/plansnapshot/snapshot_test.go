@@ -37,7 +37,7 @@ func TestExecutionPlanSnapshotV1RoundTrip(t *testing.T) {
 				Name: "Inspect database",
 				Kind: "tool",
 				Spec: &schema.ToolCallSpec{Tool: schema.ToolInvocation{
-					Name: "xts", Action: "inspect", Args: map[string]any{"server": "${server}"},
+					Name: "extview", Action: "inspect", Args: map[string]any{"server": "${server}"},
 				}},
 				Capture: map[string]string{"state": "outputs.state"},
 				CaptureDefaults: map[string]any{
@@ -78,9 +78,9 @@ func TestExecutionPlanSnapshotV1RoundTrip(t *testing.T) {
 			},
 		},
 		Tools: map[string]*schema.ToolDef{
-			"xts": {
+			"extview": {
 				APIVersion: "yawr.tool/v1",
-				Name:       "xts",
+				Name:       "extview",
 				Version:    "1.0.0",
 				Actions: map[string]*schema.ToolAction{
 					"inspect": {Outputs: map[string]*schema.ArgDef{"state": {Type: "string", Required: true}}},
@@ -97,7 +97,7 @@ func TestExecutionPlanSnapshotV1RoundTrip(t *testing.T) {
 			RunbookID:      "root",
 			RunbookName:    "Root runbook",
 			CatalogDigest:  "sha256:catalog",
-			PackageDigests: map[string]string{"sql-livesite.xts": "sha256:package"},
+			PackageDigests: map[string]string{"sql-livesite.view": "sha256:package"},
 			DynamicIncludes: []schema.LockedDynamicInclude{{
 				StepID: "dynamic", RenderedRef: "pkg/child", QualifiedID: "pkg/child",
 				RunbookID: "child", RunbookName: "Child", RunbookContentHash: strings.Repeat("a", 64),
@@ -190,7 +190,7 @@ func TestExecutionPlanSnapshotV1PreservesStaticHandoff(t *testing.T) {
 		RunID: "handoff-snapshot", RunbookPath: "root.runbook.yaml",
 		Steps: []engine.ResolvedStep{{
 			ID: "continue", Kind: "handoff", Spec: &schema.HandoffSpec{Handoff: schema.HandoffConfig{
-				Runbook: "GEODR0004.runbook.yaml",
+				Runbook: "FAILOVER0004.runbook.yaml",
 				Reason:  schema.HandoffReason{Code: "active-update-slo", Summary: "Continue investigation"},
 				With:    map[string]string{"server": "${server}"},
 				Facts:   map[string]string{"workflow": "${workflow}"},
@@ -210,7 +210,7 @@ func TestExecutionPlanSnapshotV1PreservesStaticHandoff(t *testing.T) {
 		t.Fatalf("Restore: %v", err)
 	}
 	handoff, ok := restored.Steps[0].Spec.(*schema.HandoffSpec)
-	if !ok || handoff.Handoff.Runbook != "GEODR0004.runbook.yaml" ||
+	if !ok || handoff.Handoff.Runbook != "FAILOVER0004.runbook.yaml" ||
 		handoff.Handoff.Reason.Code != "active-update-slo" || handoff.Handoff.With["server"] != "${server}" {
 		t.Fatalf("restored handoff = %#v", restored.Steps[0].Spec)
 	}

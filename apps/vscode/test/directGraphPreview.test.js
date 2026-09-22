@@ -346,17 +346,17 @@ test('webview resizes the inspector with an accessible persisted ratio', () => {
   assert.doesNotMatch(source, /localStorage/);
 });
 
-test('webview reviews collector answers and confirms XTS before dispatch', () => {
+test('webview reviews collector answers and confirms external view before dispatch', () => {
   const source = fs.readFileSync(path.join(root, 'webview', 'graph.tsx'), 'utf8');
 
-  assert.match(source, />Open XTS</);
+  assert.match(source, />Open external view</);
   assert.match(source, /yawr\.host-action\.confirmed-request/);
   assert.match(source, />Review answers</);
   assert.match(source, />Save answers and continue</);
   assert.match(source, />Edit answers</);
   assert.match(source, /Collected in this actual run/);
   assert.match(source, /review-before-submit/);
-  assert.match(source, />1 Open XTS</);
+  assert.match(source, />1 Open external view</);
   assert.match(source, />2 Answer questions</);
   assert.match(source, />3 Review</);
 });
@@ -368,7 +368,7 @@ test('webview exposes the literal saved route-test workflow and safety boundary'
   ].join('\n');
 
   assert.match(source, />Test reaching this step</);
-  assert.match(source, /XTS will not open in this route test/);
+  assert.match(source, /External view will not open in this route test/);
   assert.match(source, />Check this route</);
   assert.match(source, /No external actions will run/);
   assert.match(source, />Run route test</);
@@ -378,8 +378,8 @@ test('webview exposes the literal saved route-test workflow and safety boundary'
   assert.match(source, /route-test\.save/);
   assert.match(source, /route-test\.run/);
   assert.match(source, /const \[routeTestRunning, setRouteTestRunning\] = useState\(false\)/);
-  assert.match(source, /routeTestRunning\s*\?\s*'Testing route - XTS and external actions are blocked'/);
-  assert.doesNotMatch(source, /runActive\s*\?\s*'Testing route - XTS and external actions are blocked'/);
+  assert.match(source, /routeTestRunning\s*\?\s*'Testing route - external views and external actions are blocked'/);
+  assert.doesNotMatch(source, /runActive\s*\?\s*'Testing route - external views and external actions are blocked'/);
 });
 
 test('webview invalidates a route-test editor during render when its graph context changes', () => {
@@ -545,8 +545,8 @@ test('MCP bridge starts only for vscode-mcp graph actions or unknown dynamic wor
 
 test('session MCP bridge is provisioned before a later handoff needs a configured action', () => {
   const entry = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'enum-preview-graphjson.json'), 'utf8'));
-  assert.equal(graphMayRequireMcpBridge(entry, { 'xts/open': {} }), false);
-  assert.equal(sessionMayRequireMcpBridge(entry, { 'xts/open': {} }), true);
+  assert.equal(graphMayRequireMcpBridge(entry, { 'externalView/open': {} }), false);
+  assert.equal(sessionMayRequireMcpBridge(entry, { 'externalView/open': {} }), true);
   assert.equal(sessionMayRequireMcpBridge(entry, {}), false);
 });
 

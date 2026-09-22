@@ -25,14 +25,14 @@ function artifact(overrides = {}) {
     target: { call_path: ['route_finding'], step: 'execute_failover', phase: 'before', invocation: 1, attempt: 1 },
     inputs: { server: 'db01' },
     host_action_responses: [{
-      at: { call_path: ['inspect_replication'], step: 'open_xts_view', phase: 'execute', invocation: 1, attempt: 1 },
-      capability: 'xts.open-view',
+      at: { call_path: ['inspect_replication'], step: 'open_external_view', phase: 'execute', invocation: 1, attempt: 1 },
+      capability: 'external-view.open',
       response: { status: 'completed', result: { status: 'opened' } },
       source: { kind: 'manual' },
       review: { state: 'reviewed', reviewed_by: 'operator', reviewed_at: '2026-08-28T12:05:00Z', sensitivity_reviewed: true },
     }],
     interaction_answers: [{
-      at: { call_path: ['inspect_replication', 'handle_xts_launch'], step: 'record_findings', phase: 'execute', invocation: 1, attempt: 1 },
+      at: { call_path: ['inspect_replication', 'handle_external_view_launch'], step: 'record_findings', phase: 'execute', invocation: 1, attempt: 1 },
       kind: 'collector',
       values: { primary_health: 'unavailable' },
       source: { kind: 'manual' },

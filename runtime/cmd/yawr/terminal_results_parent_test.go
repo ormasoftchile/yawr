@@ -88,7 +88,7 @@ func TestTerminalResultsParentForwarding(t *testing.T) {
 	for _, category := range []string{"resolved", "escalated", "no_action", "previously-unknown-category"} {
 		for _, gated := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/gate-%v", category, gated), func(t *testing.T) {
-				code := "GeoDR_Exact." + category
+				code := "Failover_Exact." + category
 				gate := ""
 				if gated {
 					gate = "                  gate: {stop_if: [other-category]}\n"

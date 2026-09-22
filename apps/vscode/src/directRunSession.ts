@@ -111,6 +111,10 @@ export class DirectRunSession {
     this.runID = runID;
   }
 
+  isFinished(): boolean {
+    return this.terminal || this.disposed || this.finalized;
+  }
+
   send(command: Readonly<Record<string, unknown>>): void {
     if (this.disposed || this.terminal) return;
     let encoded: string;

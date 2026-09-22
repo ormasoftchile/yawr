@@ -90,7 +90,7 @@ The source-host run was not a wiring-only check. VS Code 1.137.0 launched a
 local Extension Host, loaded the development extension from this checkout, and
 reported **24 discovered, 24 passing, 0 skipped, 0 failed**. Executed surfaces
 included activation and command registration, the bundled graph webview,
-refresh/race behavior, direct stdio runs, choice and XTS flows, saved route
+refresh/race behavior, direct stdio runs, choice and external view flows, saved route
 tests, debug overrides, preview placement, host-action round trips, and the
 investigation-session graph.
 

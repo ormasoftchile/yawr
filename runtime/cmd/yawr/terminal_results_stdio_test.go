@@ -55,7 +55,7 @@ flow:
                           options:
                             - {value: primary, label: Primary}
                             - {value: fallback, label: Fallback}
-                      - step: {id: end, type: end, publish_results: true, outcome: {category: no_action, code: GeoDR-Exact_Code}}
+                      - step: {id: end, type: end, publish_results: true, outcome: {category: no_action, code: Failover-Exact_Code}}
                       - step: {id: unreachable_inner, type: noop}
             - step: {id: unreachable_outer, type: noop}
   - step: {id: unreachable_root, type: noop}
@@ -64,7 +64,7 @@ flow:
 		t.Fatal(err)
 	}
 	if parent {
-		path, runDir = terminalParentFixture(t, "no_action", "GeoDR-Exact_Code", "",
+		path, runDir = terminalParentFixture(t, "no_action", "Failover-Exact_Code", "",
 			"  - step: {id: choose, type: choice, prompt: Choose, variable: selected_route, options: [{label: Primary, value: primary}, {label: Fallback, value: fallback}]}\n")
 	}
 	start := func(args ...string) (*exec.Cmd, io.WriteCloser, <-chan map[string]any, *bytes.Buffer) {
@@ -158,7 +158,7 @@ flow:
 			origin, _ := publication["origin"].(map[string]any)
 			if event["kind"] == "run/completed" && publication != nil && origin["frame_id"] == nil {
 				completedCount++
-				if payload["outcome_category"] != "no_action" || payload["outcome_code"] != "GeoDR-Exact_Code" {
+				if payload["outcome_category"] != "no_action" || payload["outcome_code"] != "Failover-Exact_Code" {
 					t.Fatalf("terminal outcome changed: %#v", payload)
 				}
 			}
@@ -168,7 +168,7 @@ flow:
 			if frame["status"] != "completed" || frame["results_unavailable"] != nil {
 				t.Fatalf("invalid terminal: %#v", frame)
 			}
-			if frame["outcome_category"] != "no_action" || frame["outcome_code"] != "GeoDR-Exact_Code" {
+			if frame["outcome_category"] != "no_action" || frame["outcome_code"] != "Failover-Exact_Code" {
 				t.Fatalf("run.finished lost exact terminal outcome: %#v", frame)
 			}
 			body, err := json.Marshal(frame["results"])
@@ -188,7 +188,7 @@ flow:
 	}
 	if parent {
 		result := published.Outputs["result"].Value.(map[string]any)
-		if result["status"] != "no_action" || result["code"] != "GeoDR-Exact_Code" {
+		if result["status"] != "no_action" || result["code"] != "Failover-Exact_Code" {
 			t.Fatal("parent did not forward child Results")
 		}
 	} else if published.Outputs["selected"].Value != "fallback" {
@@ -221,7 +221,7 @@ flow:
 				continue
 			}
 			count++
-			if frame["outcome_category"] != "no_action" || frame["outcome_code"] != "GeoDR-Exact_Code" {
+			if frame["outcome_category"] != "no_action" || frame["outcome_code"] != "Failover-Exact_Code" {
 				t.Fatal("completed resume lost terminal outcome")
 			}
 			body, _ := json.Marshal(frame["results"])

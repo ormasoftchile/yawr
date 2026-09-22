@@ -112,14 +112,14 @@ func TestRender_FallbackArmUsesOtherwise(t *testing.T) {
 		},
 		Groups: []graphdoc.Group{{
 			ID: "group:fallback", Kind: graphdoc.GroupBranchArm, ParentNodeID: "branch",
-			FrameID: "frame:root", Label: "XTS view did not open", Fallback: true,
+			FrameID: "frame:root", Label: "External view did not open", Fallback: true,
 		}},
 	}
 	got := prose.Render(doc)
-	if !strings.Contains(got, "Otherwise — XTS view did not open:") {
+	if !strings.Contains(got, "Otherwise — External view did not open:") {
 		t.Fatalf("fallback arm missing Otherwise label:\n%s", got)
 	}
-	if strings.Contains(got, "If XTS view did not open:") {
+	if strings.Contains(got, "If External view did not open:") {
 		t.Fatalf("fallback arm rendered as a condition:\n%s", got)
 	}
 }

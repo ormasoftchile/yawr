@@ -15,7 +15,7 @@ test('parseHostActionResponse accepts a canonical acknowledgment envelope', () =
   const envelope = {
     type: 'yawr.host-action.ack',
     version: 'yawr.host-action/v1',
-    capability: 'xts.open-view',
+    capability: 'external-view.open',
     ...correlation,
     runId: 'run-1',
     turnId: 'turn-1',

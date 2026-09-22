@@ -2,7 +2,7 @@
 //
 // This module implements the VS Code extension side of the yawr.host-action/v1
 // contract as defined in design/yawr/sections/18-host-action-bridge.tex.
-// It contains no XTS-specific logic.
+// It contains no external-view-specific logic.
 // Capability handlers are registered externally and injected at construction.
 //
 // Wire protocol versions: the bridge only accepts messages with
@@ -364,7 +364,7 @@ interface PendingEntry {
   cts: CancellationTokenSource;
 }
 
-/** Generic yawr.host-action/v1 bridge. Zero XTS-specific logic. */
+/** Generic yawr.host-action/v1 bridge. Zero external-view-specific logic. */
 export class HostActionBridge {
   // Key = requestId (CI-2: at-most-once is per requestId).
   private readonly pending = new Map<string, PendingEntry>();

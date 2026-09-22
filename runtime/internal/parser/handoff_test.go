@@ -16,7 +16,7 @@ func TestParser_HandoffDecodesStaticTargetAndAllowlistedContext(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	parsed, err := parserImpl.ParseBytes(context.Background(), []byte(handoffRunbook(`
-      runbook: GEODR0004.runbook.yaml
+      runbook: FAILOVER0004.runbook.yaml
       reason:
         code: active-update-slo
         summary: Continue with active Update SLO investigation
@@ -33,7 +33,7 @@ func TestParser_HandoffDecodesStaticTargetAndAllowlistedContext(t *testing.T) {
 		t.Fatalf("handoff was not decoded: %#v", step)
 	}
 	handoff := step.HandoffSpec.Handoff
-	if handoff.Runbook != "GEODR0004.runbook.yaml" || handoff.Reason.Code != "active-update-slo" ||
+	if handoff.Runbook != "FAILOVER0004.runbook.yaml" || handoff.Reason.Code != "active-update-slo" ||
 		handoff.With["logical_server"] != "${logical_server}" ||
 		handoff.Facts["active_workflow"] != "${active_workflow}" {
 		t.Fatalf("decoded handoff = %#v", handoff)
@@ -46,7 +46,7 @@ func TestParser_HandoffAcceptsYawrTarget(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	parsed, err := parserImpl.ParseBytes(context.Background(), []byte(handoffRunbook(`
-      runbook: GEODR0004.yawr
+      runbook: FAILOVER0004.yawr
       reason:
         code: active-update-slo
         summary: Continue with active Update SLO investigation
@@ -62,8 +62,8 @@ func TestParser_HandoffAcceptsYawrTarget(t *testing.T) {
 	if step.Type != schema.StepTypeHandoff || step.HandoffSpec == nil {
 		t.Fatalf("handoff was not decoded: %#v", step)
 	}
-	if step.HandoffSpec.Handoff.Runbook != "GEODR0004.yawr" {
-		t.Fatalf("decoded handoff runbook = %q, want GEODR0004.yawr", step.HandoffSpec.Handoff.Runbook)
+	if step.HandoffSpec.Handoff.Runbook != "FAILOVER0004.yawr" {
+		t.Fatalf("decoded handoff runbook = %q, want FAILOVER0004.yawr", step.HandoffSpec.Handoff.Runbook)
 	}
 }
 

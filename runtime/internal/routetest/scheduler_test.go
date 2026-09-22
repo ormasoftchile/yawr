@@ -46,18 +46,18 @@ func TestScheduler_ConsumesExactHumanCheckBindingsAndStopsBeforeTarget(t *testin
 	scheduler, err := NewScheduler(Scenario{
 		Target: Selector{CallPath: []string{"execute_failover"}, Step: "dangerous_command", Phase: "before", Invocation: 1, Attempt: 1},
 		HostActionResponses: []HostActionBinding{{
-			At:         Selector{CallPath: []string{"inspect_replication"}, Step: "open_xts_view", Phase: "execute", Invocation: 1, Attempt: 1},
-			Capability: "xts.open-view",
+			At:         Selector{CallPath: []string{"inspect_replication"}, Step: "open_external_view", Phase: "execute", Invocation: 1, Attempt: 1},
+			Capability: "external-view.open",
 			Response:   HostActionResponse{Status: "completed", Result: map[string]any{"status": "opened"}},
 			Review:     Review{State: "reviewed", ReviewedBy: "operator", ReviewedAt: "2026-08-28T12:05:00Z", SensitivityReviewed: true},
 		}},
 		InteractionAnswers: []InteractionBinding{{
-			At:   Selector{CallPath: []string{"inspect_replication", "handle_xts_launch"}, Step: "record_findings", Phase: "execute", Invocation: 1, Attempt: 1},
+			At:   Selector{CallPath: []string{"inspect_replication", "handle_external_view_launch"}, Step: "record_findings", Phase: "execute", Invocation: 1, Attempt: 1},
 			Kind: "collector",
 			Values: map[string]any{
-				"xts_check_primary_health":   "unavailable",
-				"xts_check_secondary_health": "healthy",
-				"xts_check_replication_lag":  "within_limit",
+				"extview_check_primary_health":   "unavailable",
+				"extview_check_secondary_health": "healthy",
+				"extview_check_replication_lag":  "within_limit",
 			},
 			Review: Review{State: "reviewed", ReviewedBy: "operator", ReviewedAt: "2026-08-28T12:05:00Z", SensitivityReviewed: true},
 		}},
@@ -67,30 +67,30 @@ func TestScheduler_ConsumesExactHumanCheckBindingsAndStopsBeforeTarget(t *testin
 	}
 
 	hostContext := engine.WithDebugCallPath(context.Background(), []engine.DebugCallFrame{{StepID: "inspect_replication"}})
-	hostContext = hostaction.WithStepID(hostContext, "open_xts_view")
-	response, err := scheduler.ExecuteHostAction(hostContext, hostaction.Request{Capability: "xts.open-view"})
+	hostContext = hostaction.WithStepID(hostContext, "open_external_view")
+	response, err := scheduler.ExecuteHostAction(hostContext, hostaction.Request{Capability: "external-view.open"})
 	if err != nil {
 		t.Fatalf("ExecuteHostAction: %v", err)
 	}
 	if response.Status != hostaction.StatusCompleted || response.Result["status"] != "opened" {
 		t.Fatalf("host response = %#v", response)
 	}
-	if _, err := scheduler.ExecuteHostAction(hostContext, hostaction.Request{Capability: "xts.open-view"}); err == nil {
+	if _, err := scheduler.ExecuteHostAction(hostContext, hostaction.Request{Capability: "external-view.open"}); err == nil {
 		t.Fatal("second host action invocation unexpectedly reused a consumed response")
 	}
 
 	collectorContext := engine.WithDebugCallPath(context.Background(), []engine.DebugCallFrame{
-		{StepID: "inspect_replication"}, {StepID: "handle_xts_launch"},
+		{StepID: "inspect_replication"}, {StepID: "handle_external_view_launch"},
 	})
 	form, err := scheduler.PromptForm(collectorContext, input.FormRequest{StepID: "record_findings", Fields: []input.FormField{
-		{Name: "xts_check_primary_health", Type: "select", Required: true, Options: []input.Option{{Value: "unavailable"}, {Value: "healthy"}}},
-		{Name: "xts_check_secondary_health", Type: "select", Required: true, Options: []input.Option{{Value: "unavailable"}, {Value: "healthy"}}},
-		{Name: "xts_check_replication_lag", Type: "select", Required: true, Options: []input.Option{{Value: "within_limit"}, {Value: "above_limit"}}},
+		{Name: "extview_check_primary_health", Type: "select", Required: true, Options: []input.Option{{Value: "unavailable"}, {Value: "healthy"}}},
+		{Name: "extview_check_secondary_health", Type: "select", Required: true, Options: []input.Option{{Value: "unavailable"}, {Value: "healthy"}}},
+		{Name: "extview_check_replication_lag", Type: "select", Required: true, Options: []input.Option{{Value: "within_limit"}, {Value: "above_limit"}}},
 	}})
 	if err != nil {
 		t.Fatalf("PromptForm: %v", err)
 	}
-	if form.Values["xts_check_primary_health"] != "unavailable" {
+	if form.Values["extview_check_primary_health"] != "unavailable" {
 		t.Fatalf("collector response = %#v", form.Values)
 	}
 

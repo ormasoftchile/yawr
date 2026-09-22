@@ -140,6 +140,18 @@
           "scope": "resource",
           "description": "Path to the Yawr CLI binary used for offline previews."
         },
+        "yawr.externalView.openCommand": {
+          "type": "string",
+          "default": "externalView.openByPath",
+          "scope": "resource",
+          "description": "VS Code command invoked to open an external view by path and parameters."
+        },
+        "yawr.externalView.extensionId": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Optional extension ID to activate before executing the external view command."
+        },
         "yawr.preview.nodeStyle": {
           "type": "string",
           "scope": "resource",
