@@ -69,7 +69,7 @@ func appendToolInvocationGraph(document *graphjson.Document, child graphjson.Doc
 		}
 		return "frame:" + nodeID(strings.TrimPrefix(id, "frame:"))
 	}
-	entryGroup := "group:" + parentID + ":include_frame:0"
+	entryGroup := fmt.Sprintf("group:%s:%s:0", parentID, graphdoc.GroupIncludeFrame)
 	groupID := func(id string) string {
 		if id == "" {
 			return entryGroup

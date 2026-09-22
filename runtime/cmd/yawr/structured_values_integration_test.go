@@ -13,16 +13,19 @@ func copyStructuredValuesExample(t *testing.T) string {
 	t.Helper()
 	source := filepath.Join(findRepoRoot(t), "examples", "structured-values")
 	dir := t.TempDir()
-	files, err := filepath.Glob(filepath.Join(source, "*.yaml"))
-	if err != nil || len(files) == 0 {
+	entries, err := os.ReadDir(source)
+	if err != nil || len(entries) == 0 {
 		t.Fatalf("example files: %v", err)
 	}
-	for _, file := range files {
-		data, err := os.ReadFile(file)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(source, entry.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeFile(t, filepath.Join(dir, filepath.Base(file)), string(data))
+		writeFile(t, filepath.Join(dir, entry.Name()), string(data))
 	}
 	return dir
 }
@@ -32,7 +35,7 @@ func TestRun_Substitution_StructuredCollectionAndExports(t *testing.T) {
 	artifacts := t.TempDir()
 	t.Chdir(dir)
 	output := runCaptureStdout(t, []string{
-		"root.runbook.yaml", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
+		"root.yawr", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
 		"--trace", filepath.Join(artifacts, "trace.jsonl"), "--run-dir", filepath.Join(artifacts, "runs"), "--output", "json",
 	})
 	var summary jsonSummary
@@ -54,7 +57,7 @@ func TestRun_Substitution_StructuredCollectionAndExports(t *testing.T) {
 		t.Fatalf("explicit durable run store was not written: %v", err)
 	}
 	orderingOutput := runCaptureStdout(t, []string{
-		"ordering-root.runbook.yaml", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
+		"ordering-root.yawr", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
 		"--trace", "ordering-trace.jsonl", "--output", "json",
 	})
 	if err := json.Unmarshal([]byte(orderingOutput), &summary); err != nil {
@@ -70,19 +73,19 @@ func TestRun_StructuredDirectNestedParity(t *testing.T) {
 		t.Run(map[bool]string{false: "observed-no-data-missing", true: "failed"}[failed], func(t *testing.T) {
 			dir := copyStructuredValuesExample(t)
 			t.Chdir(dir)
-			relay, err := os.ReadFile("relay.runbook.yaml")
+			relay, err := os.ReadFile("relay.yawr")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if failed {
 				relay = []byte(strings.ReplaceAll(string(relay), "{id: beta, count: 1}", "{id: failed, count: 0}"))
-				writeFile(t, "relay.runbook.yaml", string(relay))
+				writeFile(t, "relay.yawr", string(relay))
 			}
 			// Invoke the identical gather action directly and through relay.
 			direct := strings.Replace(string(relay), "id: relay", "id: direct", 1)
-			writeFile(t, "direct.runbook.yaml", direct)
+			writeFile(t, "direct.yawr", direct)
 			var outputs []map[string]any
-			for _, path := range []string{"direct.runbook.yaml", "root.runbook.yaml"} {
+			for _, path := range []string{"direct.yawr", "root.yawr"} {
 				output := runCaptureStdoutAnyExit(t, []string{
 					path, "--package-map", "package-map.yaml", "--profile", "profile.yaml", "--output", "json",
 				})
@@ -120,7 +123,7 @@ func TestRun_Substitution_MaterializationFailureReturnsError(t *testing.T) {
 	for _, expression := range []string{"observations +", `list.order(observations, "left +")`} {
 		t.Run(expression, func(t *testing.T) {
 			dir := copyStructuredValuesExample(t)
-			writeFile(t, filepath.Join(dir, "order.runbook.yaml"), `apiVersion: yawr.runbook/v1
+			writeFile(t, filepath.Join(dir, "order.yawr"), `apiVersion: yawr.runbook/v1
 id: invalid-order
 name: Invalid expression reached while freezing the package
 inputs:
@@ -133,7 +136,7 @@ flow:
 			t.Chdir(dir)
 			stderr := captureStderr(t, func() int {
 				return runRun([]string{
-					"root.runbook.yaml", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
+					"root.yawr", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
 					"--trace", "trace.jsonl", "--output", "quiet",
 				})
 			})
@@ -155,7 +158,7 @@ func TestRun_StructuredInvalidAuthoredValuesRejectBeforeDispatch(t *testing.T) {
 	} {
 		t.Run(value, func(t *testing.T) {
 			dir := copyStructuredValuesExample(t)
-			writeFile(t, filepath.Join(dir, "gather.runbook.yaml"), `apiVersion: yawr.runbook/v1
+			writeFile(t, filepath.Join(dir, "gather.yawr"), `apiVersion: yawr.runbook/v1
 id: gather
 name: Reject before any child work
 toolRefs:
@@ -180,7 +183,7 @@ flow:
 			t.Chdir(dir)
 			stderr := captureStderr(t, func() int {
 				return runRun([]string{
-					"root.runbook.yaml", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
+					"root.yawr", "--package-map", "package-map.yaml", "--profile", "profile.yaml",
 					"--trace", "trace.jsonl", "--output", "quiet",
 				})
 			})

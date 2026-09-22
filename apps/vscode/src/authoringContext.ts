@@ -17,7 +17,7 @@ export function setPresentationEntrypoint(projectRoot: string, entrypointPath: s
 }
 export function eligibleAuthoringDocument(document: vscode.TextDocument): boolean {
   return document.languageId === 'yaml' && !/^\.env(?:\.|$)/i.test(path.basename(document.fileName)) &&
-    (document.isUntitled || document.uri.scheme === 'file' && /\.runbook\.ya?ml$/i.test(document.fileName));
+    (document.isUntitled || document.uri.scheme === 'file' && /\.(?:runbook\.ya?ml|yawr)$/i.test(document.fileName));
 }
 export function captureAuthoringContext(document: vscode.TextDocument, extensionPath: string, generation: number):
   { context: ResolveContext; document: SourceBuffer; overlays: SourceBuffer[]; known: boolean } {

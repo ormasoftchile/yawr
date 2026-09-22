@@ -10,12 +10,12 @@ This runbook demonstrates iteration over a collection (regions), governance cont
 
 | File | Role |
 |------|------|
-| `multi-region-rollout.runbook.yaml` | Entry point — run this one |
+| `multi-region-rollout.yawr` | Entry point — run this one |
 
 ## How to run
 
 ```bash
-yawr run multi-region-rollout.runbook.yaml
+yawr run multi-region-rollout.yawr
 ```
 
 ## Key concepts

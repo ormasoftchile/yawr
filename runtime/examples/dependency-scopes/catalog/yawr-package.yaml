@@ -2,5 +2,5 @@ apiVersion: yawr.tool-package/v1
 meta: {name: scope-children, version: "1.0.0"}
 exports:
   runbooks:
-    - {id: left, path: left.runbook.yaml}
-    - {id: right, path: right.runbook.yaml}
+    - {id: left, path: left.yawr}
+    - {id: right, path: right.yawr}

@@ -26,7 +26,7 @@ import (
 
 // FixtureSuite is the placeholder P8 fixture suite used by benchmarks and soak.
 var FixtureSuite = []string{
-	filepath.Join("examples", "collect-health", "collect-health.runbook.yaml"),
+	filepath.Join("examples", "collect-health", "collect-health.yawr"),
 }
 
 // RepoRoot returns the repository root for benchmark and soak callers.

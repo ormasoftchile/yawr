@@ -13,7 +13,7 @@ func TestIncludedDocumentPresentationRefusesInvalidChildOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := filepath.Join(filepath.Dir(filepath.Dir(cwd)), "examples", "dependency-scopes")
-	path := filepath.Join(root, "catalog", "right.runbook.yaml")
+	path := filepath.Join(root, "catalog", "right.yawr")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +30,7 @@ func TestIncludedDocumentPresentationRefusesInvalidChildOverlay(t *testing.T) {
 			}
 			reply := Resolve(Request{
 				SchemaVersion: SchemaVersion, RequestID: "invalid-child",
-				Context:  Context{ProjectRoot: root, EntrypointPath: filepath.Join(root, "static-and-lazy.runbook.yaml")},
+				Context:  Context{ProjectRoot: root, EntrypointPath: filepath.Join(root, "static-and-lazy.yawr")},
 				Document: Buffer{Path: path, URI: FileURI(path), Version: 2, Text: dirty},
 			})
 			if reply.Status != "unavailable" || reply.Reason != "missing-dependency" {

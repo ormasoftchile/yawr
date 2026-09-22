@@ -1,0 +1,217 @@
+# Incident Triage — Connectivity Test (Grandchild)
+# Invoked by incident-triage.network.yawr for automated diagnostics.
+# This is the third nesting level (parent → network → connectivity-test).
+#
+# Demonstrates: grandchild include target, tool steps, branching, nested
+# branches, choice steps, multiple outcomes.
+apiVersion: yawr.runbook/v1
+
+id: incident-triage.connectivity-test
+name: incident-triage.connectivity-test
+kind: mitigation
+description: >
+  Deep connectivity diagnostic. Tests ICMP reachability and HTTP health
+  for a service endpoint, then branches on results to determine whether
+  the issue is resolved or needs escalation.
+
+toolRefs:
+  - name: ping
+    path: ../../tools/ping.tool.yaml
+  - name: curl
+    path: ../../tools/curl.tool.yaml
+
+inputs:
+  service_name:
+    type: string
+    required: false
+    description: Service endpoint to test
+    from: prompt
+  incident_id:
+    type: string
+    required: false
+    description: Incident tracking ID
+    from: prompt
+
+prose:
+  safety: |
+    This runbook should only be invoked from a parent investigation.
+    It runs active probes against the service — do not run in tight loops.
+
+flow:
+  # ──────────────────────────────────────────────
+  # Step 1–2: Active probes
+  # ──────────────────────────────────────────────
+  - step:
+      id: ping_check
+      type: tool
+      title: Ping service endpoint
+      tool:
+        name: ping
+        action: check
+        args:
+          host: "${service_name}"
+          count: "5"
+      capture:
+        ping_result: stdout
+
+  - step:
+      id: http_check
+      type: tool
+      title: HTTP health check
+      tool:
+        name: curl
+        action: head
+        args:
+          url: "https://${service_name}/healthz"
+      capture:
+        http_result: stdout
+
+  # ──────────────────────────────────────────────
+  # Step 3: Evaluate — choice-driven branching
+  # ──────────────────────────────────────────────
+  - step:
+      id: evaluate_results
+      type: choice
+      title: Evaluate connectivity results
+      prompt: |
+        Ping result: ${ping_result}
+        HTTP result: ${http_result}
+
+        Determine the connectivity status:
+      variable: conn_status
+      options:
+        - value: "both_ok"
+          label: "Both ping and HTTP passed — service reachable"
+        - value: "ping_ok_http_fail"
+          label: "Ping OK but HTTP failed — application-layer issue"
+        - value: "both_fail"
+          label: "Both failed — network-level outage"
+
+  - step:
+      id: branch_conn_status
+      type: branch
+      branches:
+        # ── Both OK: resolved ──
+        - condition: 'conn_status == "both_ok"'
+          label: Connectivity restored
+          steps:
+            - step:
+                id: conn_ok
+                type: end
+                title: Service is reachable
+                outcome:
+                  category: resolved
+                  code: connectivity_ok
+
+        # ── Application-layer failure ──
+        - condition: 'conn_status == "ping_ok_http_fail"'
+          label: Application-layer failure
+          steps:
+            - step:
+                id: check_app_layer
+                type: collector
+                title: Investigate application-layer failure
+                prompt: |
+                  ICMP is reachable but HTTP is failing for ${service_name}.
+                  This suggests the network path is fine but the application
+                  or load balancer is unhealthy.
+
+                  Check:
+                  1. Application process status
+                  2. Load balancer health probes
+                  3. TLS certificate validity
+                  4. Application error logs
+                fields:
+                  - name: app_layer_notes
+                    type: text
+                    label: Application layer investigation notes
+                    required: true
+                    multiline: true
+                required_evidence:
+                  - kind: text
+                    name: app_layer_notes
+
+            - step:
+                id: app_layer_escalate
+                type: end
+                title: Application-layer issue identified
+                outcome:
+                  category: escalated
+                  code: app_layer_failure
+
+        # ── Network-level outage with nested scope analysis ──
+        - condition: 'conn_status == "both_fail"'
+          label: Network-level outage
+          steps:
+            - step:
+                id: check_outage_scope
+                type: choice
+                title: Determine outage scope
+                prompt: |
+                  Both ping and HTTP failed for ${service_name}.
+                  Determine if this is an isolated or widespread issue.
+
+                  Test from multiple network vantage points:
+                  1. Same region, different subnet
+                  2. Different region
+                  3. External (outside corporate network)
+                variable: outage_scope
+                options:
+                  - value: "isolated"
+                    label: "Isolated — only from specific source"
+                  - value: "regional"
+                    label: "Regional — entire region affected"
+                  - value: "global"
+                    label: "Global — all vantage points affected"
+
+            - step:
+                id: branch_outage_scope
+                type: branch
+                branches:
+                  - condition: 'outage_scope == "isolated"'
+                    label: Isolated outage
+                    steps:
+                      - step:
+                          id: isolated_fix
+                          type: collector
+                          title: Investigate isolated connectivity
+                          prompt: |
+                            The outage appears isolated to specific sources.
+                            Check routing tables and local firewall rules
+                            for the source network.
+                          fields:
+                            - name: isolated_notes
+                              type: text
+                              label: Isolated connectivity notes
+                              required: false
+                              multiline: true
+
+                      - step:
+                          id: isolated_done
+                          type: end
+                          title: Isolated connectivity issue
+                          outcome:
+                            category: resolved
+                            code: isolated_fixed
+
+                  - condition: 'outage_scope == "regional"'
+                    label: Regional outage
+                    steps:
+                      - step:
+                          id: regional_escalate
+                          type: end
+                          title: Regional network outage
+                          outcome:
+                            category: escalated
+                            code: regional_outage
+
+                  - condition: 'outage_scope == "global"'
+                    label: Global outage
+                    steps:
+                      - step:
+                          id: global_escalate
+                          type: end
+                          title: Global network outage — critical
+                          outcome:
+                            category: escalated
+                            code: global_outage

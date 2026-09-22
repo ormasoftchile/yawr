@@ -1,0 +1,18 @@
+apiVersion: yawr.runbook/v1
+
+id: chain-level-4
+name: chain-level-4
+kind: reference
+description: Level 4 — includes level 5
+
+imports:
+  level5: chain-level-5.yawr
+
+flow:
+  - step:
+      id: invoke_level_5
+      type: include
+      title: Invoke level 5
+      delay: 1s
+      include:
+        runbook: chain-level-5.yawr

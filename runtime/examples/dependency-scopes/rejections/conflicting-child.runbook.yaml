@@ -1,7 +1,0 @@
-apiVersion: yawr.runbook/v1
-id: conflicting-child
-name: This child deliberately requests an incompatible version
-requires:
-  - {package: scope.left, version: "^2.0.0"}
-flow:
-  - step: {id: must_not_enter, type: noop}

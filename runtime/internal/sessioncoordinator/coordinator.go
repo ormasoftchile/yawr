@@ -1212,7 +1212,7 @@ func deterministicHandoffID(sessionID string, operation string, identity string)
 
 func staticHandoffPath(sourcePath string, target string) (string, error) {
 	if strings.TrimSpace(sourcePath) == "" || !schema.IsStaticHandoffTarget(target) {
-		return "", errors.New("session coordinator: handoff target must be a static relative .runbook.yaml path")
+		return "", errors.New("session coordinator: handoff target must be a static relative .runbook.yaml or .yawr path")
 	}
 	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(target)))
 	return filepath.Clean(filepath.Join(filepath.Dir(sourcePath), filepath.FromSlash(clean))), nil

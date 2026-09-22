@@ -16,7 +16,7 @@ func TestDependencyScopeExamplesHaveCompleteLocalClosures(t *testing.T) {
 	for _, name := range []string{"static-and-lazy", "dynamic", "parallel", "dynamic-parallel", "dynamic-through-tool"} {
 		t.Run(name, func(t *testing.T) {
 			options := closureOptions(t, root)
-			options.Entrypoint = filepath.Join(root, name+".runbook.yaml")
+			options.Entrypoint = filepath.Join(root, name+".yawr")
 			closure := requireClosure(t, options)
 			expected := 5
 			if name == "dynamic-through-tool" {
@@ -25,8 +25,8 @@ func TestDependencyScopeExamplesHaveCompleteLocalClosures(t *testing.T) {
 			if len(closure.Documents) != expected {
 				t.Fatalf("captured %d documents, want %d for the complete invocation closure", len(closure.Documents), expected)
 			}
-			left := closureDocument(t, closure, filepath.Join(root, "catalog", "left.runbook.yaml"))
-			right := closureDocument(t, closure, filepath.Join(root, "catalog", "right.runbook.yaml"))
+			left := closureDocument(t, closure, filepath.Join(root, "catalog", "left.yawr"))
+			right := closureDocument(t, closure, filepath.Join(root, "catalog", "right.yawr"))
 			if len(left.Bindings) != 1 || len(right.Bindings) != 1 ||
 				left.Bindings[0].Name != "query" || right.Bindings[0].Name != "query" ||
 				left.Bindings[0].Def.PackageName != "scope.left" || right.Bindings[0].Def.PackageName != "scope.right" {

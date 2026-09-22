@@ -1,0 +1,11 @@
+apiVersion: yawr.runbook/v1
+id: graph-static-investigate
+name: Static investigation child
+flow:
+  - step: {id: collect, type: noop}
+  - step:
+      id: classify
+      type: include
+      include:
+        runbook: classify.yawr
+  - step: {id: child_return, type: noop}

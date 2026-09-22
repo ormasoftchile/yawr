@@ -40,6 +40,33 @@ func TestParser_HandoffDecodesStaticTargetAndAllowlistedContext(t *testing.T) {
 	}
 }
 
+func TestParser_HandoffAcceptsYawrTarget(t *testing.T) {
+	parserImpl, err := parser.New(platform.NewFakePlatform())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	parsed, err := parserImpl.ParseBytes(context.Background(), []byte(handoffRunbook(`
+      runbook: GEODR0004.yawr
+      reason:
+        code: active-update-slo
+        summary: Continue with active Update SLO investigation
+      with:
+        environment: "${environment}"
+        logical_server: "${logical_server}"
+      facts:
+        active_workflow: "${active_workflow}"`)))
+	if err != nil {
+		t.Fatalf("ParseBytes: %v", err)
+	}
+	step := parsed.Runbook.Flow[0].Step
+	if step.Type != schema.StepTypeHandoff || step.HandoffSpec == nil {
+		t.Fatalf("handoff was not decoded: %#v", step)
+	}
+	if step.HandoffSpec.Handoff.Runbook != "GEODR0004.yawr" {
+		t.Fatalf("decoded handoff runbook = %q, want GEODR0004.yawr", step.HandoffSpec.Handoff.Runbook)
+	}
+}
+
 func TestParser_HandoffRejectsDynamicTraversalAndSensitiveBindings(t *testing.T) {
 	tests := map[string]struct {
 		body string

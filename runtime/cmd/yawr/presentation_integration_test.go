@@ -15,20 +15,25 @@ import (
 func TestPresentationRealRunFrozenInspection(t *testing.T) {
 	source := filepath.Join(findRepoRoot(t), "examples", "code-presentation")
 	dir := t.TempDir()
-	files, err := filepath.Glob(filepath.Join(source, "*.yaml"))
+	entries, err := os.ReadDir(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, file := range files {
-		data, err := os.ReadFile(file)
+	var copied []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(source, entry.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeFile(t, filepath.Join(dir, filepath.Base(file)), string(data))
+		writeFile(t, filepath.Join(dir, entry.Name()), string(data))
+		copied = append(copied, entry.Name())
 	}
 	t.Chdir(dir)
 	runs := filepath.Join(dir, "runs")
-	output := runCaptureStdout(t, []string{"root.runbook.yaml", "--profile", "profile.yaml", "--run-dir", runs, "--output", "json"})
+	output := runCaptureStdout(t, []string{"root.yawr", "--profile", "profile.yaml", "--run-dir", runs, "--output", "json"})
 	var summary jsonSummary
 	if err := json.Unmarshal([]byte(output), &summary); err != nil {
 		t.Fatal(err)
@@ -36,7 +41,7 @@ func TestPresentationRealRunFrozenInspection(t *testing.T) {
 	if summary.Status != "completed" || len(summary.Steps) != 3 {
 		t.Fatalf("real offline run failed: %s", output)
 	}
-	entries, err := os.ReadDir(runs)
+	entries, err = os.ReadDir(runs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +63,8 @@ func TestPresentationRealRunFrozenInspection(t *testing.T) {
 	if !strings.Contains(string(data), `"schema_version":"execution-plan/v4"`) {
 		t.Fatal("metadata run not frozen in current format")
 	}
-	for _, file := range files {
-		if err := os.Remove(filepath.Join(dir, filepath.Base(file))); err != nil {
+	for _, name := range copied {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
 			t.Fatal(err)
 		}
 	}

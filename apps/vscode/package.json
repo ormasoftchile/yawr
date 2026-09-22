@@ -1,7 +1,7 @@
 {
   "name": "yawr-preview",
   "displayName": "Yawr Runbook Preview",
-  "description": "Preview Yawr runbooks (.runbook.yaml) as a structural graph in VS Code.",
+  "description": "Preview Yawr runbooks (.runbook.yaml, .yawr) as a structural graph in VS Code.",
   "version": "0.2.17",
   "publisher": "ormasoftchile",
   "license": "MIT",
@@ -29,6 +29,15 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "yaml",
+        "extensions": [
+          ".yawr",
+          ".yawt"
+        ]
+      }
+    ],
     "commands": [
       {
         "command": "yawr.insertRequiredArguments",
@@ -65,12 +74,12 @@
       "editor/title": [
         {
           "command": "yawr.preview",
-          "when": "resourceFilename =~ /\\.runbook\\.yaml$/",
+          "when": "resourceFilename =~ /\\.(?:runbook\\.ya?ml|yawr)$/",
           "group": "navigation@2"
         },
         {
           "command": "yawr.previewGraph",
-          "when": "resourceFilename =~ /\\.runbook\\.yaml$/",
+          "when": "resourceFilename =~ /\\.(?:runbook\\.ya?ml|yawr)$/",
           "group": "navigation@1"
         }
       ]

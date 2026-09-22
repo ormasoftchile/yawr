@@ -10,13 +10,13 @@ This runbook demonstrates iteration with child runbook invocation and result acc
 
 | File | Role |
 |------|------|
-| `collect-health.runbook.yaml` | Entry point — run this one |
-| `check-service.runbook.yaml` | Included sub-runbook — checks a single service and returns status |
+| `collect-health.yawr` | Entry point — run this one |
+| `check-service.yawr` | Included sub-runbook — checks a single service and returns status |
 
 ## How to run
 
 ```bash
-yawr run collect-health.runbook.yaml
+yawr run collect-health.yawr
 ```
 
 ## Key concepts

@@ -261,16 +261,16 @@ func TestStart_AllExamples(t *testing.T) {
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "../..")
 
 	examples := []string{
-		"examples/collect-health/collect-health.runbook.yaml",
-		"examples/collect-health-parallel/collect-health-parallel.runbook.yaml",
-		"examples/incident-triage/incident-triage.runbook.yaml",
-		"examples/multi-region-rollout/multi-region-rollout.runbook.yaml",
-		"examples/nav-test/nav-test.runbook.yaml",
-		"examples/nested-chain/chain-level-1.runbook.yaml",
-		"examples/service-health-branching/service-health-branching.runbook.yaml",
-		"examples/simple-health-check/simple-health-check.runbook.yaml",
-		"examples/edge-cases/edge-case-branch.runbook.yaml",
-		"examples/edge-cases/edge-case-single-step.runbook.yaml",
+		"examples/collect-health/collect-health.yawr",
+		"examples/collect-health-parallel/collect-health-parallel.yawr",
+		"examples/incident-triage/incident-triage.yawr",
+		"examples/multi-region-rollout/multi-region-rollout.yawr",
+		"examples/nav-test/nav-test.yawr",
+		"examples/nested-chain/chain-level-1.yawr",
+		"examples/service-health-branching/service-health-branching.yawr",
+		"examples/simple-health-check/simple-health-check.yawr",
+		"examples/edge-cases/edge-case-branch.yawr",
+		"examples/edge-cases/edge-case-single-step.yawr",
 	}
 
 	for _, ex := range examples {

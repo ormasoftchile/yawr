@@ -256,7 +256,7 @@ func validateHandoffStep(s *schema.Step, loc string, rb *schema.Runbook) Validat
 	handoff := s.HandoffSpec.Handoff
 	var errs ValidationErrors
 	if !schema.IsStaticHandoffTarget(handoff.Runbook) {
-		errs = append(errs, verr("handoff/invalid-target", loc+".handoff.runbook", "handoff runbook must be a static relative .runbook.yaml path"))
+		errs = append(errs, verr("handoff/invalid-target", loc+".handoff.runbook", "handoff runbook must be a static relative .runbook.yaml or .yawr path"))
 	}
 	if strings.TrimSpace(handoff.Reason.Code) == "" || strings.TrimSpace(handoff.Reason.Summary) == "" {
 		errs = append(errs, verr("handoff/invalid-reason", loc+".handoff.reason", "handoff reason code and summary are required"))

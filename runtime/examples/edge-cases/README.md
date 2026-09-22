@@ -10,23 +10,23 @@ This collection demonstrates edge cases and minimal runbooks: single-step runboo
 
 | File | Role |
 |------|------|
-| `edge-case-single-step.runbook.yaml` | Single collector step — minimal valid runbook |
-| `edge-case-single-step-timeout.runbook.yaml` | Single noop step with delay — tests timeout rendering |
-| `edge-case-branch.runbook.yaml` | Entry point for branching — single step that branches to two targets |
-| `edge-case-branch-target-1.runbook.yaml` | First branch target |
-| `edge-case-branch-target-2.runbook.yaml` | Second branch target |
+| `edge-case-single-step.yawr` | Single collector step — minimal valid runbook |
+| `edge-case-single-step-timeout.yawr` | Single noop step with delay — tests timeout rendering |
+| `edge-case-branch.yawr` | Entry point for branching — single step that branches to two targets |
+| `edge-case-branch-target-1.yawr` | First branch target |
+| `edge-case-branch-target-2.yawr` | Second branch target |
 
 ## How to run
 
 ```bash
 # Single step runbook
-yawr run edge-case-single-step.runbook.yaml
+yawr run edge-case-single-step.yawr
 
 # Single step with timeout
-yawr run edge-case-single-step-timeout.runbook.yaml
+yawr run edge-case-single-step-timeout.yawr
 
 # Branching to multiple targets
-yawr run edge-case-branch.runbook.yaml
+yawr run edge-case-branch.yawr
 ```
 
 ## Key concepts

@@ -55,7 +55,7 @@ func TestScopedSDKExamplesRunFromCapturedEmbeddedSources(t *testing.T) {
 						mu.Unlock()
 					}
 					handle, err := Start(context.Background(), Config{
-						RunbookFS: files, RunbookName: name + ".runbook.yaml", WorkspaceRoot: t.TempDir(),
+						RunbookFS: files, RunbookName: name + ".yawr", WorkspaceRoot: t.TempDir(),
 						Output: io.Discard, OnEvent: onEvent, OnSubEvent: onEvent, Profile: profile,
 					})
 					if err != nil {

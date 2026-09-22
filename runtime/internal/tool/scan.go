@@ -114,7 +114,8 @@ func scanSchemaDirWithPaths(dir string, excludeTests bool) ([]scannedToolDef, er
 			}
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".tool.yaml") {
+		name := d.Name()
+		if !strings.HasSuffix(name, ".tool.yaml") && !strings.HasSuffix(name, ".yawt") {
 			return nil
 		}
 		def, err := parseToolFile(path)

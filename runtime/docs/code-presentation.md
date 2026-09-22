@@ -70,7 +70,7 @@ substitutions. Its strings are returned as data; no SQL, KQL, PowerShell,
 provider, or native command executes:
 
 ```powershell
-yawr run examples\code-presentation\root.runbook.yaml --profile examples\code-presentation\profile.yaml
+yawr run examples\code-presentation\root.yawr --profile examples\code-presentation\profile.yaml
 ```
 
 Immutable session graphs retain frozen descriptors. Structural graph hashing

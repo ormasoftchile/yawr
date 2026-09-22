@@ -61,7 +61,7 @@ test('current graph invalidation includes authored tool saves and map, not unrel
   const included = path.resolve('external', 'included.runbook.yaml');
   const doc = { frames: [{ runbook_path: included }] };
   const changed = file => graphSourceChanged(file, runbook, project, doc, map);
-  for (const file of [runbook, map, included, path.join(project, 'packages', 'query.tool.yaml')]) assert.equal(changed(file), true, file);
+  for (const file of [runbook, map, included, path.join(project, 'packages', 'query.tool.yaml'), path.join(project, 'packages', 'query.yawt')]) assert.equal(changed(file), true, file);
   for (const file of [path.join(project, 'notes.yaml'), path.resolve('project-other', 'query.tool.yaml'),
     path.join(project, 'other.runbook.yaml')]) assert.equal(changed(file), false, file);
   const source = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');

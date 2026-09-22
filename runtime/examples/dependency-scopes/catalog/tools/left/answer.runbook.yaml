@@ -1,7 +1,0 @@
-apiVersion: yawr.runbook/v1
-id: lexical-left-answer
-name: Produce the left marker without external execution
-outputs:
-  marker: {type: string, value_expr: marker}
-flow:
-  - step: {id: left_marker, type: noop, capture: {marker: left}}

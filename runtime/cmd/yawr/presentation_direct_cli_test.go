@@ -61,9 +61,19 @@ func TestPresentationDirectCLIPackageFrozenInspection(t *testing.T) {
 	for _, name := range []string{"code", "args", "inputs", "outputs", "default", "presentation", "tools", "actions"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			files, err := filepath.Glob(filepath.Join(findRepoRoot(t), "examples", "code-presentation", "*.yaml"))
-			if err != nil || len(files) != 4 {
-				t.Fatalf("fixture files: %v %v", files, err)
+			srcDir := filepath.Join(findRepoRoot(t), "examples", "code-presentation")
+			entries, err := os.ReadDir(srcDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var files []string
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					files = append(files, filepath.Join(srcDir, entry.Name()))
+				}
+			}
+			if len(files) != 4 {
+				t.Fatalf("fixture files: %v", files)
 			}
 			argName, outputName, sqlAction := "text", "code", "sql"
 			if name != "code" {
@@ -77,14 +87,14 @@ func TestPresentationDirectCLIPackageFrozenInspection(t *testing.T) {
 				text := strings.ReplaceAll(string(data), "name: code", "name: "+name)
 				if name != "code" {
 					switch filepath.Base(file) {
-					case "code.tool.yaml":
+					case "code.yawt":
 						text = strings.ReplaceAll(text, "name: sql", "name: "+sqlAction)
 						text = strings.ReplaceAll(text, "      text:", "      "+argName+":")
 						text = strings.ReplaceAll(text, "      code:", "      "+outputName+":")
-					case "root.runbook.yaml":
+					case "root.yawr":
 						text = strings.ReplaceAll(text, "action: sql", "action: "+sqlAction)
 						text = strings.ReplaceAll(text, "          text:", "          "+argName+":")
-					case "echo.runbook.yaml":
+					case "echo.yawr":
 						text = strings.ReplaceAll(text, "  text:", "  "+argName+":")
 						text = strings.ReplaceAll(text, "  code:", "  "+outputName+":")
 						text = strings.ReplaceAll(text, "${text}", "${"+argName+"}")
@@ -93,7 +103,7 @@ func TestPresentationDirectCLIPackageFrozenInspection(t *testing.T) {
 				writeFile(t, filepath.Join(dir, filepath.Base(file)), text)
 			}
 			staticRuns := filepath.Join(dir, "static-runs")
-			staticOutput, staticStderr, err := presentationDirectCLI(t, dir, "run", "root.runbook.yaml", "--profile", "profile.yaml",
+			staticOutput, staticStderr, err := presentationDirectCLI(t, dir, "run", "root.yawr", "--profile", "profile.yaml",
 				"--run-dir", staticRuns, "--output", "json")
 			if err != nil {
 				t.Fatalf("static legal-name run: %v %s %s", err, staticStderr, staticOutput)
@@ -122,12 +132,12 @@ func TestPresentationDirectCLIPackageFrozenInspection(t *testing.T) {
 meta: {name: presentation-fixture, version: "1.0.0"}
 exports:
   tools:
-    - {id: %s, path: code.tool.yaml}
+    - {id: %s, path: code.yawt}
   runbooks:
-    - {id: child, path: root.runbook.yaml}
+    - {id: child, path: root.yawr}
 `, name))
 			writeFile(t, filepath.Join(dir, ".yawr", "config.yaml"), "apiVersion: yawr.config/v1\nrequires:\n  - {package: presentation-fixture, version: '^1.0.0', path: '.'}\n")
-			writeFile(t, filepath.Join(dir, "parent.runbook.yaml"), `apiVersion: yawr.runbook/v1
+			writeFile(t, filepath.Join(dir, "parent.yawr"), `apiVersion: yawr.runbook/v1
 id: dynamic-presentation
 name: Dynamic presentation
 flow:
@@ -137,7 +147,7 @@ flow:
       include: {runbook_ref: "presentation-fixture/child", resolve_from: catalog}
 `)
 			runs := filepath.Join(dir, "runs")
-			output, stderr, err := presentationDirectCLI(t, dir, "run", "parent.runbook.yaml", "--profile", "profile.yaml",
+			output, stderr, err := presentationDirectCLI(t, dir, "run", "parent.yawr", "--profile", "profile.yaml",
 				"--run-dir", runs, "--trace", filepath.Join(dir, "projected.jsonl"), "--output", "json")
 			if err != nil {
 				t.Fatalf("direct run: %v %s %s", err, stderr, output)
@@ -213,7 +223,7 @@ flow:
 				t.Fatalf("saved preview before deletion: %v %s", err, stderr)
 			}
 			assertDirectFrozenPreview(t, before, name, argName, outputName, sqlAction)
-			for _, file := range append(files, filepath.Join(dir, "parent.runbook.yaml")) {
+			for _, file := range append(files, filepath.Join(dir, "parent.yawr")) {
 				if err := os.Remove(filepath.Join(dir, filepath.Base(file))); err != nil {
 					t.Fatal(err)
 				}

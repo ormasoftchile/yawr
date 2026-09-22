@@ -1,0 +1,20 @@
+# Five-level include chain — each level pauses 1s then includes the next.
+# Useful for testing nested include rendering, delay visuals, and chain history.
+apiVersion: yawr.runbook/v1
+
+id: chain-level-1
+name: chain-level-1
+kind: reference
+description: Level 1 (entry point) — starts a 5-deep include chain with delays
+
+imports:
+  level2: chain-level-2.yawr
+
+flow:
+  - step:
+      id: invoke_level_2
+      type: include
+      title: Invoke level 2
+      delay: 3s
+      include:
+        runbook: chain-level-2.yawr

@@ -42,7 +42,7 @@ export function registerPresentationEditor(context: vscode.ExtensionContext, out
   const enabled = () => getSetting('highlighting.enabled', undefined, true);
   const eligible = (document: vscode.TextDocument) => document.languageId === 'yaml' &&
     !/^\.env(?:\.|$)/i.test(path.basename(document.fileName)) &&
-    (document.isUntitled || /\.runbook\.ya?ml$/i.test(document.fileName));
+    (document.isUntitled || /\.(?:runbook\.ya?ml|yawr)$/i.test(document.fileName));
   const updateStatus = () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || !eligible(editor.document)) { status.hide(); return; }
@@ -155,7 +155,7 @@ export function registerPresentationEditor(context: vscode.ExtensionContext, out
     vscode.window.onDidChangeActiveTextEditor(updateStatus),
     vscode.window.onDidChangeActiveColorTheme(refresh),
   ];
-  const configWatcher = vscode.workspace.createFileSystemWatcher('**/{yawr-package.yaml,*.tool.yaml,*.package-map.yaml,package-map.yaml,.yawr/config.yaml}');
+  const configWatcher = vscode.workspace.createFileSystemWatcher('**/{yawr-package.yaml,*.tool.yaml,*.yawt,*.package-map.yaml,package-map.yaml,.yawr/config.yaml}');
   subscriptions.push(configWatcher, configWatcher.onDidChange(refresh), configWatcher.onDidCreate(refresh), configWatcher.onDidDelete(refresh));
   refresh();
   return { dispose() { disposed = true; for (const state of states.values()) clear(state); states.clear(); subscriptions.forEach(s => s.dispose()); } };

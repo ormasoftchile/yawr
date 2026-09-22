@@ -1,0 +1,65 @@
+apiVersion: yawr.runbook/v1
+id: explicit-ordering
+name: Verify ordering, ties, and a non-transitive comparison rule
+requires:
+  - {package: acme.structured-values, version: "^1.0.0"}
+toolRefs:
+  - {name: records, package: acme.structured-values}
+flow:
+  - step:
+      id: order_distinct
+      type: tool
+      tool:
+        name: records
+        action: order
+        args:
+          observations:
+            - {id: last, min: "2026-01-15T11:00:00Z", max: "2026-01-15T11:30:00Z"}
+            - {id: newer, min: "2026-01-15T10:00:00Z", max: "2026-01-15T10:40:00Z"}
+            - {id: older, min: "2026-01-15T10:10:00Z", max: "2026-01-15T10:20:00Z"}
+      capture:
+        ordering_status: outputs.ordering.status
+        ordered: outputs.ordering.items
+  - step:
+      id: verify_order
+      type: assert
+      assert:
+        - {type: eq, subject: '${ordering_status}', expected: ordered}
+        - {type: eq, subject: '${ordered[0].id == "older" and ordered[1].id == "newer" and ordered[2].id == "last"}', expected: "true"}
+  - step:
+      id: order_equal
+      type: tool
+      tool:
+        name: records
+        action: order
+        args:
+          observations:
+            - {id: first, min: "2026-01-15T10:00:00Z", max: "2026-01-15T10:40:00Z"}
+            - {id: second, min: "2026-01-15T10:00:00Z", max: "2026-01-15T10:40:00Z"}
+      capture:
+        equal_status: outputs.ordering.status
+        unresolved: outputs.ordering.items
+  - step:
+      id: verify_ambiguity
+      type: assert
+      assert:
+        - {type: eq, subject: '${equal_status}', expected: ambiguous}
+        - {type: eq, subject: '${unresolved[0].id == "first" and unresolved[1].id == "second"}', expected: "true"}
+  - step:
+      id: order_cycle
+      type: tool
+      tool:
+        name: records
+        action: order
+        args:
+          observations:
+            - {min: "2026-01-15T10:00:00Z", max: "2026-01-15T12:00:00Z"}
+            - {min: "2026-01-15T10:20:00Z", max: "2026-01-15T11:50:00Z"}
+            - {min: "2026-01-15T10:40:00Z", max: "2026-01-15T11:40:00Z"}
+      capture:
+        cyclic_status: outputs.ordering.status
+  - step:
+      id: verify_inconsistent
+      type: assert
+      assert:
+        - {type: eq, subject: '${cyclic_status}', expected: inconsistent}

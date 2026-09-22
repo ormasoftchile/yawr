@@ -16,6 +16,8 @@
 *.ts text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+*.yawr text eol=lf linguist-language=YAML
+*.yawt text eol=lf linguist-language=YAML
 *.ps1 text eol=crlf
 *.exe binary
 *.png binary

@@ -12,18 +12,25 @@ import (
 
 func TestPresentationWrapperAndChildFrozenIdentity(t *testing.T) {
 	dir := t.TempDir()
-	files, _ := filepath.Glob(filepath.Join(findRepoRoot(t), "examples", "code-presentation", "*.yaml"))
-	for _, file := range files {
-		data, err := os.ReadFile(file)
+	srcDir := filepath.Join(findRepoRoot(t), "examples", "code-presentation")
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(srcDir, entry.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		writeFile(t, filepath.Join(dir, filepath.Base(file)), string(data))
+		writeFile(t, filepath.Join(dir, entry.Name()), string(data))
 	}
-	writeFile(t, filepath.Join(dir, "echo.runbook.yaml"), `apiVersion: yawr.runbook/v1
+	writeFile(t, filepath.Join(dir, "echo.yawr"), `apiVersion: yawr.runbook/v1
 id: wrapper-body
 name: Wrapper body
-toolRefs: [{name: leaf, path: leaf.tool.yaml}]
+toolRefs: [{name: leaf, path: leaf.yawt}]
 inputs:
   text: {type: string, required: true}
 outputs:
@@ -34,7 +41,7 @@ flow:
       type: tool
       tool: {name: leaf, action: query, args: {text: "print child = 1"}}
 `)
-	writeFile(t, filepath.Join(dir, "leaf.tool.yaml"), `apiVersion: yawr.tool/v1
+	writeFile(t, filepath.Join(dir, "leaf.yawt"), `apiVersion: yawr.tool/v1
 meta: {name: leaf, version: "1.0.0"}
 transport: {mode: native, command: must-not-execute}
 actions:
@@ -44,9 +51,9 @@ actions:
       text: {type: string, required: true, presentation: {version: 1, kind: code, language: kql}}
     outputs:
       code: {type: string, presentation: {version: 1, kind: code, language: kql}}
-    execute: {kind: runbook, path: leaf.runbook.yaml}
+    execute: {kind: runbook, path: leaf.yawr}
 `)
-	writeFile(t, filepath.Join(dir, "leaf.runbook.yaml"), `apiVersion: yawr.runbook/v1
+	writeFile(t, filepath.Join(dir, "leaf.yawr"), `apiVersion: yawr.runbook/v1
 id: leaf-body
 name: Leaf body
 inputs:
@@ -58,18 +65,20 @@ flow:
 `)
 	t.Chdir(dir)
 	runs := filepath.Join(dir, "runs")
-	runCaptureStdout(t, []string{"root.runbook.yaml", "--profile", "profile.yaml", "--run-dir", runs, "--output", "json"})
-	entries, _ := os.ReadDir(runs)
+	runCaptureStdout(t, []string{"root.yawr", "--profile", "profile.yaml", "--run-dir", runs, "--output", "json"})
+	runEntries, _ := os.ReadDir(runs)
 	runID := ""
-	for _, entry := range entries {
+	for _, entry := range runEntries {
 		if entry.IsDir() {
 			runID = entry.Name()
 		}
 	}
-	sources, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
-	for _, file := range sources {
-		if err := os.Remove(file); err != nil {
-			t.Fatal(err)
+	for _, pattern := range []string{"*.yaml", "*.yawr", "*.yawt"} {
+		sources, _ := filepath.Glob(filepath.Join(dir, pattern))
+		for _, file := range sources {
+			if err := os.Remove(file); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	store := runstore.NewDirRunStore(runs)

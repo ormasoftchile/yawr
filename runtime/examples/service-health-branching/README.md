@@ -10,12 +10,12 @@ This runbook demonstrates multi-level branching based on tool output. It perform
 
 | File | Role |
 |------|------|
-| `service-health-branching.runbook.yaml` | Entry point — run this one |
+| `service-health-branching.yawr` | Entry point — run this one |
 
 ## How to run
 
 ```bash
-yawr run service-health-branching.runbook.yaml
+yawr run service-health-branching.yawr
 ```
 
 ## Key concepts
