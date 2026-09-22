@@ -1,7 +1,7 @@
 # Included-runbook execution in VS Code
 
 These examples reproduce the router -> catalog investigation -> classification
-shape without an incident service, XTS, MCP calls, credentials, or external
+shape without an incident service, external views, MCP calls, credentials, or external
 commands. All work is local `noop`, assertion, Results, or operator-choice steps.
 The relative catalog binding is included in `.yawr/config.yaml`.
 

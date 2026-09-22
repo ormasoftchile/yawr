@@ -123,7 +123,9 @@ try {
       const repositoryPaths = trackedGeneratedFiles.map((path) => join('apps', 'vscode', path));
       await run('git', ['-C', repositoryRoot, 'add', '--refresh', '--', ...repositoryPaths], {},
         10_000, 'generated-file index refresh', false);
-      await rm(join(root, 'out'), { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+      if (process.env.YAWR_CLEAN_OUT === '1') {
+        await rm(join(root, 'out'), { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+      }
       await rm(join(root, '.vscode-test'), { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
       if (mode !== 'package') await rm(vsixPath, { force: true });
     };

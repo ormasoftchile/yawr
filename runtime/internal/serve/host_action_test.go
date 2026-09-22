@@ -234,8 +234,8 @@ func TestPreviewHostActionBridgeIsGeneric(t *testing.T) {
 			t.Fatalf("preview bridge missing %q", want)
 		}
 	}
-	if strings.Contains(html, "xts.open") || strings.Contains(html, "xtsLaunchStatus") {
-		t.Fatal("served preview contains product-specific XTS logic")
+	if strings.Contains(html, "external-view.open") || strings.Contains(html, "externalViewLaunchStatus") {
+		t.Fatal("served preview contains product-specific external view logic")
 	}
 }
 

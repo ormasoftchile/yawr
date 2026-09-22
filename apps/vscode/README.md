@@ -130,7 +130,7 @@ the honest navigation surfaces.
 
 ## Host-action protocol
 
-The bundled webview may request the `xts.open-view` host capability, which requires
+The bundled webview may request the `external-view.open` host capability, which requires
 `view_path`, `environment`, `parameters`, and `focus`. The extension statically maps
 each capability; a runbook can never choose a VS Code command ID. The correlated
 result is written back to the active Yawr child over `yawr.stdio/v1`.
@@ -144,9 +144,9 @@ result is written back to the active Yawr child over `yawr.stdio/v1`.
   "correlationId": "turn-123",
   "previewSessionId": "preview-session-123",
   "requestId": "preview-session-123:turn-123",
-  "capability": "xts.open-view",
+  "capability": "external-view.open",
   "request": {
-    "view_path": "Database Replicas.xts",
+    "view_path": "Database Replicas.view",
     "environment": "ProdEus1a",
     "parameters": { "server": "server-name", "database": "database-name" },
     "focus": true
@@ -155,31 +155,32 @@ result is written back to the active Yawr child over `yawr.stdio/v1`.
 ```
 
 The Yawr wire shape is closed: undeclared fields are rejected. At the trusted
-extension boundary, the capability maps only to
-`xts.openViewByPath(view_path, args)`, preserving the relative filename verbatim.
+extension boundary, the capability maps to the configured command
+(`externalView.openByPath(view_path, args)` by default, configurable via
+`yawr.externalView.openCommand`), preserving the relative filename verbatim.
 The argument string starts with `-p environment:ProdEus1a`, followed by each
 parameter as `-p name:value` (for example,
 `-p environment:ProdEus1a -p server:server-name -p database:database-name`).
-XTS 0.4.32 parses these values literally up to the next `-p`; no shell quoting
+The external view command parses these values literally up to the next `-p`; no shell quoting
 is added. String values preserve internal spaces, quotes, and backslashes;
 finite numbers and booleans are serialized to text. Parameter names must use
 word characters. Empty values, outer whitespace, nested objects/arrays, embedded
 `-p` arguments, and overriding `environment` inside `parameters` are rejected
 rather than changing the requested values. Runbooks own the view path and
-must use the target view's declared parameter names. XTS remains responsible for
+must use the target view's declared parameter names. The external view tool remains responsible for
 validating the target view's parameter schema, configured view roots,
 authentication, and the explicitly supplied environment.
-YAWR activates the installed XTS extension before dispatch when needed.
-The current XTS command controls tab activation and has no `focus` argument;
+YAWR activates the configured external view extension before dispatch when needed (configured via `yawr.externalView.extensionId`).
+The external view command controls tab activation and has no `focus` argument;
 `focus` continues to control YAWR's reminder after readiness verification.
 
 The current command returns `void` and may display startup failures without
 throwing. YAWR therefore never interprets command completion as `opened`.
 The run remains at the host-action interaction until the operator returns to
-the YAWR panel and selects **XTS view is ready**, after verifying that the real
+the YAWR panel and selects **External view is ready**, after verifying that the real
 view has loaded with the displayed filename, environment, and parameters.
-**XTS failed to open** reports a failed handoff, not a completed investigation.
-This is an explicit operator attestation, not an automatic XTS readiness probe.
+**External view failed to open** reports a failed handoff, not a completed investigation.
+This is an explicit operator attestation, not an automatic readiness probe.
 The subsequent runbook classification/collector still requires its own answer.
 
 Only after this correlated readiness confirmation does the webview receive:
@@ -193,7 +194,7 @@ Only after this correlated readiness confirmation does the webview receive:
   "correlationId": "turn-123",
   "previewSessionId": "preview-session-123",
   "requestId": "preview-session-123:turn-123",
-  "capability": "xts.open-view",
+  "capability": "external-view.open",
   "status": "completed",
   "result": { "status": "opened" },
   "error": null
@@ -201,16 +202,16 @@ Only after this correlated readiness confirmation does the webview receive:
 ```
 
 The bridge ack statuses are `completed`, `failed`, `timed-out`, `unsupported`, and
-`execution-not-started`. An operator-verified XTS view carries `opened` inside
+`execution-not-started`. An operator-verified external view carries `opened` inside
 `result.status` when the bridge status is `completed`. The extension never
-includes a requested path, XTS row, or parameters in an acknowledgment.
+includes a requested path, external row, or parameters in an acknowledgment.
 Cancelling a matching tuple, reloading the preview, replacing its panel, or
 disposing it acknowledges that tuple as `execution-not-started`; late command
 results are ignored. Cancellation frames use their canonical
 `correlationId`/`previewSessionId`/`requestId` subset, which is resolved only
 against a pending full tuple. `unsupported` remains the framework-local Yawr
 result for headless execution with no host provider and is also the bridge
-acknowledgment for an unregistered capability. Registered XTS capabilities do
+acknowledgment for an unregistered capability. Registered external view capabilities do
 not normally produce it from the VS Code host.
 
 ## Debug runs
@@ -236,11 +237,11 @@ Inputs declared as `type: secret` render as password fields and are sent in the
 private `run.configure` stdin frame. They are never placed in child-process
 arguments or emitted in run frames.
 
-XTS host actions pause on an explicit **Open XTS** control in the run panel.
+External view host actions pause on an explicit **Open external view** control in the run panel.
 That reviewed in-panel action is the launch confirmation; the extension
 does not show a second modal. After dispatch, a separate in-panel readiness
 check keeps startup failures from advancing the run. A reminder appears only
-after the operator verifies a focused XTS view is ready. Cancellation, panel
+after the operator verifies a focused external view is ready. Cancellation, panel
 disposal, and the existing handoff timeout discard pending verification listeners.
 
 ## Installed-editor file-only subprocess support

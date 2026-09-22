@@ -139,7 +139,7 @@ export function RouteTestPane({
       } else if (kind === 'host_action') {
         const capability = hostCapability(condition.node);
         const result = condition.status === 'completed'
-          ? capability === 'xts.open-view'
+          ? capability === 'external-view.open'
             ? { status: condition.nestedStatus }
             : parseObject(condition.objectValue, `${nodeTitle(condition.node)} result`)
           : undefined;
@@ -273,7 +273,7 @@ export function RouteTestPane({
         <strong className="route-test-review-safety">No external actions will run.</strong>
         <div className="route-test-stepper"><strong>1 Set conditions</strong><strong>2 Check route</strong></div>
         <h2>{targetName}</h2>
-        <p>Yawr will stop before this step. XTS, commands, tools, transfers, and connectors are blocked.</p>
+        <p>Yawr will stop before this step. External views, commands, tools, transfers, and connectors are blocked.</p>
         <ol className="route-test-review-list">
           {conditions.filter((condition) => condition.enabled).map((condition) => (
             <li key={condition.node.id}>
@@ -293,7 +293,7 @@ export function RouteTestPane({
         </label>
         <label className="route-test-ack">
           <input type="checkbox" checked={sensitivityReviewed} onChange={(event) => setSensitivityReviewed(event.target.checked)} />
-          <span>I reviewed the saved values. They contain no credentials, tokens, customer data, or raw XTS output.</span>
+          <span>I reviewed the saved values. They contain no credentials, tokens, customer data, or raw external view output.</span>
         </label>
         {(localError || error) ? <div className="interaction-error" role="alert">{localError ?? error}</div> : null}
         <div className="route-test-actions">
@@ -360,14 +360,14 @@ function ConditionEditor({ condition, onChange }: { condition: ConditionState; o
       {condition.enabled && kind === 'host_action' ? (
         <div className="route-test-condition-fields">
           <p>Source: {sourceSummary(condition.source)}</p>
-          {capability === 'xts.open-view' ? <p>XTS will not open in this route test.</p> : null}
+          {capability === 'external-view.open' ? <p>External view will not open in this route test.</p> : null}
           <label className="route-test-field"><span>Assume host result</span>
             <select value={condition.status} onChange={(event) => onChange({ status: event.target.value })}>
               {['completed', 'failed', 'timed-out', 'execution-not-started', 'unsupported'].map((status) => <option key={status}>{status}</option>)}
             </select>
           </label>
-          {condition.status === 'completed' && capability === 'xts.open-view' ? (
-            <label className="route-test-field"><span>Assume XTS launch result</span>
+          {condition.status === 'completed' && capability === 'external-view.open' ? (
+            <label className="route-test-field"><span>Assume external view launch result</span>
               <select value={condition.nestedStatus} onChange={(event) => onChange({ nestedStatus: event.target.value })}>
                 {['opened', 'view-not-found', 'environment-not-found', 'invalid-parameters', 'execution-not-started'].map((status) => <option key={status}>{status}</option>)}
               </select>
@@ -600,7 +600,7 @@ function parseObject(value: string, label: string): Record<string, unknown> {
 
 function conditionSummary(condition: ConditionState): string {
   const kind = nodeKind(condition.node);
-  if (kind === 'host_action' && hostCapability(condition.node) === 'xts.open-view') return `Assume XTS launch result: ${condition.nestedStatus}`;
+  if (kind === 'host_action' && hostCapability(condition.node) === 'external-view.open') return `Assume external view launch result: ${condition.nestedStatus}`;
   if (kind === 'collector') return `Saved findings: ${Object.values(condition.values).join(', ')}`;
   if (kind === 'choice') return `Saved choice: ${condition.selected.join(', ')}`;
   if (kind === 'decision') return `Saved decision: ${condition.label}`;

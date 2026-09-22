@@ -100,7 +100,7 @@ func TestBuildEngineConfig_DryRun(t *testing.T) {
 func TestDryRunExecutor_HostActionProducesTypedStatus(t *testing.T) {
 	result, err := (&DryRunExecutor{kind: "host_action"}).Execute(
 		context.Background(),
-		enginepkg.ResolvedStep{ID: "open_xts_view"},
+		enginepkg.ResolvedStep{ID: "open_external_view"},
 		nil,
 	)
 	if err != nil {

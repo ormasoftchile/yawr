@@ -136,7 +136,7 @@ outcome:
 outputs:
   result:
     type: object
-    value_tree: {status: resolved, code: geodr-healthy}
+    value_tree: {status: resolved, code: failover-healthy}
 flow:
   - step:
       id: diagnose
@@ -148,7 +148,7 @@ flow:
                 id: healthy
                 type: end
                 publish_results: true
-                outcome: {category: resolved, code: geodr-healthy}
+                outcome: {category: resolved, code: failover-healthy}
 ```
 
 `publish_results` is a Boolean accepted only on `end`; omitted or false retains

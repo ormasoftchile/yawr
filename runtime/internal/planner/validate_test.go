@@ -71,7 +71,7 @@ func TestValidatePlanAllowsDeclaredMCPOutputCapture(t *testing.T) {
 
 func TestValidatePlanAllowsHostActionOutputsAndValidatesTemplates(t *testing.T) {
 	rb := validationRunbook([]schema.FlowNode{{Step: &schema.Step{
-		ID:   "open_xts_view",
+		ID:   "open_external_view",
 		Type: schema.StepTypeHostAction,
 		Capture: map[string]string{
 			"host_status":     "outputs.status",
@@ -95,7 +95,7 @@ func TestValidatePlanAllowsHostActionOutputsAndValidatesTemplates(t *testing.T) 
 		"host_action.request.options.region",
 		"host_action.request.options.labels[1]",
 	} {
-		if _, ok := plan.Validation.GISTemplates[engine.StepRef{StepID: "open_xts_view", FieldPath: field}]; !ok {
+		if _, ok := plan.Validation.GISTemplates[engine.StepRef{StepID: "open_external_view", FieldPath: field}]; !ok {
 			t.Fatalf("host action template %q was not validated", field)
 		}
 	}
@@ -103,7 +103,7 @@ func TestValidatePlanAllowsHostActionOutputsAndValidatesTemplates(t *testing.T) 
 
 func TestValidatePlanRejectsUndeclaredHostActionOutputCapture(t *testing.T) {
 	rb := validationRunbook([]schema.FlowNode{{Step: &schema.Step{
-		ID:      "open_xts_view",
+		ID:      "open_external_view",
 		Type:    schema.StepTypeHostAction,
 		Capture: map[string]string{"view": "outputs.view"},
 		HostActionSpec: &schema.HostActionSpec{HostAction: schema.HostActionConfig{

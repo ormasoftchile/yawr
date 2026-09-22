@@ -53,10 +53,10 @@ test('removed SSE server commands and settings are not contributed', () => {
   assert.equal(properties['yawr.autoStartServer'], undefined);
 });
 
-test('XTS confirmation has no extension-modal preference', () => {
+test('External view confirmation has no extension-modal preference', () => {
   const properties = manifest.contributes.configuration.properties;
 
-  assert.equal(properties['yawr.xts.showHandoffConfirmation'], undefined);
+  assert.equal(properties['yawr.externalView.showHandoffConfirmation'], undefined);
 });
 
 test('runbook server settings are resource-scoped for multi-root workspaces', () => {

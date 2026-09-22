@@ -39,10 +39,9 @@ runtime/*.cover
 runtime/*.prof
 runtime/*.pprof
 runtime/.cache/
-runtime/.yawr/runs/
-runtime/.runbook/runs/
-runtime/**/.yawr/runs/
-runtime/**/.runbook/runs/
+runtime/**/.yawr/
+runtime/**/.runbook/
+*.jsonl
 runtime/**/adapter-test-*/
 runtime/**/resume-test-*/
 runtime/cmd/serve/traces/

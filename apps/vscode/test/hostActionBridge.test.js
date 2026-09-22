@@ -74,7 +74,7 @@ function makeBridge(registry, opts = {}) {
 }
 
 // ─── HAB-01: Registry ─────────────────────────────────────────────────────────
-// AC-HA-1: The extension exports at least one non-XTS test capability (test.echo)
+// AC-HA-1: The extension exports at least one non-external-view test capability (test.echo)
 // that is usable without production dependencies.
 
 test('HAB-01: testEchoHandler is exported and echoes the request.echo field', async () => {
@@ -214,7 +214,7 @@ test('HAB-04: test.echo handler returns completed ack with echoed result and ful
 // AC-HA-5: Throwing handler → status "failed", HANDLER_ERROR, message ≤200 chars, no stack frames.
 
 test('HAB-05: synchronously throwing handler emits failed ack with a fixed safe message', async () => {
-  const sensitiveSentinel = 'C:/internal/secret.xts environment=prod password=hunter2';
+  const sensitiveSentinel = 'C:/internal/secret.extview environment=prod password=hunter2';
   const throwingHandler = async () => {
     throw new Error(`${sensitiveSentinel}\n    at SomeModule (/private/src/index.js:42:10)`);
   };
@@ -231,7 +231,7 @@ test('HAB-05: synchronously throwing handler emits failed ack with a fixed safe 
   assert.ok(ack.error.message.length <= 200, `message too long: ${ack.error.message.length}`);
   assert.doesNotMatch(ack.error.message, /\s+at /, 'message must not contain stack frames');
   assert.doesNotMatch(ack.error.message, /\.js:\d+/, 'message must not contain file paths');
-  assert.doesNotMatch(ack.error.message, /secret\.xts|environment=prod|hunter2/, 'message must not contain handler diagnostics');
+  assert.doesNotMatch(ack.error.message, /secret\.extview|environment=prod|hunter2/, 'message must not contain handler diagnostics');
 });
 
 test('HAB-05b: rejected promise from handler emits same failed ack as synchronous throw', async () => {
@@ -249,7 +249,7 @@ test('HAB-05b: rejected promise from handler emits same failed ack as synchronou
 test('HAB-05c: structured handler failure preserves code but replaces raw message', async () => {
   const failingHandler = async () => ({
     status: 'failed',
-    error: { code: 'VALIDATION_ERROR', message: 'C:/internal/secret.xts token=abc123' },
+    error: { code: 'VALIDATION_ERROR', message: 'C:/internal/secret.extview token=abc123' },
   });
   const { bridge, acks } = makeBridge(
     new Map([['test.fail', { handler: failingHandler }]])
@@ -573,4 +573,4 @@ test('HAB-10: bridge sends exactly one ack for a successful request (monotonic t
   assert.equal(acks.length, 1);
 });
 
-// Product-specific handler behavior is covered by xtsProtocol.test.js.
+// Product-specific handler behavior is covered by externalViewProtocol.test.js.

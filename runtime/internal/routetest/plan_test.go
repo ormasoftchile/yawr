@@ -11,7 +11,7 @@ import (
 func TestValidateScenarioPlan_BindsQualifiedKinds(t *testing.T) {
 	plan := &engine.ExecutionPlan{Steps: []engine.ResolvedStep{
 		{ID: "inspect", Kind: "include", Depth: 0, Spec: &schema.IncludeSpec{}},
-		{ID: "open", Kind: "host_action", Depth: 1, ParentID: "inspect", ParentKind: "include", Spec: &schema.HostActionSpec{HostAction: schema.HostActionConfig{Capability: "xts.open-view"}}},
+		{ID: "open", Kind: "host_action", Depth: 1, ParentID: "inspect", ParentKind: "include", Spec: &schema.HostActionSpec{HostAction: schema.HostActionConfig{Capability: "external-view.open"}}},
 		{ID: "branch", Kind: "branch", Depth: 1, ParentID: "inspect", ParentKind: "include"},
 		{ID: "findings", Kind: "collector", Depth: 2, ParentID: "branch", ParentKind: "branch", Spec: &schema.CollectorSpec{Fields: []schema.CollectorField{{Name: "health", Type: schema.FieldTypeSelect, Ephemeral: true}}}},
 		{ID: "route", Kind: "branch", Depth: 0},
@@ -19,7 +19,7 @@ func TestValidateScenarioPlan_BindsQualifiedKinds(t *testing.T) {
 	}}
 	scenario := Scenario{
 		Target:              Selector{CallPath: []string{"route"}, Step: "target", Phase: "before", Invocation: 1, Attempt: 1},
-		HostActionResponses: []HostActionBinding{{At: Selector{CallPath: []string{"inspect"}, Step: "open", Phase: "execute", Invocation: 1, Attempt: 1}, Capability: "xts.open-view"}},
+		HostActionResponses: []HostActionBinding{{At: Selector{CallPath: []string{"inspect"}, Step: "open", Phase: "execute", Invocation: 1, Attempt: 1}, Capability: "external-view.open"}},
 		InteractionAnswers:  []InteractionBinding{{At: Selector{CallPath: []string{"inspect", "branch"}, Step: "findings", Phase: "execute", Invocation: 1, Attempt: 1}, Kind: "collector", Values: map[string]any{"health": "healthy"}}},
 	}
 	if err := ValidateScenarioPlan(scenario, plan); err == nil || !strings.Contains(err.Error(), "ephemeral") {

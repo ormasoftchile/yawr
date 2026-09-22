@@ -20,7 +20,7 @@ import (
 func terminalResultsFlow(category string, nested bool) []schema.FlowNode {
 	flow := []schema.FlowNode{
 		{Step: &schema.Step{ID: "end", Type: schema.StepTypeEnd, EndSpec: &schema.EndSpec{
-			PublishResults: true, Outcome: &schema.OutcomeDeclaration{Category: category, Code: "GeoDR-Exact_Code"},
+			PublishResults: true, Outcome: &schema.OutcomeDeclaration{Category: category, Code: "Failover-Exact_Code"},
 		}}},
 		{Step: &schema.Step{ID: "unreachable", Type: schema.StepTypeNoop, NoopSpec: &schema.NoopSpec{}}},
 	}
@@ -75,7 +75,7 @@ flow:
                 branches:
                   - else: true
                     steps:
-                      - step: {id: end, type: end, publish_results: true, outcome: {category: %s, code: GeoDR-Exact_Code}}
+                      - step: {id: end, type: end, publish_results: true, outcome: {category: %s, code: Failover-Exact_Code}}
                       - step: {id: unreachable, type: noop}
   - step: {id: tail_child, type: noop}
 `, category, category)
@@ -132,7 +132,7 @@ flow:
 				if state.Status != engine.RunStatusCompleted || state.Results == nil || state.Results.Validate() != nil {
 					t.Fatalf("missing completed publication: status=%s", state.Status)
 				}
-				if state.Vars["__run_outcome_category"] != category || state.Vars["__run_outcome_code"] != "GeoDR-Exact_Code" {
+				if state.Vars["__run_outcome_category"] != category || state.Vars["__run_outcome_code"] != "Failover-Exact_Code" {
 					t.Fatalf("outcome changed: %#v", state.Vars)
 				}
 				record := state.Results

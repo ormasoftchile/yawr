@@ -10,7 +10,7 @@ func TestTerminalResultsIntentRoundTripAndSingleRecord(t *testing.T) {
 	store := NewDirRunStore(t.TempDir())
 	defer store.Close()
 	result := &engine.StepResult{StepID: "end", Status: engine.StepStatusCompleted, TerminalResults: true,
-		Output: map[string]any{"terminal": true, "outcome_category": "escalated", "outcome_code": "GeoDR-Exact_Code"}}
+		Output: map[string]any{"terminal": true, "outcome_category": "escalated", "outcome_code": "Failover-Exact_Code"}}
 	snapshots, err := store.snapshotStepResultsV2("terminal", map[string]*engine.StepResult{"0": result})
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestTerminalResultsIntentRoundTripAndSingleRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !restored["0"].TerminalResults || restored["0"].Output["outcome_code"] != "GeoDR-Exact_Code" {
+	if !restored["0"].TerminalResults || restored["0"].Output["outcome_code"] != "Failover-Exact_Code" {
 		t.Fatal("terminal publication request/outcome lost at checkpoint")
 	}
 	state := engine.RunState{StepResults: restored}

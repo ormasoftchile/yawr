@@ -41,7 +41,7 @@ The previous `bufio.Scanner` used Go's default 65,536-byte maximum token buffer
 (usable line length is smaller when terminators require buffer space), with
 no supported override and no aggregate event/response budget. The reported
 Performance failures on two delivered runtimes identify that scanner error;
-the same-tool GeoDR response succeeds. **The actual failing SSE payload size
+the same-tool failover response succeeds. **The actual failing SSE payload size
 is unmeasured.** Neither the handoff nor a captured CLI error establishes it.
 
 The 16 MiB event allowance raises the previous line ceiling by roughly 256

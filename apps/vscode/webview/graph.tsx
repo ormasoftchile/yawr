@@ -65,7 +65,7 @@ import {
 import type { RouteTestArtifact } from '../src/routeTestTypes';
 import { sessionGraphTopologyKey, type SessionGraphViewState } from '../src/sessionCompositeGraph';
 import { parseHostActionResponse, type HostActionResponseEnvelope } from '../src/hostActionWebviewProtocol';
-import { matchesXtsViewCheck, type XtsViewCheck } from '../src/xtsViewVerification';
+import { matchesExternalViewCheck, type ExternalViewCheck } from '../src/externalViewVerification';
 import {
   collectorInputType,
   formatCollectorReviewValue as collectorReviewValue,
@@ -121,7 +121,7 @@ type HostMessage =
       artifact?: RouteTestArtifact;
     }
   | HostActionResponseEnvelope
-  | XtsViewCheck;
+  | ExternalViewCheck;
 
 interface StdioFrame {
   document?: GraphDocument;
@@ -743,22 +743,22 @@ function InteractionPane({
   interaction,
   onSubmit,
   onConfirmHostAction,
-  xtsOpened,
-  xtsViewCheck,
-  onVerifyXtsView,
+  externalViewOpened,
+  externalViewCheck,
+  onVerifyExternalView,
 }: {
   interaction: PendingInteraction;
   onSubmit(answer: Record<string, unknown>): void;
   onConfirmHostAction(interaction: PendingInteraction): void;
-  xtsOpened: boolean;
-  xtsViewCheck?: XtsViewCheck;
-  onVerifyXtsView(status: 'opened' | 'failed'): void;
+  externalViewOpened: boolean;
+  externalViewCheck?: ExternalViewCheck;
+  onVerifyExternalView(status: 'opened' | 'failed'): void;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     const initial: Record<string, unknown> = {};
     for (const field of interaction.fields ?? []) {
-      if (field.default !== undefined) initial[field.name] = field.default;
+      initial[field.name] = field.default ?? '';
     }
     return initial;
   });
@@ -777,17 +777,17 @@ function InteractionPane({
   };
 
   if (interaction.kind === 'host_action') {
-    const isXts = interaction.host_action?.capability === 'xts.open-view';
-    if (!isXts) return <div className="interaction-wait" role="status">Opening host view...</div>;
+    const isExternalView = interaction.host_action?.capability === 'external-view.open';
+    if (!isExternalView) return <div className="interaction-wait" role="status">Opening host view...</div>;
     return (
-      <section className="interaction-pane host-action-pane" aria-label={isXts ? 'Open XTS view' : 'Open host view'}>
-        <div className="actual-run-stepper" aria-label="Actual run progress"><strong>1 Open XTS</strong><span>2 Answer questions</span><span>3 Review</span></div>
-        <span className="interaction-kind">{isXts ? 'Actual run · XTS' : 'Host action'}</span>
+      <section className="interaction-pane host-action-pane" aria-label={isExternalView ? 'Open external view' : 'Open host view'}>
+        <div className="actual-run-stepper" aria-label="Actual run progress"><strong>1 Open external view</strong><span>2 Answer questions</span><span>3 Review</span></div>
+        <span className="interaction-kind">{isExternalView ? 'Actual run · External view' : 'Host action'}</span>
         <h2>{interaction.title ?? interaction.stepID}</h2>
         {interaction.prompt ? <p>{interaction.prompt}</p> : null}
-        {isXts ? <p>VS Code will switch to XTS. Review the view, then return here to record your findings.</p> : null}
-        {xtsViewCheck ? <>
-          <p>XTS launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded
+        {isExternalView ? <p>VS Code will switch to the external view. Review the view, then return here to record your findings.</p> : null}
+        {externalViewCheck ? <>
+          <p>External view launch was requested, but readiness is not confirmed. Confirm only after the real view has loaded
             with the requested environment and parameters. Do not confirm a startup, authentication, or loading error.</p>
           <dl>
             <dt>View</dt><dd>{String(interaction.host_action?.request.view_path ?? '')}</dd>
@@ -796,9 +796,9 @@ function InteractionPane({
               <React.Fragment key={name}><dt>{name}</dt><dd>{String(value)}</dd></React.Fragment>)}
           </dl>
           <button type="button" className="primary" disabled={verificationSubmitted}
-            onClick={() => { setVerificationSubmitted(true); onVerifyXtsView('opened'); }}>XTS view is ready</button>
+            onClick={() => { setVerificationSubmitted(true); onVerifyExternalView('opened'); }}>External view is ready</button>
           <button type="button" className="danger" disabled={verificationSubmitted}
-            onClick={() => { setVerificationSubmitted(true); onVerifyXtsView('failed'); }}>XTS failed to open</button>
+            onClick={() => { setVerificationSubmitted(true); onVerifyExternalView('failed'); }}>External view failed to open</button>
         </> : <button
           type="button"
           className="primary"
@@ -808,7 +808,7 @@ function InteractionPane({
             onConfirmHostAction(interaction);
           }}
         >
-          {submitting ? 'Opening XTS...' : <span>Open XTS</span>}
+          {submitting ? 'Opening external view...' : <span>Open external view</span>}
         </button>}
       </section>
     );
@@ -900,7 +900,7 @@ function InteractionPane({
 
       {interaction.kind === 'collector' && collectorReview ? (
         <section className="collector-review review-before-submit" aria-label="Review collected answers">
-          {xtsOpened ? <div className="actual-run-stepper" aria-label="Actual run progress"><span>1 Open XTS</span><span>2 Answer questions</span><strong>3 Review</strong></div> : null}
+          {externalViewOpened ? <div className="actual-run-stepper" aria-label="Actual run progress"><span>1 Open external view</span><span>2 Answer questions</span><strong>3 Review</strong></div> : null}
           <span className="interaction-kind">Collected in this actual run</span>
           <h3>Review answers</h3>
           <dl>
@@ -927,7 +927,7 @@ function InteractionPane({
             setValidationError(error instanceof Error ? error.message : String(error));
           }
         }}>
-          {xtsOpened ? <div className="actual-run-stepper" aria-label="Actual run progress"><span>1 Open XTS</span><strong>2 Answer questions</strong><span>3 Review</span></div> : null}
+          {externalViewOpened ? <div className="actual-run-stepper" aria-label="Actual run progress"><span>1 Open external view</span><strong>2 Answer questions</strong><span>3 Review</span></div> : null}
           {(interaction.fields ?? []).map((field) => (
             <label className="collector-field" data-field-name={field.name} key={field.name}>
               <span>{field.label ?? field.display_name ?? field.name}{field.required ? ' *' : ''}</span>
@@ -1664,9 +1664,9 @@ function GraphView({
   routeTestError,
   onSaveRouteTest,
   onRunRouteTest,
-  xtsOpened,
-  xtsViewCheck,
-  onVerifyXtsView,
+  externalViewOpened,
+  externalViewCheck,
+  onVerifyExternalView,
 }: {
   document: GraphDocument;
   results?: ResultsAvailability;
@@ -1712,9 +1712,9 @@ function GraphView({
   routeTestError?: string;
   onSaveRouteTest(artifact: RouteTestArtifact): void;
   onRunRouteTest(artifact: RouteTestArtifact): void;
-  xtsOpened: boolean;
-  xtsViewCheck?: XtsViewCheck;
-  onVerifyXtsView(status: 'opened' | 'failed'): void;
+  externalViewOpened: boolean;
+  externalViewCheck?: ExternalViewCheck;
+  onVerifyExternalView(status: 'opened' | 'failed'): void;
 }) {
   const runtimeNodes = useMemo(() => displayRuntimeStatuses(observedRuntimeNodes, runStatus, document), [observedRuntimeNodes, runStatus, document]);
   const [selectedId, setSelectedId] = useState<string>();
@@ -2471,7 +2471,7 @@ function GraphView({
           {routeTestOutcome?.passed
             ? 'Route test completed - external actions were blocked'
             : routeTestRunning
-              ? 'Testing route - XTS and external actions are blocked'
+              ? 'Testing route - external views and external actions are blocked'
               : 'Reviewing route test - protected execution starts only when you run this route test'}
         </div>
       ) : null}
@@ -2599,9 +2599,9 @@ function GraphView({
               interaction={pending}
               onSubmit={onSubmitInteraction}
               onConfirmHostAction={onConfirmHostAction}
-              xtsOpened={xtsOpened}
-              xtsViewCheck={xtsViewCheck}
-              onVerifyXtsView={onVerifyXtsView}
+              externalViewOpened={externalViewOpened}
+              externalViewCheck={externalViewCheck}
+              onVerifyExternalView={onVerifyExternalView}
             />
           ) : currentRouteTestEditor && routeTarget && routeTestContext ? (
             <RouteTestPane
@@ -2765,8 +2765,8 @@ function App() {
   const [routeTestOutcome, setRouteTestOutcome] = useState<RouteTestOutcome>();
   const [routeTestRunning, setRouteTestRunning] = useState(false);
   const [routeTestError, setRouteTestError] = useState<string>();
-  const [xtsOpened, setXtsOpened] = useState(false);
-  const [xtsViewCheck, setXtsViewCheck] = useState<XtsViewCheck>();
+  const [externalViewOpened, setExternalViewOpened] = useState(false);
+  const [externalViewCheck, setExternalViewCheck] = useState<ExternalViewCheck>();
   const pendingRef = useRef<PendingInteraction>();
   const resolvedTurnsRef = useRef(new Set<string>());
   const runIDRef = useRef<string>();
@@ -2799,10 +2799,10 @@ function App() {
   const clearActiveRun = (preserveVisualPlayback = false) => {
     if (!preserveVisualPlayback) visualPacerRef.current?.bypass();
     hostRequestRef.current = undefined;
-    setXtsViewCheck(undefined);
+    setExternalViewCheck(undefined);
     pendingRef.current = undefined;
     runIDRef.current = undefined;
-    setXtsOpened(false);
+    setExternalViewOpened(false);
     setPending(undefined);
     setRunID(undefined);
   };
@@ -3099,17 +3099,17 @@ function App() {
         setRouteTestError(undefined);
       } else if (message.type === 'route-test.error') {
         setRouteTestError(message.message);
-      } else if (message.type === 'yawr.xts.verify-view') {
+      } else if (message.type === 'yawr.external-view.verify-view') {
         const hostRequest = hostRequestRef.current;
         const interaction = pendingRef.current;
         if (!hostRequest || !interaction || interaction.kind !== 'host_action' ||
             interaction.runID !== hostRequest.runID || interaction.turnID !== hostRequest.turnID ||
             runIDRef.current !== hostRequest.runID) return;
-        if (matchesXtsViewCheck(message, {
+        if (matchesExternalViewCheck(message, {
           capability: hostRequest.capability, runId: hostRequest.runID, turnId: hostRequest.turnID,
           correlationId: hostRequest.correlationID, previewSessionId: hostSessionRef.current,
           requestId: hostRequest.requestID,
-        })) setXtsViewCheck(message);
+        })) setExternalViewCheck(message);
       } else if (message.type === 'yawr.host-action.ack' || message.type === 'yawr.host-action.cancel') {
         const response = parseHostActionResponse(message);
         if (!response) return;
@@ -3128,9 +3128,9 @@ function App() {
           response.capability !== hostRequest.capability
         )) return;
         if (runIDRef.current !== hostRequest.runID) return;
-        setXtsViewCheck(undefined);
+        setExternalViewCheck(undefined);
         if (response.type === 'yawr.host-action.ack' && response.status === 'completed' && response.result?.status === 'opened') {
-          setXtsOpened(true);
+          setExternalViewOpened(true);
         }
         const answer = {
               kind: 'host_action',
@@ -3214,9 +3214,9 @@ function App() {
     });
   };
 
-  /* Non-XTS capabilities preserve their existing automatic dispatch. XTS waits for explicit panel confirmation. */
+  /* Non-external-view capabilities preserve their existing automatic dispatch. External view waits for explicit panel confirmation. */
   useEffect(() => {
-    if (!pending || pending.kind !== 'host_action' || !pending.host_action || !runID || pending.host_action.capability === 'xts.open-view') return;
+    if (!pending || pending.kind !== 'host_action' || !pending.host_action || !runID || pending.host_action.capability === 'external-view.open') return;
     dispatchHostAction(pending, false);
   }, [pending?.turnID, runID]);
 
@@ -3523,7 +3523,7 @@ function App() {
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, xtsViewCheck, testMode]);
+  }, [document, inputValues, sessionID, sessionStatus, sessionAttached, runID, runStatus, runStarting, reloading, runError, pending?.turnID, runtimeNodes, executionNodeID, visualStep, results, breakpoints, routeTestContext?.planHash, routeTestOutcome, routeTestError, routeTests, externalViewCheck, testMode]);
 
   if (loading) return <div className="state" role="status">Loading runbook...</div>;
   if (error) return <div className="state error" role="alert">{error}</div>;
@@ -3583,13 +3583,13 @@ function App() {
         setRouteTestError(undefined);
         vscode.postMessage({ type: 'route-test.run', artifact });
       }}
-      xtsOpened={xtsOpened}
-      xtsViewCheck={xtsViewCheck}
-      onVerifyXtsView={(status) => {
-        if (!xtsViewCheck || xtsViewCheck.runId !== runIDRef.current ||
-            xtsViewCheck.turnId !== pendingRef.current?.turnID ||
-            xtsViewCheck.requestId !== hostRequestRef.current?.requestID) return;
-        vscode.postMessage({ ...xtsViewCheck, type: 'yawr.xts.view-verified', status });
+      externalViewOpened={externalViewOpened}
+      externalViewCheck={externalViewCheck}
+      onVerifyExternalView={(status) => {
+        if (!externalViewCheck || externalViewCheck.runId !== runIDRef.current ||
+            externalViewCheck.turnId !== pendingRef.current?.turnID ||
+            externalViewCheck.requestId !== hostRequestRef.current?.requestID) return;
+        vscode.postMessage({ ...externalViewCheck, type: 'yawr.external-view.view-verified', status });
       }}
     />
   );

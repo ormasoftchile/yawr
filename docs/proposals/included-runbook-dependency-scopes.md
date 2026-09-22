@@ -497,7 +497,7 @@ but retain distinct execution occurrence identities.
 
 Linux compilation passes; Linux execution/CI and final operator review remain
 unverified. Hide/reopen or cancellation during graph expansion, real downstream
-XTS startup, and final Runrail integration remain manual acceptance cases.
+external view startup, and final orchestration integration remain manual acceptance cases.
 Dynamic debugger Step Into remains outside this feature. The accepted pacing
 implementation is unchanged. Five self-contained B7 fixtures, including dynamic
 includes inside parallel branches and tool-backed runbooks, are under
@@ -565,7 +565,7 @@ assertions substitute for qualification.
 
 Final build delivery must include the source commit, matching runtime/VSIX
 paths and SHA-256 values, exact test counts, compatibility results, and any
-remaining installed integration/manual-only cases. Real Runrail/XTS acceptance
+remaining installed integration/manual-only cases. Real external view acceptance
 remains downstream-owned and is not proved by local marker tools.
 
 ## 11. Risks and deliberately deferred work

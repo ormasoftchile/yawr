@@ -1,11 +1,11 @@
 // HAB-11 — end-to-end yawr.host-action/v1 round-trip inside the VS Code extension host.
 //
 // This test proves: runtime/preview request → registered test.echo handler →
-// structured ack → simulated run-resume, without any XTS dependencies (AC-HA-10).
+// structured ack → simulated run-resume, without external view dependencies (AC-HA-10).
 //
 // It runs via `npm run test:e2e` (vscode-test / @vscode/test-electron) inside
 // a real VS Code extension host. The bridge module has no vscode import, so
-// the test exercises the full bridge logic while remaining XTS-free.
+// the test exercises the full bridge logic while remaining external-view-free.
 
 import * as assert from 'assert';
 import * as path from 'path';
@@ -73,7 +73,7 @@ function request(overrides: Record<string, unknown> = {}): Record<string, unknow
   };
 }
 
-suite('HAB-11 — end-to-end yawr.host-action/v1 round-trip (no XTS)', () => {
+suite('HAB-11 — end-to-end yawr.host-action/v1 round-trip (no external view)', () => {
   test('HAB-11: preview request → test.echo handler → completed ack → run-resume simulated', async () => {
     const { transport, nextAck } = createFakeTransport();
     const registry = new Map([['test.echo', { handler: testEchoHandler }]]);
@@ -100,7 +100,7 @@ suite('HAB-11 — end-to-end yawr.host-action/v1 round-trip (no XTS)', () => {
     assert.strictEqual(ack.turnId,           CORR.turnId);
   });
 
-  test('HAB-11b: unsupported capability delivers CAPABILITY_NOT_REGISTERED ack (no XTS needed)', async () => {
+  test('HAB-11b: unsupported capability delivers CAPABILITY_NOT_REGISTERED ack (no external view needed)', async () => {
     const { transport, nextAck } = createFakeTransport();
     const bridge = createHostActionBridge(new Map([['test.echo', { handler: testEchoHandler }]]), transport);
     bridge.receive(request({ capability: 'no.such.capability' }));
@@ -144,7 +144,7 @@ suite('HAB-11 — end-to-end yawr.host-action/v1 round-trip (no XTS)', () => {
     assert.strictEqual((ack.error as Record<string, unknown>).code, ERROR_HANDLER_TIMEOUT);
   });
 
-  test('HAB-11e: generic XTS request without view_path is rejected before dispatch', async function () {
+  test('HAB-11e: generic external view request without view_path is rejected before dispatch', async function () {
     this.timeout(30_000);
     const extension = vscode.extensions.getExtension('ormasoftchile.yawr-preview');
     assert.ok(extension);
@@ -166,7 +166,7 @@ suite('HAB-11 — end-to-end yawr.host-action/v1 round-trip (no XTS)', () => {
     const delivered = await panel.webview.postMessage({
       type: 'yawr.test.inject',
       payload: request({
-        capability: 'xts.open-view',
+        capability: 'external-view.open',
         request: { environment: 'LocalTestEnvironment', parameters: {}, focus: true },
       }),
     });
