@@ -213,6 +213,10 @@ export class SessionStdioClient {
     child.on('close', (code, signal) => this.finalize(code, signal));
   }
 
+  isFinished(): boolean {
+    return this.terminal || this.disposed || this.finalized || this.child.exitCode !== null || Boolean(this.child.killed);
+  }
+
   get acceptedSequence(): number {
     return this.currentAcceptedSequence;
   }

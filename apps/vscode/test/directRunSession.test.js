@@ -276,6 +276,63 @@ test('DirectRunSession does not cancel after run.finished', () => {
   assert.equal(child.killed, true);
 });
 
+test('DirectRunSession isFinished reflects terminal events, exit state, and disposal', () => {
+  for (const terminalKind of ['run/completed', 'run/failed', 'run/cancelled', 'run/indeterminate']) {
+    const child = fakeChild();
+    const session = new DirectRunSession(child, {
+      onFrame() {},
+      onError() {},
+      onExit() {},
+    });
+    session.setRunID('run-test');
+    assert.equal(session.isFinished(), false, 'must be unfinished initially');
+    child.stdout.write('{"type":"run.started","version":"yawr.stdio/v1","runID":"run-test"}\n');
+    assert.equal(session.isFinished(), false, 'must be unfinished while running');
+    child.stdout.write(`{"type":"run.event","version":"yawr.stdio/v1","runID":"run-test","event":{"kind":"${terminalKind}"}}\n`);
+    assert.equal(session.isFinished(), true, `must be finished after ${terminalKind}`);
+  }
+
+  const errorChild = fakeChild();
+  const errorSession = new DirectRunSession(errorChild, {
+    onFrame() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(errorSession.isFinished(), false);
+  errorChild.stdout.write('{"type":"protocol.error","version":"yawr.stdio/v1","message":"boom"}\n');
+  assert.equal(errorSession.isFinished(), true, 'must be finished after protocol.error');
+
+  const exitChild = fakeChild();
+  const exitSession = new DirectRunSession(exitChild, {
+    onFrame() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(exitSession.isFinished(), false);
+  exitChild.exitCode = 0;
+  assert.equal(exitSession.isFinished(), true, 'must be finished after exitCode set');
+
+  const killedChild = fakeChild();
+  const killedSession = new DirectRunSession(killedChild, {
+    onFrame() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(killedSession.isFinished(), false);
+  killedChild.killed = true;
+  assert.equal(killedSession.isFinished(), true, 'must be finished after child killed');
+
+  const disposedChild = fakeChild();
+  const disposedSession = new DirectRunSession(disposedChild, {
+    onFrame() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(disposedSession.isFinished(), false);
+  disposedSession.dispose();
+  assert.equal(disposedSession.isFinished(), true, 'must be finished after dispose');
+});
+
 test('DirectRunSession ignores frames after run.finished', async () => {
   const child = fakeChild();
   const frames = [];
