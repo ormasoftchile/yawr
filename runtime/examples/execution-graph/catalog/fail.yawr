@@ -1,0 +1,15 @@
+apiVersion: yawr.runbook/v1
+id: graph-fail
+name: Deliberate nested failure
+flow:
+  - step:
+      id: nested_work
+      type: include
+      include:
+        runbook: classify.yawr
+  - step:
+      id: deliberate_failure
+      type: assert
+      title: Deliberate failure - this exact child must be marked
+      assert:
+        - {type: eq, subject: actual, expected: deliberately-different}

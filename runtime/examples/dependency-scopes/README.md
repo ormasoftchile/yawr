@@ -12,11 +12,11 @@ that the selected definition is correct.
 
 | Entrypoint | Expected execution |
 | --- | --- |
-| `static-and-lazy.runbook.yaml` | Parent uses `left`, eager child uses `right`, lazy child uses `left`, parent still uses `left` |
-| `parallel.runbook.yaml` | Siblings execute concurrently; each child's `query` resolves to its own package |
-| `dynamic.runbook.yaml` | Catalog selection enters `left`, then `right`, then `left` again; each occurrence retains its own history |
-| `dynamic-parallel.runbook.yaml` | Parallel branches dynamically select their children; graph identities retain the correct branch and tool scope |
-| `dynamic-through-tool.runbook.yaml` | A frozen tool-backed runbook dynamically enters both children; all nested runbooks remain visible in history |
+| `static-and-lazy.yawr` | Parent uses `left`, eager child uses `right`, lazy child uses `left`, parent still uses `left` |
+| `parallel.yawr` | Siblings execute concurrently; each child's `query` resolves to its own package |
+| `dynamic.yawr` | Catalog selection enters `left`, then `right`, then `left` again; each occurrence retains its own history |
+| `dynamic-parallel.yawr` | Parallel branches dynamically select their children; graph identities retain the correct branch and tool scope |
+| `dynamic-through-tool.yawr` | A frozen tool-backed runbook dynamically enters both children; all nested runbooks remain visible in history |
 
 Each child declares its own `requires` and `toolRefs`. The parallel parent
 declares neither. The dynamic parent requires only the child-runbook package;
@@ -32,12 +32,12 @@ investigation successfully:
 
 | Entrypoint under `rejections` | Expected refusal |
 | --- | --- |
-| `parent-private-alias.runbook.yaml` | The child has no private `query` binding of its own; no tool, including the parent's first step, may execute |
-| `conflicting-requirements.runbook.yaml` | Parent and child request incompatible versions of `scope.left`; `on_error: continue` cannot suppress preflight refusal |
+| `parent-private-alias.yawr` | The child has no private `query` binding of its own; no tool, including the parent's first step, may execute |
+| `conflicting-requirements.yawr` | Parent and child request incompatible versions of `scope.left`; `on_error: continue` cannot suppress preflight refusal |
 
 The other two files in that directory are the intentionally invalid children,
 not standalone success examples. To migrate the alias case, declare the child's
-own `requires` and `toolRefs`, as shown in `catalog\left.runbook.yaml`.
+own `requires` and `toolRefs`, as shown in `catalog\left.yawr`.
 
 ## Verify in the graph
 

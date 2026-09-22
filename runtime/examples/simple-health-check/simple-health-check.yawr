@@ -1,0 +1,65 @@
+apiVersion: yawr.runbook/v1
+
+id: simple-health-check
+name: simple-health-check
+kind: mitigation
+description: Basic service reachability check — ping then HTTP
+
+toolRefs:
+  - name: ping
+    path: ../../tools/ping.tool.yaml
+  - name: curl
+    path: ../../tools/curl.tool.yaml
+
+vars:
+  ping_hostname: 127.0.0.1
+  hostname: github.com
+
+flow:
+  - step:
+      id: ping_host
+      type: tool
+      title: Ping host for reachability
+      tool:
+        name: ping
+        action: check
+        args:
+          host: "${ping_hostname}"
+          count: "3"
+      capture:
+        ping_output: stdout
+
+  - step:
+      id: check_http
+      type: tool
+      title: Check HTTP endpoint
+      tool:
+        name: curl
+        action: head
+        args:
+          url: "https://${hostname}"
+      capture:
+        http_status: stdout
+
+  - step:
+      id: review_results
+      type: collector
+      title: Review health check results
+      prompt: |
+        Verify that both ping and HTTP checks passed.
+        Ping output: ${ping_output}
+        HTTP response: ${http_status}
+      fields:
+        - name: notes
+          type: text
+          label: Notes
+          required: false
+          multiline: true
+
+  - step:
+      id: done
+      type: end
+      title: Health check complete
+      outcome:
+        category: resolved
+        code: healthy

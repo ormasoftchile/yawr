@@ -10,12 +10,12 @@ Current Runbook**. No path, package-map, or input configuration is required.
 
 | Runbook in `runbooks` | Expected behavior |
 | --- | --- |
-| `dynamic-router.runbook.yaml` | Runtime-selected child and dynamic grandchild appear. CURRENT visits nine steps, returns to the investigation and router, then reaches Results. Three runbooks remain navigable. |
-| `repeated-dynamic.runbook.yaml` | The same include site calls the same investigation twice. Both child/grandchild invocations remain distinct: five runbook frames, with two separate `collect_evidence` nodes. |
-| `static-eager.runbook.yaml` | Three runbooks are visible before execution. Every executed step is followed, then execution returns to the root. |
-| `static-lazy.runbook.yaml` | Same coverage with lazy runtime expansion; static preview already knows the filenames. |
-| `nested-failure.runbook.yaml` | A dynamic child includes a grandchild, then deliberately fails at `deliberate_failure`. That exact node is last reached; `must_not_run` never executes. |
-| `operator-review.runbook.yaml` | The real choice appears at the child `operator_classification`. The run waits until you classify the sample data. Only then does `parent_continues` execute. Cancelling instead must stop immediately. |
+| `dynamic-router.yawr` | Runtime-selected child and dynamic grandchild appear. CURRENT visits nine steps, returns to the investigation and router, then reaches Results. Three runbooks remain navigable. |
+| `repeated-dynamic.yawr` | The same include site calls the same investigation twice. Both child/grandchild invocations remain distinct: five runbook frames, with two separate `collect_evidence` nodes. |
+| `static-eager.yawr` | Three runbooks are visible before execution. Every executed step is followed, then execution returns to the root. |
+| `static-lazy.yawr` | Same coverage with lazy runtime expansion; static preview already knows the filenames. |
+| `nested-failure.yawr` | A dynamic child includes a grandchild, then deliberately fails at `deliberate_failure`. That exact node is last reached; `must_not_run` never executes. |
+| `operator-review.yawr` | The real choice appears at the child `operator_classification`. The run waits until you classify the sample data. Only then does `parent_continues` execute. Cancelling instead must stop immediately. |
 
 ## What to verify
 

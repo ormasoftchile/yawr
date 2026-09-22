@@ -10,16 +10,16 @@ This example demonstrates deep nesting of runbook includes (5 levels). Each leve
 
 | File | Role |
 |------|------|
-| `chain-level-1.runbook.yaml` | Entry point — run this one |
-| `chain-level-2.runbook.yaml` | Included by level 1 |
-| `chain-level-3.runbook.yaml` | Included by level 2 |
-| `chain-level-4.runbook.yaml` | Included by level 3 |
-| `chain-level-5.runbook.yaml` | Included by level 4 — terminal leaf |
+| `chain-level-1.yawr` | Entry point — run this one |
+| `chain-level-2.yawr` | Included by level 1 |
+| `chain-level-3.yawr` | Included by level 2 |
+| `chain-level-4.yawr` | Included by level 3 |
+| `chain-level-5.yawr` | Included by level 4 — terminal leaf |
 
 ## How to run
 
 ```bash
-yawr run chain-level-1.runbook.yaml
+yawr run chain-level-1.yawr
 ```
 
 ## Key concepts

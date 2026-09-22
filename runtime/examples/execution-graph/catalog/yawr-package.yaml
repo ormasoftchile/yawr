@@ -5,10 +5,10 @@ meta:
 exports:
   runbooks:
     - id: investigate
-      path: investigate.runbook.yaml
+      path: investigate.yawr
     - id: classify
-      path: classify.runbook.yaml
+      path: classify.yawr
     - id: fail
-      path: fail.runbook.yaml
+      path: fail.yawr
     - id: operator
-      path: operator.runbook.yaml
+      path: operator.yawr

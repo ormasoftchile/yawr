@@ -22,7 +22,7 @@ import (
 // example runbook used as input to the format=... tests.
 func previewRunbookPath(t *testing.T) string {
 	t.Helper()
-	abs, err := filepath.Abs(filepath.Join("..", "..", "examples", "collect-health", "collect-health.runbook.yaml"))
+	abs, err := filepath.Abs(filepath.Join("..", "..", "examples", "collect-health", "collect-health.yawr"))
 	if err != nil {
 		t.Fatalf("abs path: %v", err)
 	}

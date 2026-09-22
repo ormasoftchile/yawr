@@ -10,13 +10,13 @@ This is the parallel version of collect-health. It demonstrates concurrent itera
 
 | File | Role |
 |------|------|
-| `collect-health-parallel.runbook.yaml` | Entry point — run this one |
-| `check-service.runbook.yaml` | Included sub-runbook — checks a single service and returns status |
+| `collect-health-parallel.yawr` | Entry point — run this one |
+| `check-service.yawr` | Included sub-runbook — checks a single service and returns status |
 
 ## How to run
 
 ```bash
-yawr run collect-health-parallel.runbook.yaml
+yawr run collect-health-parallel.yawr
 ```
 
 ## Key concepts

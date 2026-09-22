@@ -1,0 +1,118 @@
+# Incident Triage — Resource Exhaustion Investigation (Child)
+# Invoked by incident-triage.yawr for resource-category incidents.
+#
+# Demonstrates: child include target, iterate block, branching inside iterate,
+# choice steps, assert steps.
+apiVersion: yawr.runbook/v1
+
+id: incident-triage.resource-exhaustion
+name: incident-triage.resource-exhaustion
+kind: mitigation
+description: >
+  Investigate resource exhaustion incidents (CPU, memory, disk).
+  Iterates over affected instances to check each one individually.
+
+toolRefs:
+  - name: curl
+    path: ../../tools/curl.tool.yaml
+
+inputs:
+  service_name:
+    type: string
+    required: false
+    description: Affected service name
+    from: prompt
+  incident_id:
+    type: string
+    required: false
+    description: Incident tracking ID
+    from: prompt
+  instances:
+    type: array
+    required: false
+    description: Affected instances to walk through
+    default: [ "i-1", "i-2" ]
+
+flow:
+  - step:
+      id: identify_resource
+      type: choice
+      title: Identify exhausted resource
+      prompt: |
+        Check monitoring dashboards for ${service_name}.
+        Determine which resource is exhausted.
+      variable: resource_type
+      options:
+        - value: "cpu"
+          label: "CPU — sustained high utilization"
+        - value: "memory"
+          label: "Memory — approaching or at limits"
+        - value: "disk"
+          label: "Disk — storage nearly full"
+
+  - iterate:
+      id: check_instances
+      over: instances
+      as: instance
+      steps:
+        - step:
+            id: check_instance_health
+            type: tool
+            title: "Check health of ${instance}"
+            tool:
+              name: curl
+              action: head
+              args:
+                # Hits {service_name} (resolvable host) with the
+                # instance ID in the path so curl can complete even
+                # if the per-instance subdomain doesn't exist.
+                url: "https://${service_name}/instances/${instance}/healthz"
+            capture:
+              instance_health: stdout
+
+        - step:
+            id: branch_instance_health
+            type: branch
+            branches:
+              - condition: 'str.contains(instance_health, "200")'
+                label: Instance healthy
+                steps:
+                  - step:
+                      id: instance_ok
+                      type: assert
+                      title: "${instance} is healthy"
+                      assert:
+                        - type: contains
+                          subject: "${instance_health}"
+                          expected: "200"
+
+              - condition: 'not str.contains(instance_health, "200")'
+                label: Instance unhealthy
+                steps:
+                  - step:
+                      id: instance_remediate
+                      type: collector
+                      title: "Remediate ${instance}"
+                      prompt: |
+                        Instance ${instance} is unhealthy.
+                        Health response: ${instance_health}
+                        Resource type: ${resource_type}
+
+                        Actions:
+                        - CPU: Check for runaway processes, consider scaling
+                        - Memory: Check for leaks, restart if necessary
+                        - Disk: Clear logs, expand storage, archive old data
+                      fields:
+                        - name: remediation_notes
+                          type: text
+                          label: Remediation notes
+                          required: false
+                          multiline: true
+
+  - step:
+      id: resource_done
+      type: end
+      title: Resource exhaustion investigation complete
+      outcome:
+        category: resolved
+        code: resource_mitigated

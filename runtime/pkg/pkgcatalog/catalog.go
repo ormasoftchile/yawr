@@ -1064,7 +1064,8 @@ func (source *Source) scanToolDir(workspaceRoot, dir string) ([]*Entry, error) {
 		if d.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(d.Name(), ".tool.yaml") {
+		name := d.Name()
+		if !strings.HasSuffix(name, ".tool.yaml") && !strings.HasSuffix(name, ".yawt") {
 			return nil
 		}
 		rel, rerr := filepath.Rel(workspaceRoot, path)

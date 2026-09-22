@@ -225,9 +225,10 @@ type HandoffReason struct {
 // IsStaticHandoffTarget reports whether target is a portable relative V1
 // runbook path with no templates or directory escape.
 func IsStaticHandoffTarget(target string) bool {
+	lower := strings.ToLower(target)
 	if target == "" || target != strings.TrimSpace(target) || strings.Contains(target, "${") ||
 		filepath.IsAbs(target) || strings.ContainsAny(target, "\\:*?\"<>|") || strings.HasPrefix(target, "/") ||
-		!strings.HasSuffix(strings.ToLower(target), ".runbook.yaml") {
+		(!strings.HasSuffix(lower, ".runbook.yaml") && !strings.HasSuffix(lower, ".yawr")) {
 		return false
 	}
 	for _, current := range target {

@@ -1,7 +1,0 @@
-apiVersion: yawr.runbook/v1
-id: lexical-right-answer
-name: Produce the right marker without external execution
-outputs:
-  marker: {type: string, value_expr: marker}
-flow:
-  - step: {id: right_marker, type: noop, capture: {marker: right}}

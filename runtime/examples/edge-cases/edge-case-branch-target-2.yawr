@@ -1,0 +1,21 @@
+apiVersion: yawr.runbook/v1
+
+id: edge-case-branch-target-2
+name: edge-case-branch-target-2
+kind: reference
+description: Branch target runbook 2 (chained from edge-case-branch)
+
+flow:
+  - step:
+      id: target_2_step
+      type: collector
+      title: Target Branch 2
+      prompt: |
+        This is the second branch target.
+        Reached via conditional branch from edge-case-branch.
+      fields:
+        - name: notes
+          type: text
+          label: Notes
+          required: false
+          multiline: true

@@ -51,13 +51,13 @@ For example:
 
 ```bash
 # Simple health check
-yawr run simple-health-check/simple-health-check.runbook.yaml
+yawr run simple-health-check/simple-health-check.yawr
 
 # Multi-region rollout with governance
-yawr run multi-region-rollout/multi-region-rollout.runbook.yaml
+yawr run multi-region-rollout/multi-region-rollout.yawr
 
 # Complex incident triage
-yawr run incident-triage/incident-triage.runbook.yaml
+yawr run incident-triage/incident-triage.yawr
 ```
 
 ## Feature Coverage

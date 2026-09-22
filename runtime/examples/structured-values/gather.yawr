@@ -1,0 +1,50 @@
+apiVersion: yawr.runbook/v1
+id: gather
+name: Preserve each configuration and its child rowset
+toolRefs:
+  - {name: records, package: acme.structured-values}
+inputs:
+  configurations: {type: array, required: true}
+outputs:
+  records: {type: array, value_expr: records}
+  labels: {type: array, value_expr: labels}
+flow:
+  - iterate:
+      id: configurations
+      over: configurations
+      as: configuration
+      steps:
+        # Sequential iterations share captures: explicitly reset missing work.
+        - step: {id: reset_status, type: noop, capture: {child_status: missing}}
+        - iterate:
+            id: reset_rows
+            over: "0"
+            steps:
+              - step: {id: unused, type: noop}
+            collect_values: {child_rows: null}
+        - step:
+            id: lookup_if_present
+            type: branch
+            on_error: continue
+            branches:
+              - condition: 'configuration.id != "missing"'
+                steps:
+                  - step:
+                      id: read_rows
+                      type: tool
+                      tool:
+                        name: records
+                        action: rows
+                        args:
+                          name: '${configuration.id}'
+                          count: '${configuration.count}'
+                      capture:
+                        child_rows: outputs.rows
+                        child_status: outputs.status
+      collect:
+        labels: '${configuration.id}'
+      collect_values:
+        records:
+          configuration: '${configuration}'
+          status: '${child_status}'
+          rows: '${child_rows}'

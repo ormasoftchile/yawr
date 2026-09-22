@@ -1,0 +1,13 @@
+apiVersion: yawr.runbook/v1
+id: graph-investigate
+name: Catalog investigation
+flow:
+  - step: {id: collect_evidence, type: noop, title: Collect local sample evidence}
+  - step:
+      id: classify
+      type: include
+      title: Enter dynamic classification runbook
+      include:
+        runbook_ref: graph-demo/classify
+        resolve_from: catalog
+  - step: {id: investigation_return, type: noop, title: Returned from classification}

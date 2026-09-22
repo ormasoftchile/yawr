@@ -23,7 +23,7 @@ func TestScopedExampleRejectionsPrecedeEveryDispatch(t *testing.T) {
 			artifacts := t.TempDir()
 			command := y1Command(t, "run", "--stdio", "--run-dir", filepath.Join(artifacts, "runs"),
 				"--trace", filepath.Join(artifacts, "trace.jsonl"),
-				filepath.Join(root, "rejections", fixture.name+".runbook.yaml"))
+				filepath.Join(root, "rejections", fixture.name+".yawr"))
 			command.Dir = root
 			var stderr bytes.Buffer
 			command.Stderr = &stderr

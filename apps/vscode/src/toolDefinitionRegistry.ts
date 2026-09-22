@@ -94,7 +94,7 @@ export function findToolYamls(dir: string): string[] {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...findToolYamls(full));
-    } else if (entry.isFile() && entry.name.endsWith('.tool.yaml')) {
+    } else if (entry.isFile() && (entry.name.endsWith('.tool.yaml') || entry.name.endsWith('.yawt'))) {
       results.push(full);
     }
   }

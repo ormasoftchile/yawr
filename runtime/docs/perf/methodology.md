@@ -21,7 +21,7 @@ The committed raw outputs are:
 - GIS: interpolation of representative literal, expression, escape, and path templates.
 - GCP/GDP: capture-path resolution over representative PJVM output trees.
 - PJVM: representative Go-to-PJVM conversion.
-- Full fixture: parse-gate planning of `examples/collect-health/collect-health.runbook.yaml` with eager include resolution.
+- Full fixture: parse-gate planning of `examples/collect-health/collect-health.yawr` with eager include resolution.
 
 The fixture suite is intentionally small because Brady deferred the final soak infrastructure decision on 2026-06-07. Runtime engineers should replace the fixture list in `internal/perf` when that decision lands.
 

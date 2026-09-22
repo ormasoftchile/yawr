@@ -50,8 +50,8 @@ func TestDryRun_CoversCapturesFromSubstitutedActions(t *testing.T) {
 		runbook string
 		steps   int
 	}{
-		{runbook: "root.runbook.yaml", steps: 2},
-		{runbook: "ordering-root.runbook.yaml", steps: 6},
+		{runbook: "root.yawr", steps: 2},
+		{runbook: "ordering-root.yawr", steps: 6},
 	} {
 		t.Run(test.runbook, func(t *testing.T) {
 			dir := copyStructuredValuesExample(t)
@@ -87,7 +87,7 @@ func TestDryRun_SynthesizedOutputsStillDispatchNothing(t *testing.T) {
 	artifacts := t.TempDir()
 
 	out, _ := dryRunCaptureStdout(t, []string{
-		"root.runbook.yaml", "--package-map", "package-map.yaml",
+		"root.yawr", "--package-map", "package-map.yaml",
 		"--run-dir", filepath.Join(artifacts, "runs"), "--output", "json",
 	})
 	var summary jsonSummary

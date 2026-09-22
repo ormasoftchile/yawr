@@ -167,6 +167,18 @@ test('findToolYamls: returns tool yaml paths for known fixture dir', () => {
   assert.ok(files.every((f) => f.endsWith('.tool.yaml')));
 });
 
+test('findToolYamls: finds both .tool.yaml and .yawt files', (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yawr-find-tools-'));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(tmpDir, 'alpha.tool.yaml'), '');
+  fs.writeFileSync(path.join(tmpDir, 'beta.yawt'), '');
+  fs.writeFileSync(path.join(tmpDir, 'gamma.yaml'), '');
+  const files = findToolYamls(tmpDir);
+  assert.equal(files.length, 2);
+  assert.ok(files.some((f) => f.endsWith('alpha.tool.yaml')));
+  assert.ok(files.some((f) => f.endsWith('beta.yawt')));
+});
+
 // ─── DEFECT 2 regression tests ───────────────────────────────────────────────
 // These five tests guard the three parse axes that were broken before the fix.
 

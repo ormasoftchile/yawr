@@ -29,11 +29,11 @@ func TestRunStdioExecutionGraphExamples(t *testing.T) {
 				args = append(args, "--debug")
 			}
 			scenarioRoot := root
-			entrypoint := filepath.Join(root, "runbooks", fixture+".runbook.yaml")
+			entrypoint := filepath.Join(root, "runbooks", fixture+".yawr")
 			lexical := strings.HasPrefix(name, "lexical-")
 			if lexical {
 				scenarioRoot = filepath.Join(findRepoRoot(t), "examples", "dependency-scopes")
-				entrypoint = filepath.Join(scenarioRoot, strings.TrimPrefix(name, "lexical-")+".runbook.yaml")
+				entrypoint = filepath.Join(scenarioRoot, strings.TrimPrefix(name, "lexical-")+".yawr")
 			}
 			preview := y1Command(t, "preview", "--format", "graphjson", "--recurse", entrypoint)
 			preview.Dir = scenarioRoot

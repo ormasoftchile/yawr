@@ -37,6 +37,16 @@ test('resolveRunbookPath: active .runbook.yaml editor takes precedence over save
   );
 });
 
+test('resolveRunbookPath: active .yawr editor takes precedence over saved workspace path', () => {
+  const active = 'C:\\work\\my-incident.yawr';
+  const saved  = 'C:\\work\\other.runbook.yaml';
+  assert.strictEqual(
+    resolveRunbookPath(active, saved),
+    active,
+    'active .yawr editor path must win over saved workspace path',
+  );
+});
+
 // ─── 2: workspace state fallback ─────────────────────────────────────────────
 
 test('resolveRunbookPath: falls back to saved path when no qualifying editor is focused (post-restart recovery)', () => {

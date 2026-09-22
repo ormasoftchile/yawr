@@ -1,0 +1,12 @@
+apiVersion: yawr.runbook/v1
+id: graph-static-lazy
+name: Static lazy include
+flow:
+  - step: {id: before, type: noop}
+  - step:
+      id: child
+      type: include
+      include:
+        runbook: ../catalog/static-investigate.yawr
+        expand: lazy
+  - step: {id: after, type: noop, title: Returned from lazy include}

@@ -77,7 +77,7 @@ import {
   sessionMayRequireMcpBridge,
 } from './directGraphPreview';
 import { graphSourceChanged } from './graphSourceChanged';
-import { WORKSPACE_RUNBOOK_KEY, resolveRunbookPath } from './panelRecovery';
+import { WORKSPACE_RUNBOOK_KEY, resolveRunbookPath, isRunbookPath } from './panelRecovery';
 import { affectsSetting, runtimeEnvironment, getSetting } from './identity';
 import { minimumStepDisplayMs } from './visualStepPacer';
 import { resolvePreviewPanelTarget } from './previewPlacement';
@@ -539,8 +539,8 @@ function refreshBridgeRegistry(runbookPath: string): void {
 // runbook file and opens the rendered Markdown in a side-by-side preview.
 async function previewProse() {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || !editor.document.fileName.endsWith('.runbook.yaml')) {
-    void vscode.window.showWarningMessage('Open a *.runbook.yaml file first.');
+  if (!editor || !isRunbookPath(editor.document.fileName)) {
+    void vscode.window.showWarningMessage('Open a *.runbook.yaml or *.yawr file first.');
     return;
   }
   const runbookPath = editor.document.fileName;
@@ -569,8 +569,8 @@ async function previewProse() {
 // engine adjudicates the value.
 async function validateInputs() {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || !editor.document.fileName.endsWith('.runbook.yaml')) {
-    void vscode.window.showWarningMessage('Open a *.runbook.yaml file first.');
+  if (!editor || !isRunbookPath(editor.document.fileName)) {
+    void vscode.window.showWarningMessage('Open a *.runbook.yaml or *.yawr file first.');
     return;
   }
   const file = editor.document.fileName;
@@ -792,7 +792,7 @@ async function previewGraph() {
     extensionContext?.workspaceState.get<string>(WORKSPACE_RUNBOOK_KEY),
   );
   if (!runbookPath) {
-    void vscode.window.showWarningMessage('Open a *.runbook.yaml file first.');
+    void vscode.window.showWarningMessage('Open a *.runbook.yaml or *.yawr file first.');
     return;
   }
   return openDirectGraphPanelForRunbook(runbookPath);
@@ -805,7 +805,7 @@ async function runCurrentRunbook(): Promise<ProductionRunResult | undefined> {
     extensionContext?.workspaceState.get<string>(WORKSPACE_RUNBOOK_KEY),
   );
   if (!runbookPath) {
-    void vscode.window.showWarningMessage('Open a *.runbook.yaml file first.');
+    void vscode.window.showWarningMessage('Open a *.runbook.yaml or *.yawr file first.');
     return;
   }
   return new Promise<ProductionRunResult>((resolve, reject) => {

@@ -10,5 +10,5 @@ export function graphSourceChanged(
       document?.frames.some(frame => same(frame.runbook_path))) return true;
   const relative = path.relative(projectRoot, fileName);
   return !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`) &&
-    /\.tool\.ya?ml$/i.test(fileName);
+    /\.(?:tool\.ya?ml|yawt)$/i.test(fileName);
 }

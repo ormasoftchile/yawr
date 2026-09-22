@@ -1,0 +1,9 @@
+apiVersion: yawr.tool/v1
+meta: {name: query, version: "1.0.0"}
+transport: {mode: native, command: unused}
+actions:
+  - name: read
+    classification: read-only
+    outputs:
+      marker: {type: string, required: true}
+    execute: {kind: runbook, path: answer.yawr}

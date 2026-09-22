@@ -30,7 +30,7 @@ func TestScopedSegmentArtifactPreservesVersionAndFrozenIdentity(t *testing.T) {
 	ctx := context.Background()
 	prepared, err := adapter.PrepareScopedRun(ctx, adapter.ScopedRunOptions{
 		Catalog: pkgcatalog.BuildOptions{WorkspaceRoot: root}, Parser: parser,
-		Entrypoint: filepath.Join(root, "dynamic.runbook.yaml"),
+		Entrypoint: filepath.Join(root, "dynamic.yawr"),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -116,7 +116,7 @@ func findToolFiles(root string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && strings.HasSuffix(path, ".tool.yaml") {
+		if !info.IsDir() && (strings.HasSuffix(path, ".tool.yaml") || strings.HasSuffix(path, ".yawt")) {
 			files = append(files, path)
 		}
 		return nil

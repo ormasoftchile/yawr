@@ -1,0 +1,11 @@
+apiVersion: yawr.runbook/v1
+id: reject-conflicting-requirements
+name: Reject incompatible package versions before entering the child
+requires:
+  - {package: scope.left, version: "^1.0.0", path: ../catalog/tools/left}
+flow:
+  - step:
+      id: enter_child
+      type: include
+      include: {runbook: conflicting-child.yawr}
+      on_error: continue

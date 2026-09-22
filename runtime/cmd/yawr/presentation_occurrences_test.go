@@ -14,17 +14,17 @@ import (
 func TestPresentationIterationOccurrencesDoNotAlias(t *testing.T) {
 	source := filepath.Join(findRepoRoot(t), "examples", "code-presentation")
 	dir := t.TempDir()
-	for _, name := range []string{"code.tool.yaml", "echo.runbook.yaml", "profile.yaml"} {
+	for _, name := range []string{"code.yawt", "echo.yawr", "profile.yaml"} {
 		data, err := os.ReadFile(filepath.Join(source, name))
 		if err != nil {
 			t.Fatal(err)
 		}
 		writeFile(t, filepath.Join(dir, name), string(data))
 	}
-	writeFile(t, filepath.Join(dir, "root.runbook.yaml"), `apiVersion: yawr.runbook/v1
+	writeFile(t, filepath.Join(dir, "root.yawr"), `apiVersion: yawr.runbook/v1
 id: repeated-code
 name: Repeated code
-toolRefs: [{name: code, path: code.tool.yaml}]
+toolRefs: [{name: code, path: code.yawt}]
 flow:
   - iterate:
       id: repeat
@@ -41,7 +41,7 @@ flow:
 `)
 	t.Chdir(dir)
 	runs := filepath.Join(dir, "runs")
-	runCaptureStdout(t, []string{"root.runbook.yaml", "--profile", "profile.yaml", "--run-dir", runs, "--output", "json"})
+	runCaptureStdout(t, []string{"root.yawr", "--profile", "profile.yaml", "--run-dir", runs, "--output", "json"})
 	entries, _ := os.ReadDir(runs)
 	runID := ""
 	for _, entry := range entries {

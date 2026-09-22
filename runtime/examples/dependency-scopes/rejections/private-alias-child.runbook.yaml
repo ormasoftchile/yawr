@@ -1,8 +1,0 @@
-apiVersion: yawr.runbook/v1
-id: private-alias-child
-name: This child deliberately omits its own toolRefs
-flow:
-  - step:
-      id: inherited_query_is_invalid
-      type: tool
-      tool: {name: query, action: read}

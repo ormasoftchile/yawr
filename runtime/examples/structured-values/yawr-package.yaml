@@ -2,4 +2,4 @@ apiVersion: yawr.tool-package/v1
 meta: {name: acme.structured-values, version: "1.0.0"}
 exports:
   tools:
-    - {id: records, path: records.tool.yaml}
+    - {id: records, path: records.yawt}

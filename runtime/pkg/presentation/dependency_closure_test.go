@@ -17,12 +17,12 @@ func TestIncludedDocumentPresentationUsesOwnDependenciesAndDirtyTool(t *testing.
 	for _, entry := range []string{"static-and-lazy", "parallel", "dynamic"} {
 		for _, child := range []string{"left", "right"} {
 			t.Run(entry+"/"+child, func(t *testing.T) {
-				path := filepath.Join(root, "catalog", child+".runbook.yaml")
+				path := filepath.Join(root, "catalog", child+".yawr")
 				data, err := os.ReadFile(path)
 				if err != nil {
 					t.Fatal(err)
 				}
-				toolPath := filepath.Join(root, "catalog", "tools", child, "query.tool.yaml")
+				toolPath := filepath.Join(root, "catalog", "tools", child, "query.yawt")
 				toolData, err := os.ReadFile(toolPath)
 				if err != nil {
 					t.Fatal(err)
@@ -31,7 +31,7 @@ func TestIncludedDocumentPresentationUsesOwnDependenciesAndDirtyTool(t *testing.
 					"marker: {type: string, required: true, presentation: {version: 1, kind: code, language: sql}}", 1)
 				reply := Resolve(Request{
 					SchemaVersion: SchemaVersion, RequestID: "lexical",
-					Context:  Context{ProjectRoot: root, EntrypointPath: filepath.Join(root, entry+".runbook.yaml")},
+					Context:  Context{ProjectRoot: root, EntrypointPath: filepath.Join(root, entry+".yawr")},
 					Document: Buffer{Path: path, URI: FileURI(path), Version: 1, Text: string(data)},
 					Overlays: []Buffer{{Path: toolPath, URI: FileURI(toolPath), Version: 7, Text: dirty}},
 				})

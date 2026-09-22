@@ -1,7 +1,0 @@
-apiVersion: yawr.tool/v1
-meta: {name: router, version: "1.0.0"}
-transport: {mode: native, command: unused}
-actions:
-  - name: investigate
-    classification: read-only
-    execute: {kind: runbook, path: investigate.runbook.yaml}

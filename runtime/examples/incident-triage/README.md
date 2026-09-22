@@ -10,16 +10,16 @@ This is a comprehensive incident response runbook that demonstrates large-scale 
 
 | File | Role |
 |------|------|
-| `incident-triage.runbook.yaml` | Entry point — run this one |
-| `app-crash.runbook.yaml` | Included sub-runbook — application crash investigation |
-| `network.runbook.yaml` | Included sub-runbook — network issue investigation |
-| `connectivity-test.runbook.yaml` | Included by network.runbook.yaml — deep connectivity diagnostics |
-| `resource-exhaustion.runbook.yaml` | Included sub-runbook — resource exhaustion investigation |
+| `incident-triage.yawr` | Entry point — run this one |
+| `app-crash.yawr` | Included sub-runbook — application crash investigation |
+| `network.yawr` | Included sub-runbook — network issue investigation |
+| `connectivity-test.yawr` | Included by network.yawr — deep connectivity diagnostics |
+| `resource-exhaustion.yawr` | Included sub-runbook — resource exhaustion investigation |
 
 ## How to run
 
 ```bash
-yawr run incident-triage.runbook.yaml
+yawr run incident-triage.yawr
 ```
 
 ## Key concepts

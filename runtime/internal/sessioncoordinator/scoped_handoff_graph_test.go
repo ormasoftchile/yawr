@@ -27,7 +27,7 @@ func TestScopedHandoffGraphValidatesCompleteInvocationProjection(t *testing.T) {
 	}
 	prepared, err := adapter.PrepareScopedRun(context.Background(), adapter.ScopedRunOptions{
 		Catalog:    pkgcatalog.BuildOptions{WorkspaceRoot: root},
-		Entrypoint: filepath.Join(root, "static-and-lazy.runbook.yaml"), Parser: parser,
+		Entrypoint: filepath.Join(root, "static-and-lazy.yawr"), Parser: parser,
 	})
 	if err != nil {
 		t.Fatal(err)

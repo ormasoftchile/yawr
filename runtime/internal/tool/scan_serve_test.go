@@ -42,3 +42,34 @@ func TestScanSchemaDirWithoutTestsExcludesTestToolFixtures(t *testing.T) {
 		t.Fatal("test-only action must not be present in the serving registry")
 	}
 }
+
+func TestScanSchemaDirAcceptsYawtFiles(t *testing.T) {
+	root := t.TempDir()
+	toolYamlPath := filepath.Join(root, "packages", "tools", "classic.tool.yaml")
+	yawtPath := filepath.Join(root, "packages", "tools", "modern.yawt")
+
+	writeTool := func(path, name, action string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		content := "apiVersion: yawr.tool/v1\n" +
+			"meta:\n  name: " + name + "\n  version: 1.0.0\n" +
+			"transport:\n  mode: native\n  command: echo\n" +
+			"actions:\n  - name: " + action + "\n"
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeTool(toolYamlPath, "classic", "act")
+	writeTool(yawtPath, "modern", "act")
+
+	defs, err := ScanSchemaDirWithoutTests(root)
+	if err != nil {
+		t.Fatalf("ScanSchemaDirWithoutTests: %v", err)
+	}
+	if len(defs) != 2 {
+		t.Fatalf("scanned %d definitions, want 2 (both .tool.yaml and .yawt)", len(defs))
+	}
+}

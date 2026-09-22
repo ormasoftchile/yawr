@@ -512,6 +512,28 @@ actions: [{name: run, argv: ["run"]}]
 	}
 }
 
+func TestBuild_Tier3_DiscoversYawt(t *testing.T) {
+	ws := t.TempDir()
+	writeFile(t, filepath.Join(ws, "tools", "classic.tool.yaml"), `apiVersion: yawr.tool/v1
+meta: {name: classic}
+transport: {mode: native, command: echo}
+actions: [{name: run, argv: ["run"]}]
+`)
+	writeFile(t, filepath.Join(ws, "tools", "modern.yawt"), `apiVersion: yawr.tool/v1
+meta: {name: modern}
+transport: {mode: native, command: echo}
+actions: [{name: run, argv: ["run"]}]
+`)
+	cat, errs := Build(BuildOptions{WorkspaceRoot: ws})
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	entries := cat.Entries()
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries (both .tool.yaml and .yawt), got %d", len(entries))
+	}
+}
+
 func TestBindFile_ByPackage_CollisionProof(t *testing.T) {
 	ws := t.TempDir()
 	pkgRoot := filepath.Join(ws, "vendor", "acme-incident-tools")

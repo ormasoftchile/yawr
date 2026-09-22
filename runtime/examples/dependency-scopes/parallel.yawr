@@ -1,0 +1,23 @@
+apiVersion: yawr.runbook/v1
+id: lexical-parallel
+name: Parallel siblings use different definitions of query
+outputs:
+  scenario: {type: string, value: lexical-parallel}
+flow:
+  - parallel:
+      id: investigate
+      branches:
+        - label: left
+          steps:
+            - step:
+                id: enter_left
+                type: include
+                include: {runbook: catalog/left.yawr}
+        - label: right
+          steps:
+            - step:
+                id: enter_right
+                type: include
+                include: {runbook: catalog/right.yawr}
+  - step: {id: both_children_returned, type: noop}
+  - step: {id: results, type: results, title: Results}

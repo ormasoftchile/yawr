@@ -10,12 +10,12 @@ This is a minimal runbook that demonstrates tool steps, variable capture, and ba
 
 | File | Role |
 |------|------|
-| `simple-health-check.runbook.yaml` | Entry point — run this one |
+| `simple-health-check.yawr` | Entry point — run this one |
 
 ## How to run
 
 ```bash
-yawr run simple-health-check.runbook.yaml
+yawr run simple-health-check.yawr
 ```
 
 ## Key concepts

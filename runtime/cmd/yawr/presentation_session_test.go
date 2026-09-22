@@ -27,20 +27,28 @@ func TestPresentationSessionFrozenGraphAndReplay(t *testing.T) {
 		t.Run(variant, func(t *testing.T) {
 			dynamic := variant != "static"
 			dir := t.TempDir()
-			files, _ := filepath.Glob(filepath.Join(findRepoRoot(t), "examples", "code-presentation", "*.yaml"))
-			for _, file := range files {
-				data, err := os.ReadFile(file)
-				if err != nil {
-					t.Fatal(err)
+			srcDir := filepath.Join(findRepoRoot(t), "examples", "code-presentation")
+			entries, err := os.ReadDir(srcDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var files []string
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					files = append(files, filepath.Join(srcDir, entry.Name()))
+					data, err := os.ReadFile(filepath.Join(srcDir, entry.Name()))
+					if err != nil {
+						t.Fatal(err)
+					}
+					writeFile(t, filepath.Join(dir, entry.Name()), string(data))
 				}
-				writeFile(t, filepath.Join(dir, filepath.Base(file)), string(data))
 			}
 			if variant == "dynamic-native" {
 				executable, err := os.Executable()
 				if err != nil {
 					t.Fatal(err)
 				}
-				path := filepath.Join(dir, "code.tool.yaml")
+				path := filepath.Join(dir, "code.yawt")
 				data, err := os.ReadFile(path)
 				if err != nil {
 					t.Fatal(err)
@@ -48,22 +56,22 @@ func TestPresentationSessionFrozenGraphAndReplay(t *testing.T) {
 				text := strings.ReplaceAll(string(data), "\r\n", "\n")
 				text = strings.ReplaceAll(text, "transport: {mode: native, command: must-not-execute}",
 					fmt.Sprintf("transport:\n  mode: native\n  command: '%s'\n  env: {YAWR_PRESENTATION_TEST_CHILD: '1'}", strings.ReplaceAll(executable, "'", "''")))
-				text = strings.ReplaceAll(text, "    execute: {kind: runbook, path: echo.runbook.yaml}", "    argv: ['-test.run=^TestPresentationNativeProcess$']")
+				text = strings.ReplaceAll(text, "    execute: {kind: runbook, path: echo.yawr}", "    argv: ['-test.run=^TestPresentationNativeProcess$']")
 				text = strings.ReplaceAll(text, "      code:\n        type: string", "      code:\n        type: string\n        from: stdout")
 				writeFile(t, path, text)
 			}
-			entry := filepath.Join(dir, "root.runbook.yaml")
+			entry := filepath.Join(dir, "root.yawr")
 			if dynamic {
 				writeFile(t, filepath.Join(dir, "yawr-package.yaml"), `apiVersion: yawr.tool-package/v1
 meta: {name: presentation-fixture, version: "1.0.0"}
 exports:
   tools:
-    - {id: code, path: code.tool.yaml}
+    - {id: code, path: code.yawt}
   runbooks:
-    - {id: child, path: root.runbook.yaml}
+    - {id: child, path: root.yawr}
 `)
 				writeFile(t, filepath.Join(dir, ".yawr", "config.yaml"), "apiVersion: yawr.config/v1\nrequires:\n  - {package: presentation-fixture, version: '^1.0.0', path: '.'}\n")
-				entry = filepath.Join(dir, "parent.runbook.yaml")
+				entry = filepath.Join(dir, "parent.yawr")
 				writeFile(t, entry, `apiVersion: yawr.runbook/v1
 id: dynamic-presentation
 name: Dynamic presentation
