@@ -1236,7 +1236,21 @@ async function openDirectGraphPanelForRunbook(
     }
   };
   const startInvestigation = async (rawInputs: unknown) => {
-    if (disposed || runStarting || runSession || investigationClient || investigationDescriptor || investigationStarting) {
+    if (runSession?.isFinished()) {
+      runSession.dispose();
+      runSession = undefined;
+      runBridge?.dispose();
+      runBridge = undefined;
+    }
+    if (investigationClient && (investigationClient.isFinished() || closedInvestigationStatus(investigationState?.sessionStatus))) {
+      investigationClient.dispose();
+      investigationClient = undefined;
+      investigationDescriptor = undefined;
+    }
+    if (investigationDescriptor && !investigationClient) {
+      investigationDescriptor = undefined;
+    }
+    if (disposed || runStarting || (runSession && !runSession.isFinished()) || investigationClient || investigationDescriptor || investigationStarting) {
       reportInvestigationError('Another run or session is already active.');
       return;
     }
@@ -1540,6 +1554,13 @@ async function openDirectGraphPanelForRunbook(
     if (runSession?.isFinished()) {
       runSession.dispose();
       runSession = undefined;
+      runBridge?.dispose();
+      runBridge = undefined;
+    }
+    if (investigationClient && (investigationClient.isFinished() || closedInvestigationStatus(investigationState?.sessionStatus))) {
+      investigationClient.dispose();
+      investigationClient = undefined;
+      investigationDescriptor = undefined;
     }
     if (investigationDescriptor && !investigationClient) {
       investigationDescriptor = undefined;
@@ -1548,6 +1569,7 @@ async function openDirectGraphPanelForRunbook(
       void panel.webview.postMessage({ type: 'run.error', message: 'A run is already active.' });
       return;
     }
+    retainExecutionGraph = false;
     let inputs: Record<string, string>;
     let debug;
     try {
@@ -1785,7 +1807,21 @@ async function openDirectGraphPanelForRunbook(
       }
       let reservedRevision: number | undefined;
       if (run) {
-        if (runStarting || runSession || investigationClient || investigationDescriptor) throw new Error('A run is already active.');
+        if (runSession?.isFinished()) {
+          runSession.dispose();
+          runSession = undefined;
+          runBridge?.dispose();
+          runBridge = undefined;
+        }
+        if (investigationClient && (investigationClient.isFinished() || closedInvestigationStatus(investigationState?.sessionStatus))) {
+          investigationClient.dispose();
+          investigationClient = undefined;
+          investigationDescriptor = undefined;
+        }
+        if (investigationDescriptor && !investigationClient) {
+          investigationDescriptor = undefined;
+        }
+        if (runStarting || (runSession && !runSession.isFinished()) || investigationClient || investigationDescriptor) throw new Error('A run is already active.');
         runStarting = true;
         reservedRevision = ++runStartRevision;
         activeRouteTest = {

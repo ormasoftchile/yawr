@@ -360,3 +360,44 @@ test('pre-lease protocol.error reports the structured error at the requested cur
   assert.deepEqual(errors, ['session-already-active: another writer owns the session']);
   assert.equal(child.killed, true);
 });
+
+test('SessionStdioClient isFinished reflects terminal state, exitCode, killed and disposal', () => {
+  const child = fakeChild();
+  const client = new SessionStdioClient(child, {
+    sessionID,
+    afterSequence: 0,
+    onGroup() {},
+    onAcceptedSequence() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(client.isFinished(), false);
+  child.exitCode = 0;
+  assert.equal(client.isFinished(), true);
+
+  const killedChild = fakeChild();
+  const killedClient = new SessionStdioClient(killedChild, {
+    sessionID,
+    afterSequence: 0,
+    onGroup() {},
+    onAcceptedSequence() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(killedClient.isFinished(), false);
+  killedChild.killed = true;
+  assert.equal(killedClient.isFinished(), true);
+
+  const disposedChild = fakeChild();
+  const disposedClient = new SessionStdioClient(disposedChild, {
+    sessionID,
+    afterSequence: 0,
+    onGroup() {},
+    onAcceptedSequence() {},
+    onError() {},
+    onExit() {},
+  });
+  assert.equal(disposedClient.isFinished(), false);
+  disposedClient.dispose();
+  assert.equal(disposedClient.isFinished(), true);
+});

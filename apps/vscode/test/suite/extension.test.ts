@@ -2074,6 +2074,111 @@ suite('Yawr extension smoke tests', () => {
     }
   });
 
+  test('consecutive runs without reset transition cleanly without already active error', async function () {
+    this.timeout(30_000);
+    const ext = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(ext, `extension ${EXTENSION_ID} must be present`);
+    await ext.activate();
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder, 'the Extension Host test requires a workspace folder');
+    const runbookUri = vscode.Uri.joinPath(workspaceFolder.uri, ...testStatePath, 'consecutive-runs.runbook.yaml');
+    const fixtureUri = vscode.Uri.joinPath(workspaceFolder.uri, 'test', 'fixtures', 'enum-preview-graphjson.json');
+    const fixture = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(fixtureUri)).toString('utf8'));
+    fixture.inputs = [];
+    await vscode.workspace.fs.writeFile(runbookUri, Buffer.from('apiVersion: yawr.runbook/v1\nid: consecutive-runs\nsteps: []\n'));
+
+    type FakeChild = EventEmitter & {
+      stdin: PassThrough;
+      stdout: PassThrough;
+      stderr: PassThrough;
+      killed: boolean;
+      exitCode: number | null;
+      kill(): boolean;
+    };
+    const createFakeChild = (): FakeChild => {
+      const child = new EventEmitter() as FakeChild;
+      child.stdin = new PassThrough();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      child.killed = false;
+      child.exitCode = null;
+      child.kill = () => { child.killed = true; return true; };
+      return child;
+    };
+    const child1 = createFakeChild();
+    const child2 = createFakeChild();
+    const writeFrame = (child: FakeChild, frame: Record<string, unknown>) => {
+      child.stdout.write(`${JSON.stringify({ ...frame, version: 'yawr.stdio/v1' })}\n`);
+    };
+    let spawnCount = 0;
+    const panel = await vscode.commands.executeCommand<vscode.WebviewPanel>(
+      'yawr.test.openDirectGraphPanel',
+      runbookUri.fsPath,
+      {
+        documentLoader: async () => fixture,
+        spawnRun: () => {
+          spawnCount += 1;
+          if (spawnCount === 1) {
+            setImmediate(() => {
+              writeFrame(child1, { type: 'run.started', runID: 'run-1', status: 'running' });
+              writeFrame(child1, { type: 'run.event', runID: 'run-1', event: { kind: 'run/completed', run_id: 'run-1' } });
+              writeFrame(child1, { type: 'run.finished', runID: 'run-1', status: 'completed' });
+              child1.exitCode = 0;
+              child1.emit('close', 0, null);
+            });
+            return child1;
+          }
+          setImmediate(() => {
+            writeFrame(child2, { type: 'run.started', runID: 'run-2', status: 'running' });
+            writeFrame(child2, { type: 'run.event', runID: 'run-2', event: { kind: 'run/completed', run_id: 'run-2' } });
+            writeFrame(child2, { type: 'run.finished', runID: 'run-2', status: 'completed' });
+            child2.exitCode = 0;
+            child2.emit('close', 0, null);
+          });
+          return child2;
+        },
+      },
+    );
+    assert.ok(panel, 'test command must return the direct graph WebviewPanel');
+
+    type UIState = { runID?: string; runStatus: string; runError?: string; runButtonCount: number };
+    const waitForUI = (predicate: (state: UIState) => boolean, failure: string) =>
+      new Promise<UIState>((resolve, reject) => {
+        let lastState: UIState | undefined;
+        const timeout = setTimeout(() => {
+          subscription.dispose();
+          reject(new Error(`${failure}; last state: ${JSON.stringify(lastState)}`));
+        }, 10_000);
+        const subscription = panel.webview.onDidReceiveMessage((message: unknown) => {
+          const state = message as { type?: unknown } & UIState;
+          if (state?.type === 'ui.state') lastState = state;
+          if (state?.type !== 'ui.state' || !predicate(state)) return;
+          clearTimeout(timeout);
+          subscription.dispose();
+          resolve(state);
+        });
+      });
+
+    try {
+      await waitForUI((state) => state.runButtonCount === 1, 'graph did not render initial Run button');
+      const firstRunCompleted = waitForUI((state) => state.runID === 'run-1' && state.runStatus === 'completed', 'run 1 did not complete');
+      await panel.webview.postMessage({ type: 'test.action', action: 'run' });
+      await firstRunCompleted;
+
+      const secondRunCompleted = waitForUI(
+        (state) => state.runID === 'run-2' && state.runStatus === 'completed' && !state.runError,
+        'run 2 did not start and complete without error',
+      );
+      await panel.webview.postMessage({ type: 'test.action', action: 'run' });
+      await secondRunCompleted;
+      assert.strictEqual(spawnCount, 2, 'spawnRun must have been invoked twice');
+    } finally {
+      panel.dispose();
+      await vscode.workspace.fs.delete(runbookUri, { useTrash: false });
+    }
+  });
+
   for (const duringVerification of [false, true]) test(`cancelling external view during ${duringVerification ? 'view verification' : 'command dispatch'} cannot ack or show a reminder`, async function () {
     this.timeout(30_000);
     const ext = vscode.extensions.getExtension(EXTENSION_ID);

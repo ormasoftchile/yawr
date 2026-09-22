@@ -79,6 +79,7 @@ export class DirectRunSession {
   private buffer = '';
   private runID: string | undefined;
   private terminal = false;
+  private terminalEvent = false;
   private disposed = false;
   private finalized = false;
   private results?: ResultsAssembly;
@@ -112,7 +113,7 @@ export class DirectRunSession {
   }
 
   isFinished(): boolean {
-    return this.terminal || this.disposed || this.finalized;
+    return this.terminal || this.terminalEvent || this.disposed || this.finalized || this.child.exitCode !== null || Boolean(this.child.killed);
   }
 
   send(command: Readonly<Record<string, unknown>>): void {
@@ -219,7 +220,9 @@ export class DirectRunSession {
       this.protocolFailure('stdio protocol frame type must be a non-empty string');
       return;
     }
-    if (frame.type !== 'protocol.error') {
+    if (frame.type === 'protocol.error') {
+      this.terminalEvent = true;
+    } else {
       if (typeof frame.runID !== 'string' || frame.runID.length === 0) {
         this.protocolFailure(`${frame.type} frame requires runID`);
         return;
@@ -266,7 +269,15 @@ export class DirectRunSession {
       delete frame.results;
       delete frame.results_ref;
       this.terminal = true;
+      this.terminalEvent = true;
       this.buffer = '';
+    }
+    const eventKind = frame.type === 'run.event' && typeof frame.event === 'object' && frame.event !== null
+      ? (frame.event as Record<string, unknown>).kind
+      : undefined;
+    if (eventKind === 'run/completed' || eventKind === 'run/failed' ||
+        eventKind === 'run/cancelled' || eventKind === 'run/indeterminate') {
+      this.terminalEvent = true;
     }
     try { sanitizeEventFrame(frame); }
     catch { this.protocolFailure('invalid run event payload'); return; }
@@ -275,6 +286,7 @@ export class DirectRunSession {
 
   private protocolFailure(message: string): void {
     if (this.disposed) return;
+    this.terminalEvent = true;
     this.callbacks.onError(message);
     this.dispose();
   }
