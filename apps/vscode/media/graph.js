@@ -27341,6 +27341,13 @@
     ["circle", { cx: "12", cy: "12", r: "1", key: "41hilf" }]
   ]);
 
+  // ../../node_modules/lucide-react/dist/esm/icons/circle-x.js
+  var CircleX = createLucideIcon("CircleX", [
+    ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
+    ["path", { d: "m15 9-6 6", key: "1uzhvr" }],
+    ["path", { d: "m9 9 6 6", key: "z0biqf" }]
+  ]);
+
   // ../../node_modules/lucide-react/dist/esm/icons/clock-3.js
   var Clock3 = createLucideIcon("Clock3", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
@@ -27498,6 +27505,19 @@
   var Terminal = createLucideIcon("Terminal", [
     ["polyline", { points: "4 17 10 11 4 5", key: "akl6gq" }],
     ["line", { x1: "12", x2: "20", y1: "19", y2: "19", key: "q2wloq" }]
+  ]);
+
+  // ../../node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  var TriangleAlert = createLucideIcon("TriangleAlert", [
+    [
+      "path",
+      {
+        d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",
+        key: "wmoenq"
+      }
+    ],
+    ["path", { d: "M12 9v4", key: "juzpu7" }],
+    ["path", { d: "M12 17h.01", key: "p32p05" }]
   ]);
 
   // ../../node_modules/lucide-react/dist/esm/icons/undo-2.js
@@ -38147,6 +38167,7 @@
   };
   var RuntimeNodesContext = (0, import_react15.createContext)({});
   var DebugBreakpointsContext = (0, import_react15.createContext)(/* @__PURE__ */ new Set());
+  var RunContext = (0, import_react15.createContext)({ hasRun: false });
   var ExecutionPositionContext = (0, import_react15.createContext)({ terminal: false });
   function breakpointKey(nodeID, phase) {
     return `${nodeID}:${phase}`;
@@ -38155,6 +38176,8 @@
     const runtimeNodes = (0, import_react15.useContext)(RuntimeNodesContext);
     const debugBreakpoints = (0, import_react15.useContext)(DebugBreakpointsContext);
     const executionPosition = (0, import_react15.useContext)(ExecutionPositionContext);
+    const runContext = typeof RunContext !== "undefined" ? (0, import_react15.useContext)(RunContext) : void 0;
+    const hasRun = Boolean(runContext?.hasRun);
     const kind = typeof data.kind === "string" ? data.kind : "step";
     const id2 = typeof data.id === "string" ? data.id : "";
     const title = typeof data.title === "string" ? data.title : "";
@@ -38166,6 +38189,10 @@
     const error = runtime?.error ?? (typeof data.error === "string" ? data.error : "");
     const hasBeforeBreakpoint = debugBreakpoints.has(breakpointKey(id2, "before"));
     const hasAfterBreakpoint = debugBreakpoints.has(breakpointKey(id2, "after"));
+    const isExecuted = Boolean(
+      runtime && runtime.status && runtime.status !== "pending" || typeof data.status === "string" && data.status !== "pending" && data.status !== ""
+    );
+    const isUnexecuted = hasRun && !isExecuted && !isCurrent;
     const locatorText = title || id2;
     const focusedLabel = `Focused step: ${locatorText}`;
     const currentLabel = `Current step: ${locatorText}`;
@@ -38175,14 +38202,14 @@
       "div",
       {
         "aria-current": isCurrent && !executionPosition.terminal ? "step" : void 0,
-        className: `step-node kind-${kind} status-${status}${selected ? " selected" : ""}${isCurrent ? executionPosition.terminal ? " execution-last" : " execution-current" : ""}${isCurrent && executionPosition.progressing ? " execution-progress" : ""}`
+        className: `step-node kind-${kind} status-${status}${isUnexecuted ? " unexecuted" : ""}${selected ? " selected" : ""}${isCurrent ? executionPosition.terminal ? " execution-last" : " execution-current" : ""}${isCurrent && executionPosition.progressing ? " execution-progress" : ""}`
       },
       /* @__PURE__ */ import_react15.default.createElement(Handle$1, { type: "target", position: Position.Top }),
-      /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-heading" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "kind-mark", "aria-hidden": "true" }, kind.slice(0, 2).toUpperCase()), /* @__PURE__ */ import_react15.default.createElement("span", null, kindLabels2[kind] ?? kind)),
+      /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-heading" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "kind-mark", "aria-hidden": "true" }, kind.slice(0, 2).toUpperCase()), /* @__PURE__ */ import_react15.default.createElement("span", null, kindLabels2[kind] ?? kind), isUnexecuted ? /* @__PURE__ */ import_react15.default.createElement("span", { className: "step-status-tag unexecuted", title: "Not run in this execution" }, "Not run") : status === "completed" ? /* @__PURE__ */ import_react15.default.createElement("span", { className: "step-status-tag completed", title: "Completed" }, typeof CircleCheck !== "undefined" ? /* @__PURE__ */ import_react15.default.createElement(CircleCheck, { className: "step-tag-icon", "aria-hidden": "true" }) : null) : status === "failed" || status === "denied" || status === "indeterminate" ? /* @__PURE__ */ import_react15.default.createElement("span", { className: "step-status-tag failed", title: error ? `Failed: ${error}` : "Failed" }, typeof CircleX !== "undefined" ? /* @__PURE__ */ import_react15.default.createElement(CircleX, { className: "step-tag-icon", "aria-hidden": "true" }) : null) : status === "blocked" ? /* @__PURE__ */ import_react15.default.createElement("span", { className: "step-status-tag blocked", title: "Blocked" }, typeof TriangleAlert !== "undefined" ? /* @__PURE__ */ import_react15.default.createElement(TriangleAlert, { className: "step-tag-icon", "aria-hidden": "true" }) : null) : null),
       /* @__PURE__ */ import_react15.default.createElement("div", { className: "debug-node-markers" }, hasBeforeBreakpoint ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "Before breakpoint", title: "Pause before execution" }, /* @__PURE__ */ import_react15.default.createElement(CircleDot, { className: "debug-before-marker", "aria-hidden": "true" })) : null, hasAfterBreakpoint ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "After breakpoint", title: "Pause after execution" }, /* @__PURE__ */ import_react15.default.createElement(CircleDot, { className: "debug-after-marker", "aria-hidden": "true" })) : null, runtime?.debugOverride ? /* @__PURE__ */ import_react15.default.createElement("span", { "aria-label": "Debug override applied", title: "Debug override applied" }, /* @__PURE__ */ import_react15.default.createElement(Bug, { className: "debug-override-marker", "aria-hidden": "true" })) : null),
       /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-id" }, id2),
       title && title !== id2 ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-title" }, title) : null,
-      status !== "pending" ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-status" }, status === "no-final-status" ? "No final status" : status, error ? `: ${error}` : "") : null,
+      status !== "pending" ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-status" }, status === "no-final-status" ? "No final status" : status, error ? `: ${error}` : "") : isUnexecuted ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "step-status unexecuted-status" }, "Not run") : null,
       !isTerminal ? /* @__PURE__ */ import_react15.default.createElement(Handle$1, { type: "source", position: Position.Bottom }) : null
     ));
   }
@@ -39208,6 +39235,8 @@
       () => currentActivities(document2, observedRuntimeNodes, runStatus, runID, pending2),
       [document2, observedRuntimeNodes, runStatus, runID, pending2]
     );
+    const hasRun = Boolean(runID) || Object.keys(runtimeNodes).length > 0;
+    const runContextValue = (0, import_react15.useMemo)(() => ({ runID, hasRun }), [runID, hasRun]);
     const history = (0, import_react15.useMemo)(() => executionHistory(document2, observedRuntimeNodes), [document2, observedRuntimeNodes]);
     const previousExecutionRef = (0, import_react15.useRef)();
     const executionScope = sessionID ?? document2.runbook.path ?? document2.hash ?? document2;
@@ -39929,7 +39958,7 @@
           className: "workspace",
           style: { "--inspector-width": `${inspectorRatio * 100}%` }
         },
-        /* @__PURE__ */ import_react15.default.createElement("section", { ref: canvasRef, className: "canvas", "aria-label": "Runbook structure" }, /* @__PURE__ */ import_react15.default.createElement(RuntimeNodesContext.Provider, { value: runtimeNodes }, /* @__PURE__ */ import_react15.default.createElement(ExecutionPositionContext.Provider, { value: executionPosition }, /* @__PURE__ */ import_react15.default.createElement(DebugBreakpointsContext.Provider, { value: breakpointKeys }, /* @__PURE__ */ import_react15.default.createElement(ReactFlowProvider, null, /* @__PURE__ */ import_react15.default.createElement(
+        /* @__PURE__ */ import_react15.default.createElement("section", { ref: canvasRef, className: `canvas${hasRun ? " has-run" : ""}`, "aria-label": "Runbook structure" }, /* @__PURE__ */ import_react15.default.createElement(RuntimeNodesContext.Provider, { value: runtimeNodes }, /* @__PURE__ */ import_react15.default.createElement(ExecutionPositionContext.Provider, { value: executionPosition }, /* @__PURE__ */ import_react15.default.createElement(DebugBreakpointsContext.Provider, { value: breakpointKeys }, /* @__PURE__ */ import_react15.default.createElement(RunContext.Provider, { value: runContextValue }, /* @__PURE__ */ import_react15.default.createElement(ReactFlowProvider, null, /* @__PURE__ */ import_react15.default.createElement(
           ReactFlow,
           {
             nodes: renderNodes,
@@ -39969,12 +39998,12 @@
               pannable: true,
               zoomable: true,
               ariaLabel: "Runbook overview",
-              nodeColor: (node) => node.id === resolvedExecutionNodeID ? executionTerminal ? "var(--vscode-charts-blue)" : "var(--vscode-charts-green)" : node.selected ? "var(--vscode-charts-yellow)" : ["running", "delaying"].includes(runtimeNodes[node.id]?.status ?? "") ? "var(--vscode-charts-green)" : "var(--vscode-foreground)",
+              nodeColor: (node) => node.id === resolvedExecutionNodeID ? executionTerminal ? "var(--vscode-charts-blue)" : "var(--vscode-charts-green)" : node.selected ? "var(--vscode-charts-yellow)" : ["running", "delaying"].includes(runtimeNodes[node.id]?.status ?? "") ? "var(--vscode-charts-green)" : runtimeNodes[node.id]?.status === "completed" ? "var(--vscode-charts-green)" : runtimeNodes[node.id]?.status === "failed" ? "var(--vscode-charts-red)" : hasRun ? "color-mix(in srgb, var(--vscode-panel-border) 60%, transparent)" : "var(--vscode-foreground)",
               nodeStrokeColor: (node) => node.selected ? "var(--vscode-editor-background)" : "transparent",
               nodeStrokeWidth: 3
             }
           )
-        )))))),
+        ))))))),
         showPanel ? /* @__PURE__ */ import_react15.default.createElement(
           "div",
           {
@@ -41129,6 +41158,7 @@ lucide-react/dist/esm/icons/arrow-right.js:
 lucide-react/dist/esm/icons/bug.js:
 lucide-react/dist/esm/icons/circle-check.js:
 lucide-react/dist/esm/icons/circle-dot.js:
+lucide-react/dist/esm/icons/circle-x.js:
 lucide-react/dist/esm/icons/clock-3.js:
 lucide-react/dist/esm/icons/file-input.js:
 lucide-react/dist/esm/icons/flag.js:
@@ -41147,6 +41177,7 @@ lucide-react/dist/esm/icons/rotate-ccw.js:
 lucide-react/dist/esm/icons/shield-check.js:
 lucide-react/dist/esm/icons/square.js:
 lucide-react/dist/esm/icons/terminal.js:
+lucide-react/dist/esm/icons/triangle-alert.js:
 lucide-react/dist/esm/icons/undo-2.js:
 lucide-react/dist/esm/icons/workflow.js:
 lucide-react/dist/esm/icons/wrench.js:

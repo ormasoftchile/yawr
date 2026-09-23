@@ -1946,26 +1946,135 @@ textarea {
   font-size: 9px;
   text-transform: uppercase;
 }
+.step-status.unexecuted-status {
+  font-style: italic;
+  opacity: 0.8;
+}
+.step-status-tag {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.step-status-tag .step-tag-icon {
+  width: 12px;
+  height: 12px;
+}
+.step-status-tag.completed {
+  color: var(--vscode-charts-green);
+}
+.step-status-tag.failed {
+  color: var(--vscode-charts-red);
+}
+.step-status-tag.blocked {
+  color: var(--vscode-charts-yellow);
+}
+.step-status-tag.unexecuted {
+  color: var(--vscode-disabledForeground, #8b949e);
+  font-size: 8px;
+  background: color-mix(in srgb, var(--vscode-disabledForeground, #6e7681) 18%, transparent);
+  border: 1px solid var(--vscode-disabledForeground, #6e7681);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-style: normal;
+}
 .step-node.status-running,
 .step-node.status-delaying {
   outline: 2px solid var(--vscode-charts-blue);
 }
 .step-node.status-completed {
-  border-color: var(--vscode-charts-green);
+  --node-accent: var(--vscode-charts-green, #3fb950) !important;
+  border-color: var(--vscode-charts-green, #3fb950) !important;
+  border-width: 2px;
+  border-left: 4px solid var(--vscode-charts-green, #3fb950) !important;
+  background: color-mix(in srgb, var(--vscode-charts-green, #3fb950) 12%, var(--vscode-editorWidget-background));
+}
+.step-node.status-completed .kind-mark {
+  background: var(--vscode-charts-green, #3fb950) !important;
+  color: #ffffff !important;
 }
 .step-node.status-failed,
 .step-node.status-denied,
 .step-node.status-indeterminate {
-  border-color: var(--vscode-charts-red);
+  --node-accent: var(--vscode-charts-red, #f85149) !important;
+  border-color: var(--vscode-charts-red, #f85149) !important;
+  border-width: 2px;
+  border-left: 4px solid var(--vscode-charts-red, #f85149) !important;
+  background: color-mix(in srgb, var(--vscode-charts-red, #f85149) 12%, var(--vscode-editorWidget-background));
+}
+.step-node.status-failed .kind-mark,
+.step-node.status-denied .kind-mark,
+.step-node.status-indeterminate .kind-mark {
+  background: var(--vscode-charts-red, #f85149) !important;
+  color: #ffffff !important;
 }
 .step-node.status-blocked,
 .step-node.status-waiting,
 .step-node.status-paused,
 .step-node.status-delaying {
-  border-color: var(--vscode-charts-yellow);
+  --node-accent: var(--vscode-charts-yellow, #d29922) !important;
+  border-color: var(--vscode-charts-yellow, #d29922) !important;
+  border-width: 2px;
+  border-left: 4px solid var(--vscode-charts-yellow, #d29922) !important;
+  background: color-mix(in srgb, var(--vscode-charts-yellow, #d29922) 10%, var(--vscode-editorWidget-background));
+}
+.step-node.status-blocked .kind-mark,
+.step-node.status-waiting .kind-mark,
+.step-node.status-paused .kind-mark,
+.step-node.status-delaying .kind-mark {
+  background: var(--vscode-charts-yellow, #d29922) !important;
+  color: #1e1e1e !important;
 }
 .step-node.status-skipped {
   opacity: 0.55;
+}
+.step-node.unexecuted {
+  --node-accent: var(--vscode-disabledForeground, #6e7681) !important;
+  background: var(--vscode-editor-inactiveSelectionBackground, #2d2d2d) !important;
+  border: 1px solid var(--vscode-panel-border, #444444) !important;
+  border-left: 3px solid var(--vscode-disabledForeground, #6e7681) !important;
+  color: var(--vscode-disabledForeground, #8b949e) !important;
+  filter: grayscale(1) !important;
+  box-shadow: none !important;
+}
+.step-node.unexecuted .step-heading {
+  color: var(--vscode-disabledForeground, #8b949e) !important;
+}
+.step-node.unexecuted .kind-mark {
+  background: var(--vscode-disabledForeground, #57606a) !important;
+  color: var(--vscode-editor-background, #1e1e1e) !important;
+  border: 1px solid var(--vscode-panel-border, #444444);
+}
+.step-node.unexecuted .step-id {
+  color: var(--vscode-disabledForeground, #8b949e) !important;
+}
+.step-node.unexecuted .step-title {
+  color: var(--vscode-disabledForeground, #6e7681) !important;
+}
+.step-node.unexecuted .step-status {
+  color: var(--vscode-disabledForeground, #6e7681) !important;
+}
+.step-node.unexecuted .step-status.unexecuted-status {
+  color: var(--vscode-disabledForeground, #6e7681) !important;
+  font-style: italic;
+}
+.step-node.unexecuted .step-status-tag {
+  color: var(--vscode-disabledForeground, #8b949e) !important;
+}
+.style-header-badges .step-node.unexecuted .step-heading {
+  background: var(--vscode-disabledForeground, #57606a) !important;
+  color: var(--vscode-editor-background, #1e1e1e) !important;
+}
+.style-minimalist .step-node.unexecuted .kind-mark {
+  color: var(--vscode-disabledForeground, #8b949e) !important;
+  border-color: var(--vscode-disabledForeground, #8b949e) !important;
+}
+.canvas.has-run .react-flow__edge:not(.edge-completed):not(.edge-running):not(.edge-failed):not(.edge-session-transition) path {
+  stroke: var(--vscode-disabledForeground, #555555) !important;
+  stroke-dasharray: 4 4;
 }
 .step-node.selected {
   outline: 3px solid var(--vscode-charts-yellow);

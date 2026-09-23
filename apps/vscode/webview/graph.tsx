@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import { ArrowLeft, ArrowRight, Bug, CheckCircle2, CircleDot, FolderOpen, LocateFixed, PanelRight, Play, RotateCcw, Square, Workflow } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Bug, CheckCircle2, CircleDot, FolderOpen, LocateFixed, PanelRight, Play, RotateCcw, Square, Workflow, XCircle } from 'lucide-react';
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ReactFlow, {
@@ -331,6 +331,11 @@ const kindLabels: Record<string, string> = {
 
 const RuntimeNodesContext = createContext<Readonly<Record<string, RuntimeNodeState>>>({});
 const DebugBreakpointsContext = createContext<ReadonlySet<string>>(new Set());
+interface RunContextValue {
+  runID?: string;
+  hasRun: boolean;
+}
+const RunContext = createContext<RunContextValue>({ hasRun: false });
 interface ExecutionPosition {
   nodeID?: string; terminal: boolean; progressing?: boolean; status?: 'waiting' | 'paused';
 }
@@ -344,6 +349,8 @@ function StepNode({ data, selected }: NodeProps<GraphNodeData>) {
   const runtimeNodes = useContext(RuntimeNodesContext);
   const debugBreakpoints = useContext(DebugBreakpointsContext);
   const executionPosition = useContext(ExecutionPositionContext);
+  const runContext = typeof RunContext !== 'undefined' ? useContext(RunContext) : undefined;
+  const hasRun = Boolean(runContext?.hasRun);
   const kind = typeof data.kind === 'string' ? data.kind : 'step';
   const id = typeof data.id === 'string' ? data.id : '';
   const title = typeof data.title === 'string' ? data.title : '';
@@ -358,6 +365,11 @@ function StepNode({ data, selected }: NodeProps<GraphNodeData>) {
   const error = runtime?.error ?? (typeof data.error === 'string' ? data.error : '');
   const hasBeforeBreakpoint = debugBreakpoints.has(breakpointKey(id, 'before'));
   const hasAfterBreakpoint = debugBreakpoints.has(breakpointKey(id, 'after'));
+  const isExecuted = Boolean(
+    (runtime && runtime.status && runtime.status !== 'pending') ||
+    (typeof data.status === 'string' && data.status !== 'pending' && data.status !== '')
+  );
+  const isUnexecuted = hasRun && !isExecuted && !isCurrent;
   const locatorText = title || id;
   const focusedLabel = `Focused step: ${locatorText}`;
   const currentLabel = `Current step: ${locatorText}`;
@@ -381,11 +393,20 @@ function StepNode({ data, selected }: NodeProps<GraphNodeData>) {
         </div>
       </NodeToolbar>
       <div aria-current={isCurrent && !executionPosition.terminal ? 'step' : undefined}
-        className={`step-node kind-${kind} status-${status}${selected ? ' selected' : ''}${isCurrent ? executionPosition.terminal ? ' execution-last' : ' execution-current' : ''}${isCurrent && executionPosition.progressing ? ' execution-progress' : ''}`}>
+        className={`step-node kind-${kind} status-${status}${isUnexecuted ? ' unexecuted' : ''}${selected ? ' selected' : ''}${isCurrent ? executionPosition.terminal ? ' execution-last' : ' execution-current' : ''}${isCurrent && executionPosition.progressing ? ' execution-progress' : ''}`}>
         <Handle type="target" position={Position.Top} />
         <div className="step-heading">
           <span className="kind-mark" aria-hidden="true">{kind.slice(0, 2).toUpperCase()}</span>
           <span>{kindLabels[kind] ?? kind}</span>
+          {isUnexecuted ? (
+            <span className="step-status-tag unexecuted" title="Not run in this execution">Not run</span>
+          ) : status === 'completed' ? (
+            <span className="step-status-tag completed" title="Completed">{typeof CheckCircle2 !== 'undefined' ? <CheckCircle2 className="step-tag-icon" aria-hidden="true" /> : null}</span>
+          ) : status === 'failed' || status === 'denied' || status === 'indeterminate' ? (
+            <span className="step-status-tag failed" title={error ? `Failed: ${error}` : 'Failed'}>{typeof XCircle !== 'undefined' ? <XCircle className="step-tag-icon" aria-hidden="true" /> : null}</span>
+          ) : status === 'blocked' ? (
+            <span className="step-status-tag blocked" title="Blocked">{typeof AlertTriangle !== 'undefined' ? <AlertTriangle className="step-tag-icon" aria-hidden="true" /> : null}</span>
+          ) : null}
         </div>
         <div className="debug-node-markers">
           {hasBeforeBreakpoint ? <span aria-label="Before breakpoint" title="Pause before execution"><CircleDot className="debug-before-marker" aria-hidden="true" /></span> : null}
@@ -394,7 +415,11 @@ function StepNode({ data, selected }: NodeProps<GraphNodeData>) {
         </div>
         <div className="step-id">{id}</div>
         {title && title !== id ? <div className="step-title">{title}</div> : null}
-        {status !== 'pending' ? <div className="step-status">{status === 'no-final-status' ? 'No final status' : status}{error ? `: ${error}` : ''}</div> : null}
+        {status !== 'pending' ? (
+          <div className="step-status">{status === 'no-final-status' ? 'No final status' : status}{error ? `: ${error}` : ''}</div>
+        ) : isUnexecuted ? (
+          <div className="step-status unexecuted-status">Not run</div>
+        ) : null}
         {!isTerminal ? <Handle type="source" position={Position.Bottom} /> : null}
       </div>
     </>
@@ -1774,6 +1799,8 @@ function GraphView({
   const [activityLocationNotice, setActivityLocationNotice] = useState<string>();
   const activities = useMemo(() => currentActivities(document, observedRuntimeNodes, runStatus, runID, pending),
     [document, observedRuntimeNodes, runStatus, runID, pending]);
+  const hasRun = Boolean(runID) || Object.keys(runtimeNodes).length > 0;
+  const runContextValue = useMemo(() => ({ runID, hasRun }), [runID, hasRun]);
   const history = useMemo(() => executionHistory(document, observedRuntimeNodes), [document, observedRuntimeNodes]);
   const previousExecutionRef = useRef<{ scope: string | GraphDocument; nodeID?: string }>();
   const executionScope = sessionID ?? document.runbook.path ?? document.hash ?? document;
@@ -2503,10 +2530,11 @@ function GraphView({
         className="workspace"
         style={{ '--inspector-width': `${inspectorRatio * 100}%` } as React.CSSProperties}
       >
-        <section ref={canvasRef} className="canvas" aria-label="Runbook structure">
+        <section ref={canvasRef} className={`canvas${hasRun ? ' has-run' : ''}`} aria-label="Runbook structure">
           <RuntimeNodesContext.Provider value={runtimeNodes}>
             <ExecutionPositionContext.Provider value={executionPosition}>
               <DebugBreakpointsContext.Provider value={breakpointKeys}>
+                <RunContext.Provider value={runContextValue}>
                 <ReactFlowProvider>
                 <ReactFlow
                   nodes={renderNodes}
@@ -2538,12 +2566,19 @@ function GraphView({
                       : node.selected ? 'var(--vscode-charts-yellow)'
                       : ['running', 'delaying'].includes(runtimeNodes[node.id]?.status ?? '')
                         ? 'var(--vscode-charts-green)'
-                        : 'var(--vscode-foreground)'}
+                        : runtimeNodes[node.id]?.status === 'completed'
+                          ? 'var(--vscode-charts-green)'
+                          : runtimeNodes[node.id]?.status === 'failed'
+                            ? 'var(--vscode-charts-red)'
+                            : hasRun
+                              ? 'color-mix(in srgb, var(--vscode-panel-border) 60%, transparent)'
+                              : 'var(--vscode-foreground)'}
                     nodeStrokeColor={(node) => node.selected ? 'var(--vscode-editor-background)' : 'transparent'}
                     nodeStrokeWidth={3}
                   />
                 </ReactFlow>
                 </ReactFlowProvider>
+                </RunContext.Provider>
               </DebugBreakpointsContext.Provider>
             </ExecutionPositionContext.Provider>
           </RuntimeNodesContext.Provider>
