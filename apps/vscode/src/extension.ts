@@ -925,8 +925,9 @@ async function openDirectGraphPanelForRunbook(
       localResourceRoots: [mediaRoot],
     },
   );
-  const scriptUri = panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'graph.js')).toString();
-  const styleUri = panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'graph.css')).toString();
+  const cacheBuster = Date.now().toString();
+  const scriptUri = `${panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'graph.js')).toString()}?v=${cacheBuster}`;
+  const styleUri = `${panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'graph.css')).toString()}?v=${cacheBuster}`;
   panel.webview.html = createDirectGraphWebviewHtml(
     scriptUri,
     styleUri,

@@ -283,9 +283,11 @@ test('actual step renderer distinguishes current work, input, pause, blocked and
       React, useContext: value => value, RuntimeNodesContext: runtime,
       ExecutionPositionContext: { nodeID: 'first', terminal: false, ...context },
       DebugBreakpointsContext: new Set(), breakpointKey: (id, phase) => `${id}:${phase}`,
+      RunContext: { hasRun: false },
       kindLabels: {}, Position: { Left: 'left', Right: 'right', Top: 'top', Bottom: 'bottom' },
       NodeToolbar: ({ isVisible, children }) => isVisible ? React.createElement('div', null, children) : null,
       Handle: () => null, ArrowLeft: () => null, ArrowRight: () => null,
+      CheckCircle2: () => null, XCircle: () => null, AlertTriangle: () => null,
     });
     const html = renderToStaticMarkup(React.createElement(component, { data: { id: 'first', kind: 'tool' }, selected: true }));
     assert.ok(html.includes(`status-${expected}`), html);
@@ -295,3 +297,35 @@ test('actual step renderer distinguishes current work, input, pause, blocked and
     assert.equal(runtime.first.status, status, 'visual state must not rewrite run evidence');
   }
 });
+
+test('step renderer grays out unexecuted steps when a run has executed', () => {
+  const source = fs.readFileSync(require.resolve('../webview/graph.tsx'), 'utf8');
+  const code = transformSync(source.slice(source.indexOf('function StepNode('), source.indexOf('function FrameNode(')),
+    { loader: 'tsx' }).code;
+  const runtime = {};
+  const component = vm.runInNewContext(code + '\nStepNode', {
+    React, useContext: value => value, RuntimeNodesContext: runtime,
+    ExecutionPositionContext: { nodeID: undefined, terminal: false },
+    DebugBreakpointsContext: new Set(), breakpointKey: (id, phase) => `${id}:${phase}`,
+    RunContext: { hasRun: true, runID: 'run-123' },
+    kindLabels: {}, Position: { Left: 'left', Right: 'right', Top: 'top', Bottom: 'bottom' },
+    NodeToolbar: ({ isVisible, children }) => isVisible ? React.createElement('div', null, children) : null,
+    Handle: () => null, ArrowLeft: () => null, ArrowRight: () => null,
+    CheckCircle2: () => null, XCircle: () => null, AlertTriangle: () => null,
+  });
+  const html = renderToStaticMarkup(React.createElement(component, { data: { id: 'unexecuted-step', kind: 'tool' }, selected: false }));
+  assert.ok(html.includes('unexecuted'), 'Must include unexecuted class');
+  assert.ok(html.includes('Not run'), 'Must render Not run status');
+});
+
+test('step styles define gray shades for unexecuted steps and vivid accents for completed and failed', () => {
+  const css = fs.readFileSync(require.resolve('../webview/graph.css'), 'utf8');
+  assert.match(css, /\.step-node\.unexecuted\s*\{[^}]*grayscale\(1\)/);
+  assert.match(css, /\.step-node\.unexecuted\s*\{[^}]*--node-accent:\s*var\(--vscode-disabledForeground/);
+  assert.match(css, /\.step-node\.status-completed\s*\{[^}]*--node-accent:\s*var\(--vscode-charts-green/);
+  assert.match(css, /\.step-node\.status-completed\s*\{[^}]*border-left:\s*4px solid/);
+  assert.match(css, /\.step-node\.status-completed \.kind-mark\s*\{[^}]*background:\s*var\(--vscode-charts-green/);
+  assert.match(css, /\.step-node\.status-failed[^{]*\{[^}]*--node-accent:\s*var\(--vscode-charts-red/);
+});
+
+
