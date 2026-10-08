@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	internaldebugprotect "github.com/ormasoftchile/yawr/runtime/internal/debugprotect"
+	internalexpr "github.com/ormasoftchile/yawr/runtime/internal/expr"
 	"github.com/ormasoftchile/yawr/runtime/internal/executor"
 	internalGov "github.com/ormasoftchile/yawr/runtime/internal/governance"
 	internalinput "github.com/ormasoftchile/yawr/runtime/internal/input"
@@ -1153,6 +1154,59 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
 		}
 	}
 	stepProtection := h.debugProtectionBeforeStep(ctx, step, h.debugger != nil)
+
+	// Step-level conditional execution (when: expression).
+	if step.When != "" {
+		condEval := h.engine.cfg.ConditionEvaluator
+		if condEval == nil {
+			condEval = internalexpr.NewSimpleConditionEvaluator(h.engine.cfg.Evaluator)
+		}
+		ok, err := condEval.EvalBool(step.When, h.run.Vars)
+		if err != nil {
+			return h.failRun(ctx, step.ID, fmt.Errorf("evaluating when condition %q on step %s: %w", step.When, step.ID, err))
+		}
+		if !ok {
+			startedAt := time.Now()
+			stepName := step.Name
+			if stepName == "" {
+				stepName = step.ID
+			}
+			startedPayload := map[string]any{
+				"step_id":       step.ID,
+				"name":          stepName,
+				"kind":          step.Kind,
+				"nest_depth":    step.NestDepth,
+				"display_order": step.DisplayOrder,
+			}
+			if step.ParentID != "" {
+				startedPayload["parent_step_id"] = step.ParentID
+			}
+			if step.ParentKind != "" {
+				startedPayload["parent_kind"] = step.ParentKind
+			}
+			if step.IncludeAlias != "" {
+				startedPayload["include_alias"] = step.IncludeAlias
+			}
+			if step.BranchLabel != "" {
+				startedPayload["branch_label"] = step.BranchLabel
+			}
+			h.emitEventLocked(ctx, trace.EventKindStepStarted, traceOccurrencePayload(ctx, step.ID, startedPayload))
+			if h.traceErr != nil {
+				return h.haltCheckpointCommit(ctx, step.ID, nil, h.traceErr)
+			}
+			result := &enginepkg.StepResult{
+				StepID:      step.ID,
+				Status:      enginepkg.StepStatusSkipped,
+				Outcome:     enginepkg.StepOutcomeSkipped,
+				StartedAt:   startedAt,
+				CompletedAt: time.Now(),
+				DurationMs:  time.Since(startedAt).Milliseconds(),
+				Output:      map[string]any{"skip_reason": "condition_false"},
+			}
+			return h.settleStep(ctx, step, result, nil)
+		}
+	}
+
 	// Dispatch based on step kind for built-in composite steps.
 	switch step.Kind {
 	case "parallel":
@@ -5306,12 +5360,17 @@ func hasValidatedGCPCapture(vp *enginepkg.ValidatedPlan, step enginepkg.Resolved
 func resolveFlowNode(node schema.FlowNode) (enginepkg.ResolvedStep, bool) {
 	if node.Step != nil {
 		step := node.Step
+		when := step.When
+		if when == "" && step.IncludeSpec != nil {
+			when = step.IncludeSpec.Include.When
+		}
 		return enginepkg.ResolvedStep{
 			ID:              step.ID,
 			Kind:            string(step.Type),
 			Spec:            stepSpecForStep(step),
 			Capture:         step.Capture,
 			CaptureDefaults: step.CaptureDefaults,
+			When:            when,
 			Delay:           step.Delay,
 			LexicalScopeID:  step.LexicalScopeID,
 			ToolBindingID:   step.ToolBindingID,
@@ -5422,19 +5481,41 @@ func (h *runHandle) executeCompensationStep(
 ) error {
 	ctx = withFrozenPlanContext(ctx, h.run.Plan)
 	startedAt := time.Now()
-	exec := h.engine.cfg.Executors.Lookup(step.Kind)
 	var result *enginepkg.StepResult
-	if exec == nil {
-		result = &enginepkg.StepResult{
-			StepID:      step.ID,
-			Status:      enginepkg.StepStatusFailed,
-			Outcome:     enginepkg.StepOutcomeFailed,
-			StartedAt:   startedAt,
-			CompletedAt: time.Now(),
-			DurationMs:  time.Since(startedAt).Milliseconds(),
-			Error:       &ExecutorNotFoundError{Kind: step.Kind},
+	if step.When != "" {
+		condEval := h.engine.cfg.ConditionEvaluator
+		if condEval == nil {
+			condEval = internalexpr.NewSimpleConditionEvaluator(h.engine.cfg.Evaluator)
 		}
-	} else {
+		ok, err := condEval.EvalBool(step.When, h.run.Vars)
+		if err != nil {
+			return fmt.Errorf("evaluating when condition %q on compensation step %s: %w", step.When, step.ID, err)
+		}
+		if !ok {
+			result = &enginepkg.StepResult{
+				StepID:      step.ID,
+				Status:      enginepkg.StepStatusSkipped,
+				Outcome:     enginepkg.StepOutcomeSkipped,
+				StartedAt:   startedAt,
+				CompletedAt: time.Now(),
+				DurationMs:  time.Since(startedAt).Milliseconds(),
+				Output:      map[string]any{"skip_reason": "condition_false"},
+			}
+		}
+	}
+	if result == nil {
+		exec := h.engine.cfg.Executors.Lookup(step.Kind)
+		if exec == nil {
+			result = &enginepkg.StepResult{
+				StepID:      step.ID,
+				Status:      enginepkg.StepStatusFailed,
+				Outcome:     enginepkg.StepOutcomeFailed,
+				StartedAt:   startedAt,
+				CompletedAt: time.Now(),
+				DurationMs:  time.Since(startedAt).Milliseconds(),
+				Error:       &ExecutorNotFoundError{Kind: step.Kind},
+			}
+		} else {
 		stepCtx := enginepkg.WithRunID(ctx, h.run.ID)
 		stepCtx = enginepkg.WithEventForwarder(stepCtx, h.forwardSubEngineEvent)
 		stepCtx = context.WithValue(stepCtx, publicationParentKey{}, h)
@@ -5479,6 +5560,7 @@ func (h *runHandle) executeCompensationStep(
 				StartedAt: startedAt, CompletedAt: time.Now(), Error: errors.New("compensation executor returned no result"),
 			}
 		}
+	}
 	}
 	if result.StepID == "" {
 		result.StepID = step.ID

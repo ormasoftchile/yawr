@@ -611,13 +611,17 @@ func buildIncludeResolvedStep(ctx context.Context, parent internalexecutor.SubSt
 		childFlow = childRb.Runbook.Flow
 	}
 	includeAlias := lookupIncludeAliasForImports(imports, inclCfg.Runbook)
+	when := s.When
+	if when == "" {
+		when = inclCfg.When
+	}
 	return engine.ResolvedStep{
 		ID:              s.ID,
 		Kind:            string(schema.StepTypeInclude),
 		Spec:            &schema.IncludeSpec{Include: inclCfg, ResolvedSteps: childFlow},
 		Capture:         s.Capture,
 		CaptureDefaults: s.CaptureDefaults,
-		When:            s.When,
+		When:            when,
 		OnError:         s.OnError,
 		Delay:           s.Delay,
 		NestDepth:       parent.NestDepth,

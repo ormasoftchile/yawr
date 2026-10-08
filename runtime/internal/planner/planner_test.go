@@ -768,3 +768,84 @@ func TestPlan_MaxDepthExceeded(t *testing.T) {
 		t.Errorf("error = %v; want ErrMaxDepthExceeded", err)
 	}
 }
+
+func TestPlan_IncludeWhen(t *testing.T) {
+	ctx := context.Background()
+
+	childRb := &parser.ParsedRunbook{
+		Source: "/test/child.yaml",
+		Runbook: &schema.Runbook{
+			ID:   "child-runbook",
+			Name: "Child Runbook",
+			Flow: []schema.FlowNode{
+				{Step: &schema.Step{
+					ID:   "child-step-1",
+					Type: schema.StepTypeCLI,
+					CLI:  &schema.CLISpec{Command: "echo", Args: []string{"child"}},
+				}},
+			},
+		},
+	}
+
+	parentRb := &parser.ParsedRunbook{
+		Source: "/test/parent.yaml",
+		Runbook: &schema.Runbook{
+			ID:   "parent-runbook",
+			Name: "Parent Runbook",
+			Flow: []schema.FlowNode{
+				{Step: &schema.Step{
+					ID:   "include-with-step-when",
+					Type: schema.StepTypeInclude,
+					When: "env == 'prod'",
+					IncludeSpec: &schema.IncludeSpec{
+						Include: schema.IncludeConfig{Runbook: "child.yaml"},
+					},
+				}},
+				{Step: &schema.Step{
+					ID:   "include-with-incl-when",
+					Type: schema.StepTypeInclude,
+					IncludeSpec: &schema.IncludeSpec{
+						Include: schema.IncludeConfig{Runbook: "child.yaml", When: "env == 'staging'"},
+					},
+				}},
+			},
+		},
+	}
+
+	loader := &fakeLoader{
+		runbooks: map[string]*parser.ParsedRunbook{"/test/child.yaml": childRb},
+	}
+	registry := &fakeRegistry{tools: make(map[string]*schema.ToolDef)}
+
+	p := planner.New(plannerPkg.Config{
+		Loader:       loader,
+		Tools:        registry,
+		BaseDir:      "/test",
+		ExpandPolicy: expand.Policy{Default: expand.ModeEager},
+	})
+
+	plan, err := p.Plan(ctx, parentRb)
+	if err != nil {
+		t.Fatalf("Plan failed: %v", err)
+	}
+
+	var stepWhenFound, inclWhenFound bool
+	for _, s := range plan.Steps {
+		if s.ID == "include-with-step-when" {
+			stepWhenFound = true
+			if s.When != "env == 'prod'" {
+				t.Errorf("s.When = %q, want \"env == 'prod'\"", s.When)
+			}
+		}
+		if s.ID == "include-with-incl-when" {
+			inclWhenFound = true
+			if s.When != "env == 'staging'" {
+				t.Errorf("s.When = %q, want \"env == 'staging'\"", s.When)
+			}
+		}
+	}
+	if !stepWhenFound || !inclWhenFound {
+		t.Fatalf("expected both include steps in plan: stepWhen=%v, inclWhen=%v", stepWhenFound, inclWhenFound)
+	}
+}
+

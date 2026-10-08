@@ -2152,6 +2152,69 @@ func TestEngineCompensationCommitsNestedDispatchesIndependently(t *testing.T) {
 	}
 }
 
+func TestEngine_PlanExecutionFrames_Compensate_WhenCondition(t *testing.T) {
+	store := &capturingCheckpointStore{}
+	traceWriter := &fakeTraceWriter{}
+	config := makeTestConfig()
+	config.TraceWriter = traceWriter
+	registry := newFakeExecutorRegistry()
+	registry.Register("compensate", internalexecutor.NewCompensateExecutor())
+	registry.Register("fail", stepExecutorFunc(func(_ context.Context, step enginepkg.ResolvedStep, _ map[string]any) (*enginepkg.StepResult, error) {
+		return &enginepkg.StepResult{
+			StepID: step.ID, Status: enginepkg.StepStatusFailed, Outcome: enginepkg.StepOutcomeFailed,
+			Error: errors.New("trigger compensation"), Vars: map[string]any{},
+		}, nil
+	}))
+	var compensated []string
+	registry.Register("external", stepExecutorFunc(func(ctx context.Context, step enginepkg.ResolvedStep, _ map[string]any) (*enginepkg.StepResult, error) {
+		if _, err := enginepkg.PrepareExternalDispatch(ctx, enginepkg.DispatchRequest{
+			Classification: "mutating", EndpointIdentity: "compensation-provider",
+			RenderedRequest: map[string]any{"step": step.ID},
+		}); err != nil {
+			return nil, err
+		}
+		compensated = append(compensated, step.ID)
+		return &enginepkg.StepResult{
+			StepID: step.ID, Status: enginepkg.StepStatusCompleted, Outcome: enginepkg.StepOutcomeSuccess,
+			Vars: map[string]any{},
+		}, nil
+	}))
+	config.Executors = registry
+	plan := enginepkg.ValidatedForTest(&enginepkg.ExecutionPlan{
+		RunID: "run-compensation-when", RunbookPath: "compensation.runbook.yaml",
+		Steps: []enginepkg.ResolvedStep{
+			{ID: "register", Kind: "compensate", Spec: &schema.CompensateSpec{Compensate: schema.CompensateConfig{
+				On: "failure", Steps: []schema.FlowNode{
+					{Step: &schema.Step{ID: "undo-1", Type: "external", When: "should_undo == true"}},
+					{Step: &schema.Step{ID: "undo-2", Type: "external", When: "should_undo == false"}},
+				},
+			}}},
+			{ID: "fail", Kind: "fail", Spec: &cliStepSpec{}},
+		},
+		Metadata: enginepkg.PlanMetadata{RunbookID: "compensation-when"},
+	})
+	handle, err := New(config).Start(context.Background(), plan, enginepkg.RunOptions{
+		Store: store,
+		RuntimeVars: map[string]any{"should_undo": true},
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if _, err := handle.Next(context.Background()); err != nil {
+		t.Fatalf("register compensation: %v", err)
+	}
+	if _, err := handle.Next(context.Background()); err != nil {
+		t.Fatalf("trigger compensation: %v", err)
+	}
+	if len(compensated) != 1 || compensated[0] != "undo-1" {
+		t.Fatalf("compensated steps = %#v, want only undo-1", compensated)
+	}
+	state := handle.State()
+	if result := state.StepResults["undo-2"]; result == nil || result.Status != enginepkg.StepStatusSkipped {
+		t.Fatalf("undo-2 result = %#v, want skipped", result)
+	}
+}
+
 func TestEngineResumeCompensationSkipsFailedRootAndCommittedUndo(t *testing.T) {
 	base := t.TempDir()
 	const runID = "run-resume-compensation"

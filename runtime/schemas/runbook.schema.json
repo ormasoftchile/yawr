@@ -421,7 +421,7 @@
         },
         "when": {
           "type": "string",
-          "description": "GXL condition expression. NOTE: this field is parsed and validated but not yet evaluated at runtime. Use a branch step with condition: arms for conditional execution. See DEF-004."
+          "description": "GXL condition expression. When evaluated to false at runtime, the step is skipped."
         },
         "timeout": {
           "type": "string"
@@ -710,7 +710,7 @@
             },
             "when": {
               "type": "string",
-              "description": "GXL condition expression. NOTE: this field is parsed and validated but not yet evaluated at runtime. Use a branch step with condition: arms for conditional execution. See DEF-004."
+              "description": "GXL condition expression. When evaluated to false at runtime, the step is skipped."
             },
             "gate": {
               "type": "object",
@@ -753,7 +753,7 @@
             },
             "when": {
               "type": "string",
-              "description": "GXL condition expression. NOTE: this field is parsed and validated but not yet evaluated at runtime. Use a branch step with condition: arms for conditional execution. See DEF-004."
+              "description": "GXL condition expression. When evaluated to false at runtime, the step is skipped."
             },
             "gate": {
               "type": "object",

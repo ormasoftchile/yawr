@@ -588,6 +588,10 @@ func (v *planVisitor) makeStep(ctx flowwalk.Ctx, s *schema.Step, includeAlias st
 	} else if s.Type == schema.StepTypeInclude {
 		s.IncludeAlias = includeAlias
 	}
+	when := s.When
+	if when == "" && s.IncludeSpec != nil {
+		when = s.IncludeSpec.Include.When
+	}
 	return engine.ResolvedStep{
 		ID:               s.ID,
 		Name:             displayName(s),
@@ -596,7 +600,7 @@ func (v *planVisitor) makeStep(ctx flowwalk.Ctx, s *schema.Step, includeAlias st
 		Spec:             specForStep(s),
 		Capture:          s.Capture,
 		CaptureDefaults:  s.CaptureDefaults,
-		When:             s.When,
+		When:             when,
 		Retry:            s.Retry,
 		Scope:            s.Scope,
 		LexicalScopeID:   s.LexicalScopeID,
