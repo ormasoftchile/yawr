@@ -182,13 +182,17 @@ func (builder *materializedPlanBuilder) appendFlow(
 		switch {
 		case node.Step != nil:
 			authored := node.Step
+			when := authored.When
+			if when == "" && authored.IncludeSpec != nil {
+				when = authored.IncludeSpec.Include.When
+			}
 			step = engine.ResolvedStep{
 				IncludeAlias: authored.IncludeAlias,
 				ID:           authored.ID, Name: displayName(authored), Subtitle: authored.Subtitle, Kind: string(authored.Type),
 				Spec: specForStep(authored), Capture: authored.Capture, CaptureDefaults: authored.CaptureDefaults,
 				Depth: depth, NestDepth: nestDepth, DisplayOrder: builder.nextOrder(), Origin: origin,
 				OnError: authored.OnError,
-				Timeout: authored.Timeout, Delay: authored.Delay, When: authored.When,
+				Timeout: authored.Timeout, Delay: authored.Delay, When: when,
 				Retry: authored.Retry, Scope: authored.Scope, Export: authored.Export,
 				LexicalScopeID: authored.LexicalScopeID, ToolBindingID: authored.ToolBindingID,
 				Contract: authored.Contract, RequiredEvidence: authored.RequiredEvidence,

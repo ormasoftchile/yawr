@@ -691,13 +691,17 @@ func ResolveFlowNode(node schema.FlowNode) (engine.ResolvedStep, bool) {
 func resolveFlowNode(node schema.FlowNode) (engine.ResolvedStep, bool) {
 	if node.Step != nil {
 		step := node.Step
+		when := step.When
+		if when == "" && step.IncludeSpec != nil {
+			when = step.IncludeSpec.Include.When
+		}
 		return engine.ResolvedStep{
 			ID:              step.ID,
 			Kind:            string(step.Type),
 			Spec:            stepSpecForStep(step),
 			Capture:         step.Capture,
 			CaptureDefaults: step.CaptureDefaults,
-			When:            step.When,
+			When:            when,
 			Delay:           step.Delay,
 			OnError:         step.OnError,
 			LexicalScopeID:  step.LexicalScopeID,

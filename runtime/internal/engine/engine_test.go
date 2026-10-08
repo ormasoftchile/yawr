@@ -1919,3 +1919,260 @@ func TestEngine_StepDelay_EmptyDelayDoesNotSleep(t *testing.T) {
 		}
 	}
 }
+
+func TestEngine_StepWhen_ConditionTrue(t *testing.T) {
+	executed := false
+	exec := stepExecutorFunc(func(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
+		executed = true
+		return &engine.StepResult{
+			StepID:  step.ID,
+			Status:  engine.StepStatusCompleted,
+			Outcome: engine.StepOutcomeSuccess,
+		}, nil
+	})
+
+	reg := newFakeExecutorRegistry()
+	reg.Register("cli", exec)
+
+	cfg := makeTestConfig()
+	cfg.Executors = reg
+	eng := New(cfg)
+
+	plan := makeTestPlan(engine.ResolvedStep{
+		ID:   "step-1",
+		Kind: "cli",
+		Spec: &cliStepSpec{},
+		When: "env == 'prod'",
+	})
+
+	handle, err := eng.Start(context.Background(), engine.ValidatedForTest(plan), engine.RunOptions{
+		RuntimeVars: map[string]any{"env": "prod"},
+	})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	result, err := handle.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next failed: %v", err)
+	}
+	if !executed {
+		t.Error("expected executor to be invoked when condition is true")
+	}
+	if result.Status != engine.StepStatusCompleted {
+		t.Errorf("status = %v, want %v", result.Status, engine.StepStatusCompleted)
+	}
+}
+
+func TestEngine_StepWhen_ConditionFalse_Skipped(t *testing.T) {
+	executed := false
+	exec := stepExecutorFunc(func(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
+		executed = true
+		return &engine.StepResult{
+			StepID:  step.ID,
+			Status:  engine.StepStatusCompleted,
+			Outcome: engine.StepOutcomeSuccess,
+		}, nil
+	})
+
+	tw := &fakeTraceWriter{}
+	reg := newFakeExecutorRegistry()
+	reg.Register("cli", exec)
+
+	cfg := makeTestConfig()
+	cfg.Executors = reg
+	cfg.TraceWriter = tw
+	eng := New(cfg)
+
+	plan := makeTestPlan(engine.ResolvedStep{
+		ID:   "step-1",
+		Kind: "cli",
+		Spec: &cliStepSpec{},
+		When: "env == 'prod'",
+	})
+
+	handle, err := eng.Start(context.Background(), engine.ValidatedForTest(plan), engine.RunOptions{
+		RuntimeVars: map[string]any{"env": "dev"},
+	})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	result, err := handle.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next failed: %v", err)
+	}
+	if executed {
+		t.Error("expected executor NOT to be invoked when condition is false")
+	}
+	if result.Status != engine.StepStatusSkipped {
+		t.Errorf("status = %v, want %v", result.Status, engine.StepStatusSkipped)
+	}
+	if result.Outcome != engine.StepOutcomeSkipped {
+		t.Errorf("outcome = %v, want %v", result.Outcome, engine.StepOutcomeSkipped)
+	}
+	if reason, ok := result.Output["skip_reason"].(string); !ok || reason != "condition_false" {
+		t.Errorf("output[skip_reason] = %v, want 'condition_false'", result.Output["skip_reason"])
+	}
+
+	events := tw.collect()
+	var hasStarted, hasSkipped bool
+	for _, ev := range events {
+		if ev.Kind == trace.EventKindStepStarted {
+			hasStarted = true
+		}
+		if ev.Kind == trace.EventKindStepSkipped {
+			hasSkipped = true
+		}
+	}
+	if !hasStarted {
+		t.Error("expected trace.EventKindStepStarted event")
+	}
+	if !hasSkipped {
+		t.Error("expected trace.EventKindStepSkipped event")
+	}
+}
+
+func TestEngine_StepWhen_BypassesDelay(t *testing.T) {
+	executed := false
+	exec := stepExecutorFunc(func(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
+		executed = true
+		return &engine.StepResult{
+			StepID:  step.ID,
+			Status:  engine.StepStatusCompleted,
+			Outcome: engine.StepOutcomeSuccess,
+		}, nil
+	})
+
+	tw := &fakeTraceWriter{}
+	reg := newFakeExecutorRegistry()
+	reg.Register("cli", exec)
+
+	cfg := makeTestConfig()
+	cfg.Executors = reg
+	cfg.TraceWriter = tw
+	eng := New(cfg)
+
+	plan := makeTestPlan(engine.ResolvedStep{
+		ID:    "step-1",
+		Kind:  "cli",
+		Spec:  &cliStepSpec{},
+		When:  "false",
+		Delay: "5s",
+	})
+
+	startedAt := time.Now()
+	handle, err := eng.Start(context.Background(), engine.ValidatedForTest(plan), engine.RunOptions{})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	result, err := handle.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next failed: %v", err)
+	}
+	if executed {
+		t.Error("expected executor NOT to be invoked on skipped step")
+	}
+	if time.Since(startedAt) > 500*time.Millisecond {
+		t.Errorf("expected skipped step to bypass delay, but took %v", time.Since(startedAt))
+	}
+	if result.Status != engine.StepStatusSkipped {
+		t.Errorf("status = %v, want %v", result.Status, engine.StepStatusSkipped)
+	}
+	for _, ev := range tw.collect() {
+		if ev.Kind == trace.EventKindStepDelaying {
+			t.Fatal("skipped step should not emit step/delaying event")
+		}
+	}
+}
+
+func TestEngine_StepWhen_EvaluatesAgainstMutatedVars(t *testing.T) {
+	step1Exec := &varProducingExecutor{
+		vars: map[string]any{"captured_flag": "enable_feature"},
+	}
+	step2Executed := false
+	step2Exec := stepExecutorFunc(func(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
+		step2Executed = true
+		return &engine.StepResult{
+			StepID:  step.ID,
+			Status:  engine.StepStatusCompleted,
+			Outcome: engine.StepOutcomeSuccess,
+		}, nil
+	})
+	step3Executed := false
+	step3Exec := stepExecutorFunc(func(ctx context.Context, step engine.ResolvedStep, vars map[string]any) (*engine.StepResult, error) {
+		step3Executed = true
+		return &engine.StepResult{
+			StepID:  step.ID,
+			Status:  engine.StepStatusCompleted,
+			Outcome: engine.StepOutcomeSuccess,
+		}, nil
+	})
+
+	reg := newFakeExecutorRegistry()
+	reg.Register("producer", step1Exec)
+	reg.Register("consumer", step2Exec)
+	reg.Register("other", step3Exec)
+
+	cfg := makeTestConfig()
+	cfg.Executors = reg
+	eng := New(cfg)
+
+	plan := makeTestPlan(
+		engine.ResolvedStep{ID: "s1", Kind: "producer", Spec: &cliStepSpec{}},
+		engine.ResolvedStep{ID: "s2", Kind: "consumer", Spec: &cliStepSpec{}, When: "captured_flag == 'enable_feature'"},
+		engine.ResolvedStep{ID: "s3", Kind: "other", Spec: &cliStepSpec{}, When: "captured_flag == 'disable_feature'"},
+	)
+
+	handle, err := eng.Start(context.Background(), engine.ValidatedForTest(plan), engine.RunOptions{})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	r1, err := handle.Next(context.Background())
+	if err != nil || r1.Status != engine.StepStatusCompleted {
+		t.Fatalf("s1 failed: %v, status: %v", err, r1.Status)
+	}
+	r2, err := handle.Next(context.Background())
+	if err != nil || r2.Status != engine.StepStatusCompleted {
+		t.Fatalf("s2 failed: %v, status: %v", err, r2.Status)
+	}
+	if !step2Executed {
+		t.Error("expected s2 to be executed")
+	}
+	r3, err := handle.Next(context.Background())
+	if err != nil || r3.Status != engine.StepStatusSkipped {
+		t.Fatalf("s3 failed: %v, status: %v", err, r3.Status)
+	}
+	if step3Executed {
+		t.Error("expected s3 NOT to be executed")
+	}
+}
+
+func TestEngine_StepWhen_InvalidConditionFailsRun(t *testing.T) {
+	reg := newFakeExecutorRegistry()
+	reg.Register("cli", &passThroughExecutor{})
+
+	cfg := makeTestConfig()
+	cfg.Executors = reg
+	eng := New(cfg)
+
+	plan := makeTestPlan(engine.ResolvedStep{
+		ID:   "step-1",
+		Kind: "cli",
+		Spec: &cliStepSpec{},
+		When: "invalid expression syntax @@@",
+	})
+
+	handle, err := eng.Start(context.Background(), engine.ValidatedForTest(plan), engine.RunOptions{})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	result, err := handle.Next(context.Background())
+	if err == nil && (result == nil || result.Status != engine.StepStatusFailed) {
+		t.Errorf("expected failure on invalid condition expression, got result=%v, err=%v", result, err)
+	}
+}
+

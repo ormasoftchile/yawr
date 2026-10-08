@@ -2,12 +2,8 @@
 # Invoked by incident-triage.yawr for network-category incidents.
 # Contains its own branching and includes connectivity-test as a grandchild.
 #
-# Demonstrates: child-level branching, choice steps, nested include, tool steps.
-#
-# ⚠️  KNOWN LIMITATION: The when: fields in this example are parsed but
-# not yet evaluated at runtime (DEF-004). All steps currently execute
-# unconditionally. For conditional execution, use branch steps with
-# condition: arms. See the dynamic-include contract §9 (B-19).
+# Demonstrates: child-level branching, choice steps, nested include, tool steps,
+# and conditional step execution via when: expressions.
 apiVersion: yawr.runbook/v1
 
 id: incident-triage.network

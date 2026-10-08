@@ -66,6 +66,9 @@ func nativeScope(vars map[string]any) (*gxleval.Scope, error) {
 	}
 	scopeVars := make(map[string]any, len(vars))
 	for key, value := range vars {
+		if strings.HasPrefix(key, "__") {
+			continue
+		}
 		scopeVars[key] = value
 	}
 	return gxleval.FromAny(scopeVars)
