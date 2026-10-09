@@ -42,11 +42,16 @@ func WithDispatchCommitter(ctx context.Context, committer DispatchCommitter) con
 	return context.WithValue(ctx, dispatchCommitterContextKey{}, committer)
 }
 
+func DispatchCommitterFromContext(ctx context.Context) (DispatchCommitter, bool) {
+	committer, ok := ctx.Value(dispatchCommitterContextKey{}).(DispatchCommitter)
+	return committer, ok && committer != nil
+}
+
 // PrepareExternalDispatch commits a rendered external request before provider
 // I/O. An empty state means the current run has no durable store.
 func PrepareExternalDispatch(ctx context.Context, request DispatchRequest) (DispatchState, error) {
-	committer, _ := ctx.Value(dispatchCommitterContextKey{}).(DispatchCommitter)
-	if committer == nil {
+	committer, ok := DispatchCommitterFromContext(ctx)
+	if !ok || committer == nil {
 		return DispatchState{}, nil
 	}
 	return committer.PrepareDispatch(ctx, request)
