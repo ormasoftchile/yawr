@@ -75,10 +75,11 @@ type ToolDef struct {
 
 // ToolAction mirrors schema.ToolAction for runtime use
 type ToolAction struct {
-	Description string
-	Argv        []string
-	Args        map[string]*ArgDef
-	Returns     string
+	Classification *string
+	Description    string
+	Argv           []string
+	Args           map[string]*ArgDef
+	Returns        string
 
 	// Execute mirrors schema.ToolAction.Execute: non-nil with
 	// Kind=="runbook" makes this a substituted action

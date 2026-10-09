@@ -270,6 +270,7 @@ func RuntimeToolDef(def *schema.ToolDef) (toolpkg.ToolDef, error) {
 			}
 		}
 		action := &toolpkg.ToolAction{
+			Classification: schemaAction.Classification,
 			Description:    schemaAction.Description,
 			Argv:           schemaAction.Argv,
 			Args:           runtimeArgs,

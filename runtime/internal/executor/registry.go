@@ -116,7 +116,21 @@ type RegistryConfig struct {
 func NewDefaultRegistry(cfg RegistryConfig) *MapRegistry {
 	r := NewMapRegistry()
 	r.Register("cli", NewCLIExecutor(cfg.Platform, cfg.Evaluator))
-	r.Register("tool", NewToolExecutorWithSubstitution(cfg.ToolRuntime, cfg.Evaluator, cfg.SubStepRunner, cfg.SubstitutionParser, cfg.ApprovalGate))
+	toolExec := NewToolExecutorWithSubstitution(cfg.ToolRuntime, cfg.Evaluator, cfg.SubStepRunner, cfg.SubstitutionParser, cfg.ApprovalGate)
+	if cfg.ToolRuntime != nil {
+		var reg tool.ToolRegistry
+		if rtReg, ok := cfg.ToolRuntime.(interface{ Registry() tool.ToolRegistry }); ok && rtReg != nil {
+			reg = rtReg.Registry()
+		}
+		if inv, err := tool.NewInvoker(tool.InvokerOptions{
+			Registry:     reg,
+			Runtime:      cfg.ToolRuntime,
+			ApprovalGate: cfg.ApprovalGate,
+		}); err == nil && inv != nil {
+			toolExec.SetInvoker(inv)
+		}
+	}
+	r.Register("tool", toolExec)
 	include := newIncludeExecutorFull(cfg.Evaluator, cfg.SubStepRunner, cfg.LazyRunbookLoader, cfg.DynamicIncludeResolver, cfg.MaxIncludeDepth, cfg.PinRecorder).WithApprovalGate(cfg.ApprovalGate)
 	if executor, ok := r.Lookup("tool").(*ToolExecutor); ok {
 		include.presentationTools = executor.freezeDynamicPresentationTools

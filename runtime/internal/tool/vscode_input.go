@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/ormasoftchile/yawr/runtime/pkg/errkit"
 	"github.com/ormasoftchile/yawr/runtime/pkg/schema"
 	toolpkg "github.com/ormasoftchile/yawr/runtime/pkg/tool"
 )
@@ -58,6 +59,22 @@ func validateToolArguments(action *toolpkg.ToolAction, args map[string]any) erro
 		}
 		if value, present := args[name]; !present || value == nil {
 			return fmt.Errorf("tool runtime: required argument %q is missing", name)
+		}
+	}
+	for name, argDef := range action.Args {
+		if argDef == nil || len(argDef.Enum) == 0 {
+			continue
+		}
+		v, ok := args[name]
+		if !ok {
+			continue
+		}
+		s, ok := v.(string)
+		if !ok {
+			return errkit.New("ENUM-008", fmt.Sprintf("tool arg %q must be a string for enum validation", name))
+		}
+		if !argDef.Enum.Contains(s) {
+			return errkit.New("ENUM-008", fmt.Sprintf("tool arg %q value is not a declared enum member", name))
 		}
 	}
 	return nil

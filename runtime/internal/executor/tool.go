@@ -37,6 +37,13 @@ type ToolExecutor struct {
 	runner       SubStepRunner
 	parser       parserpkg.Parser
 	approvalGate governance.ApprovalGate
+	invoker      tool.ToolInvoker
+}
+
+// SetInvoker equips ToolExecutor with a shared ToolInvoker for unified execution.
+func (e *ToolExecutor) SetInvoker(inv tool.ToolInvoker) *ToolExecutor {
+	e.invoker = inv
+	return e
 }
 
 // NewToolExecutor constructs a ToolExecutor with no substitution support:
@@ -233,20 +240,53 @@ func (e *ToolExecutor) Execute(ctx context.Context, step engine.ResolvedStep, va
 		failed.Error = fmt.Errorf("outputs: a declared semantic output contract is required before dispatch")
 		return failed, nil
 	}
-	dispatch, err := engine.PrepareExternalDispatch(ctx, engine.DispatchRequest{
-		Classification: dispatchClassification, EndpointIdentity: dispatchEndpoint,
-		RenderedRequest: map[string]any{"tool": toolName, "action": action, "args": args},
-	})
-	if err != nil {
-		return nil, err
-	}
-	ctx = engine.WithPreparedDispatch(ctx, dispatch)
 	engine.RecordRouteTestExternalDispatch(ctx)
 	var res *tool.ToolResult
-	if bound != nil {
-		res, err = boundRuntime.InvokeBound(ctx, *bound, args)
+	if e.invoker != nil && bound == nil {
+		invReq := tool.InvocationRequest{
+			Tool:      toolName,
+			Action:    action,
+			Arguments: args,
+			Authority: tool.InvocationAuthority{
+				Actor:            "workflow:" + step.ID,
+				AllowRead:        true,
+				AllowMutating:    true,
+				AllowDestructive: true,
+				ApprovalGate:     e.approvalGate,
+			},
+		}
+		invRes, invErr := e.invoker.Invoke(ctx, invReq)
+		if invErr != nil {
+			err = invErr
+		} else if invRes != nil {
+			res = &tool.ToolResult{
+				ExitCode: invRes.ExitCode,
+				Stdout:   invRes.Stdout,
+				Stderr:   invRes.Stderr,
+				Output:   invRes.Output,
+			}
+			if invRes.Status == tool.InvocationStatusFailed || invRes.Status == tool.InvocationStatusDenied || invRes.Status == tool.InvocationStatusIndeterminate {
+				err = invRes.Error
+				if err == nil && invRes.ErrorMessage != "" {
+					err = errors.New(invRes.ErrorMessage)
+				}
+			}
+		}
 	} else {
-		res, err = e.runtime.Invoke(ctx, toolName, action, args)
+		var dispatch engine.DispatchState
+		dispatch, err = engine.PrepareExternalDispatch(ctx, engine.DispatchRequest{
+			Classification: dispatchClassification, EndpointIdentity: dispatchEndpoint,
+			RenderedRequest: map[string]any{"tool": toolName, "action": action, "args": args},
+		})
+		if err != nil {
+			return nil, err
+		}
+		ctx = engine.WithPreparedDispatch(ctx, dispatch)
+		if bound != nil {
+			res, err = boundRuntime.InvokeBound(ctx, *bound, args)
+		} else {
+			res, err = e.runtime.Invoke(ctx, toolName, action, args)
+		}
 	}
 	if err != nil {
 		failed := newResult(step, engine.StepStatusFailed)
